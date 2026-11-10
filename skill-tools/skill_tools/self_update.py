@@ -17,12 +17,17 @@ from dataclasses import dataclass
 from importlib import metadata
 from pathlib import Path
 
-from .config import DEFAULT_GITHUB_OWNER, DEFAULT_GITHUB_REPOSITORY
+from .config import DEFAULT_GITHUB_OWNER
 from .models import InstallError
 
 DISTRIBUTION_NAME = "skill-tools"
-DEFAULT_URL = f"https://github.com/{DEFAULT_GITHUB_OWNER}/{DEFAULT_GITHUB_REPOSITORY}.git"
-DEFAULT_SUBDIRECTORY = "tools/skill-tools"
+# tools/ is the AI-tools submodule of the umbrella (fdshg693/AI); a git install
+# has to fetch from the submodule's own repository.
+DEFAULT_URL = f"https://github.com/{DEFAULT_GITHUB_OWNER}/AI-tools.git"
+DEFAULT_SUBDIRECTORY = "skill-tools"
+# Installs made before the split (umbrella URL + tools/skill-tools) move to the default.
+_LEGACY_SUBDIRECTORY = "tools/skill-tools"
+_LEGACY_REPOSITORY = f"github.com/{DEFAULT_GITHUB_OWNER}/ai"
 WINDOWS_LOG_NAME = "skill-tools-update.log"
 
 
@@ -80,10 +85,14 @@ def requirement_spec(origin: InstallOrigin) -> str:
     """Return the ``git+...`` requirement that fetches the latest skill-tools.
 
     A previous git install keeps its repository, requested branch/tag, and
-    subdirectory. Anything else falls back to the default GitHub repository.
+    subdirectory, except an install from the umbrella's old ``tools/skill-tools``
+    (before the submodule split), which moves to the default. Anything else
+    falls back to the default GitHub repository.
     """
 
-    if origin.kind == "git" and origin.url:
+    if origin.kind == "git" and origin.url and _is_legacy_umbrella(origin):
+        url, revision, subdirectory = DEFAULT_URL, None, None
+    elif origin.kind == "git" and origin.url:
         url, revision, subdirectory = origin.url, origin.revision, origin.subdirectory
     else:
         url, revision, subdirectory = DEFAULT_URL, None, None
@@ -91,6 +100,17 @@ def requirement_spec(origin: InstallOrigin) -> str:
     if revision:
         spec += f"@{revision}"
     return f"{spec}#subdirectory={subdirectory or DEFAULT_SUBDIRECTORY}"
+
+
+def _is_legacy_umbrella(origin: InstallOrigin) -> bool:
+    """A git install from the umbrella before tools/ became the AI-tools submodule."""
+
+    url = (origin.url or "").lower().removeprefix("git+").removesuffix("/")
+    url = url.removesuffix(".git").split("://", 1)[-1]
+    return url == _LEGACY_REPOSITORY.lower() and origin.subdirectory in (
+        None,
+        _LEGACY_SUBDIRECTORY,
+    )
 
 
 def uv_tool_environment(prefix: str | None = None) -> bool:

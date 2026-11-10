@@ -195,13 +195,14 @@ class LocalSource:
             raise SourceError(f"source path escapes local repository: {path}")
         return candidate
 
-    def _git_visible_files(self) -> tuple[PurePosixPath, ...] | None:
+    @staticmethod
+    def _git_ls_files(directory: Path) -> list[bytes] | None:
         try:
             result = subprocess.run(
                 [
                     "git",
                     "-C",
-                    str(self.root),
+                    str(directory),
                     "ls-files",
                     "--cached",
                     "--others",
@@ -215,11 +216,44 @@ class LocalSource:
             return None
         if result.returncode != 0:
             return None
+        return [raw for raw in result.stdout.split(b"\0") if raw]
+
+    def _git_listing(self) -> list[bytes] | None:
+        """``git ls-files`` of the repository plus its checked-out submodules.
+
+        A submodule appears in its parent's listing as one gitlink path; its
+        files are listed in the submodule and prefixed with that path.
+        """
+
+        top = self._git_ls_files(self.root)
+        if top is None:
+            return None
+        listing: list[bytes] = []
+        pending = [(b"", top, 0)]
+        while pending:
+            prefix, entries, depth = pending.pop()
+            for raw in entries:
+                full = prefix + raw
+                directory = self.root / Path(os.fsdecode(full))
+                if (
+                    depth < _MAX_SUBMODULE_DEPTH
+                    and (directory / ".git").exists()
+                    and (directory.is_dir() and not is_link_like(directory))
+                ):
+                    nested = self._git_ls_files(directory)
+                    if nested is not None:
+                        pending.append((full + b"/", nested, depth + 1))
+                        continue
+                listing.append(full)
+        return listing
+
+    def _git_visible_files(self) -> tuple[PurePosixPath, ...] | None:
+        listing = self._git_listing()
+        if listing is None:
+            return None
 
         paths: set[PurePosixPath] = set()
-        for raw_path in result.stdout.split(b"\0"):
-            if not raw_path:
-                continue
+        for raw_path in listing:
             relative = Path(os.fsdecode(raw_path))
             if relative.is_absolute() or ".." in relative.parts:
                 raise SourceError(f"git returned an unsafe source path: {relative}")

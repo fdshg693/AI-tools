@@ -23,7 +23,7 @@ uv tool install --editable tools/skill-tools
 clone なしで GitHub `main` から導入・更新する場合:
 
 ```powershell
-uv tool install --force "git+https://github.com/fdshg693/ai.git#subdirectory=tools/skill-tools"
+uv tool install --force "git+https://github.com/fdshg693/AI-tools.git#subdirectory=skill-tools"
 ```
 
 `uv tool install` 済みの CLI は `skill-tools self-update` で最新の GitHub 版へ更新できます（[`self-update`](#self-update) 参照）。
@@ -89,7 +89,7 @@ then `.claude/skills`.
 
 使い方のフィードバック（`--fb`）の保存先は `fb.path` です。checkout または editable install（隣に `pyproject.toml` がある）では `<skill-tools プロジェクト>/fb`、wheel などで `pyproject.toml` が同梱されないときは OS キャッシュ領域の `skill-tools/fb`（`SKILL_TOOLS_HOME` を含む）が既定です。優先順は環境変数 `SKILL_TOOLS_FB_DIR`、設定の `fb.path`、既定値です。設定ファイル内の相対パスは、その設定ファイルのあるディレクトリ基準で解決します（`index.path` と同じ）。実行ログの `logs/` とは別のディレクトリです。
 
-`source.type: local` のファイル一覧は `git ls-files --cached --others --exclude-standard` で取得します。対象が git 管理下でない（`.git` が無い、git が使えない等）場合はディレクトリ走査へフォールバックし、その際は `.git` / `.venv` / `venv` / `node_modules` / `__pycache__` / `.mypy_cache` / `.pytest_cache` / `.ruff_cache` / `.tox` / `.codegraph` / `.pnpm-store` / `.turbo` / `.next` / `.astro` を除外します。フォールバックは gitignore を解釈しないため、fingerprint 計算（`build-index` など）が git 管理下より遅くなります。`config show` は fingerprint を再計算しません。
+`source.type: local` のファイル一覧は `git ls-files --cached --others --exclude-standard` で取得します。チェックアウト済みのサブモジュールは、その中でも同じ `git ls-files` を実行し、サブモジュールのパスの下のファイルとして数えます（未初期化のサブモジュールの中身は見えません。アンブレラでは `just sub-init` を先に実行します）。対象が git 管理下でない（`.git` が無い、git が使えない等）場合はディレクトリ走査へフォールバックし、その際は `.git` / `.venv` / `venv` / `node_modules` / `__pycache__` / `.mypy_cache` / `.pytest_cache` / `.ruff_cache` / `.tox` / `.codegraph` / `.pnpm-store` / `.turbo` / `.next` / `.astro` を除外します。フォールバックは gitignore を解釈しないため、fingerprint 計算（`build-index` など）が git 管理下より遅くなります。`config show` は fingerprint を再計算しません。
 
 フックのインストール先は `hooks:` で上書きできます（すべて任意）。
 
@@ -206,7 +206,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 - `hooks update` / `hooks remove` は既定で drift（配置ファイルの変更・欠落、登録エントリの手編集・削除）があれば中止します。`--force` は変更されたフックファイルを置換・削除し、見つからない登録エントリは警告してスキップします。seed 設定は利用者が編集する前提なので hash 追跡せず、`remove` でも消しません。
 - <a id="self-update"></a>`self-update [--dry-run]` は skill-tools **自身**を更新します（スキル更新の `update-skills` とは別物）。インストール元は配布メタデータの `direct_url.json`（PEP 610）で判定します。
   - **editable install**（`dir_info.editable`）は何もせず、ローカル clone で `git pull` するよう案内して終了コード `0` で終わります。
-  - それ以外は `uv tool install --force "git+<URL>#subdirectory=tools/skill-tools"` を実行します。以前 git からインストールしていれば、その URL・`@<branch/tag>`・subdirectory を引き継ぎ、そうでなければ既定の GitHub `fdshg693/ai` を使います（branch 未指定なら既定ブランチの最新）。
+  - それ以外は `uv tool install --force "git+<URL>#subdirectory=<dir>"` を実行します。以前 git からインストールしていれば、その URL・`@<branch/tag>`・subdirectory を引き継ぎ、そうでなければ既定の GitHub `fdshg693/AI-tools`（subdirectory `skill-tools`）を使います（branch 未指定なら既定ブランチの最新）。`tools/` がサブモジュール `AI-tools` になる前にアンブレラ `fdshg693/ai` の `tools/skill-tools` から入れた環境は、既定の `AI-tools` へ切り替えます。
   - `uv tool install` で入れた環境（`uv-receipt.toml` がある）でなければ、終了コード `4` で中止します。`uv` が PATH に無い場合も同様です。
   - Windows では実行中の `skill-tools.exe` を自分自身で置換できないため、更新は本コマンド終了後に別プロセスで始まり、進捗は一時ディレクトリの `skill-tools-update.log` に出ます。完了後に `skill-tools --version` で確認してください。
   - `--dry-run` は実行予定のコマンドを表示するだけです。

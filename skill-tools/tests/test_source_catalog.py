@@ -345,3 +345,50 @@ def test_github_source_refuses_unresolvable_submodules(
     _install_fake_github_repos(monkeypatch, {"owner/repo": (blobs, {"plugins": "sha"})})
     with pytest.raises(SourceError, match=message):
         GitHubSource("owner", "repo", "main")
+
+
+def test_local_source_lists_files_inside_checked_out_submodules(tmp_path: Path) -> None:
+    import subprocess
+
+    def git(cwd: Path, *args: str) -> None:
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "protocol.file.allow=always",
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@example.com",
+                "-c",
+                "core.hooksPath=/dev/null",
+                *args,
+            ],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+        )
+
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    git(upstream, "init", "-q")
+    alpha = upstream / "one" / "skills" / "alpha"
+    alpha.mkdir(parents=True)
+    (alpha / "SKILL.md").write_bytes(_skill("alpha"))
+    git(upstream, "add", "-A")
+    git(upstream, "commit", "-q", "-m", "init")
+
+    root = tmp_path / "umbrella"
+    root.mkdir()
+    git(root, "init", "-q")
+    (root / "ai-tools.yaml").write_text(CATALOG, encoding="utf-8")
+    git(root, "add", "ai-tools.yaml")
+    git(root, "submodule", "add", "-q", str(upstream), "plugins")
+    (root / "plugins" / "one" / "skills" / "alpha" / "notes.md").write_text("x\n", encoding="utf-8")
+
+    source = LocalSource(root)
+    assert source.list_files((PurePosixPath("plugins"),)) == (
+        PurePosixPath("plugins/one/skills/alpha/SKILL.md"),
+        PurePosixPath("plugins/one/skills/alpha/notes.md"),
+    )
+    assert [record.name for record in discover_catalog(source)] == ["alpha"]

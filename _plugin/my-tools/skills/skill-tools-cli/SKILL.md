@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.4
+  version: 1.2.5
 ---
 
 # skill-tools の使い方
@@ -198,7 +198,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 - `search`はpure-Python BM25のUnicode語彙検索と既存の意味検索をRRFで統合する。JSONは`canonicalId`と一致語周辺の最大240文字の`snippet`を含み、tableにも`canonical_id`と`snippet`を表示する。本文全文やsnippetをrun logに記録しない。旧index schemaは`build-index`で再構築する
 - **index未作成・APIキー未設定・別sourceのindexは非ゼロ終了**であり、空結果として扱わない。一方、fingerprint不一致とindexの古さはstderrの警告にとどまり検索は成功するので、警告だけを理由に`build-index`をやり直さない
 - `--json`は`score` / `canonicalId` / `path` / `name` / `description` / `tool` / `plugin` / `status` / `snippet`を返す。`path`はlocalなら絶対パス、GitHubならblob URL、`canonicalId`はsource repo相対の`SKILL.md` path。table表示も`score` / `canonical_id` / `path` / `name` / `snippet`を含む。snippetは語彙一致がある場合だけ出る
-- local sourceのファイル列挙は`git ls-files`。git管理下でないディレクトリではディレクトリ走査へフォールバックし、gitignoreを解釈しないぶん`config show`のfingerprint計算が遅くなる。install時のコピー対象はこの列挙に加えてバンドルコピーの除外/包含ポリシー（`tools/skill-tools/.gitignore`と`.skill-tools`）で絞られる
+- local sourceのファイル列挙は`git ls-files`（チェックアウト済みのサブモジュールの中も列挙する）。git管理下でないディレクトリではディレクトリ走査へフォールバックし、gitignoreを解釈しないぶん`config show`のfingerprint計算が遅くなる。install時のコピー対象はこの列挙に加えてバンドルコピーの除外/包含ポリシー（`tools/skill-tools/.gitignore`と`.skill-tools`）で絞られる
 
 このリポジトリ内での作業開始時に「関連スキルを探してTODOへ組み込む」流れ自体は`discovering-skills`（`maintenance/plugin/skills/discovering-skills/`）が持つ。検索を手順の一部として回すならそちらに従い、このスキルはCLI単体の使い方として参照する。
 

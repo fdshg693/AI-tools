@@ -62,16 +62,40 @@ def test_other_installs_fall_back_to_default_github_url(direct_url: object) -> N
     origin = read_install_origin(FakeDistribution(direct_url))
     assert origin.kind == "other"
     assert requirement_spec(origin) == (
-        "git+https://github.com/fdshg693/ai.git#subdirectory=tools/skill-tools"
+        "git+https://github.com/fdshg693/AI-tools.git#subdirectory=skill-tools"
     )
 
 
 def test_git_install_without_revision_tracks_default_branch() -> None:
     origin = read_install_origin(
-        FakeDistribution({"url": "https://github.com/fdshg693/ai", "vcs_info": {"vcs": "git"}})
+        FakeDistribution(
+            {
+                "url": "https://github.com/fdshg693/AI-tools",
+                "vcs_info": {"vcs": "git"},
+                "subdirectory": "skill-tools",
+            }
+        )
     )
     assert requirement_spec(origin) == (
-        "git+https://github.com/fdshg693/ai#subdirectory=tools/skill-tools"
+        "git+https://github.com/fdshg693/AI-tools#subdirectory=skill-tools"
+    )
+
+
+@pytest.mark.parametrize(
+    "url", ["https://github.com/fdshg693/ai", "https://github.com/fdshg693/AI.git"]
+)
+def test_install_from_umbrella_before_split_moves_to_ai_tools(url: str) -> None:
+    origin = read_install_origin(
+        FakeDistribution(
+            {
+                "url": url,
+                "vcs_info": {"vcs": "git", "requested_revision": "main"},
+                "subdirectory": "tools/skill-tools",
+            }
+        )
+    )
+    assert requirement_spec(origin) == (
+        "git+https://github.com/fdshg693/AI-tools.git#subdirectory=skill-tools"
     )
 
 
@@ -105,7 +129,7 @@ def test_update_dry_run_prints_command_without_running(
     monkeypatch.setattr(self_update, "run_update", ran.append)
     assert main(["self-update", "--dry-run"], cwd=tmp_path) == 0
     out = capsys.readouterr().out
-    assert "uv tool install --force git+https://github.com/fdshg693/ai.git" in out
+    assert "uv tool install --force git+https://github.com/fdshg693/AI-tools.git" in out
     assert ran == []
 
 
