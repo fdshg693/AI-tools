@@ -1,0 +1,121 @@
+name: Tool release
+
+# mainへのpush(バージョン変更マージ)をトリガーに、パッケージごとの
+# git タグ(<name>-v<version>)とGitHub Releaseを自動発行する。
+# スケジュール実行はしない(コード変更が無くてもタグが増えるだけの
+# リリースは無意味なため)。判定は各ジョブ内でのタグ存在チェックのみで
+# 行うので、ここではpathsフィルタを設けない。
+#
+# このリポジトリ(fdshg693/AI-tools)はアンブレラ fdshg693/AI の tools/ サブモジュール。
+# 対象パッケージはアンブレラの registry/repo-tools.yaml の `release: true` なエントリ
+# (path は `tools/<dir>`)から動的に決定する(discoverジョブ)。アンブレラの main を読むので、
+# repo-tools.yaml の変更はアンブレラ側で先に main へ入れておく。
+# 対象は workspace 内の兄弟パッケージに依存しないパッケージに限る(このリポジトリには
+# uv workspace のルートが無く、各パッケージを単体でビルドするため)。
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY_URL: https://raw.githubusercontent.com/fdshg693/AI/main/registry/repo-tools.yaml
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      dirs: ${{ steps.dirs.outputs.dirs }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Read release targets from the umbrella's repo-tools.yaml
+        id: dirs
+        run: |
+          curl -fsSL "$REGISTRY_URL" -o "$RUNNER_TEMP/repo-tools.yaml"
+          dirs=$(uv run --no-project --with pyyaml python -c "
+          import json, os, sys
+          import yaml
+
+          with open(sys.argv[1], encoding='utf-8') as f:
+              config = yaml.safe_load(f)
+
+          paths = []
+          for tool in config['tools'].values():
+              if not tool.get('release'):
+                  continue
+              path = tool['path']
+              if not path.startswith('tools/'):
+                  raise SystemExit(f'release target outside tools/: {path}')
+              path = path.removeprefix('tools/')
+              if not os.path.isdir(path):
+                  raise SystemExit(f'release target missing in this repository: {path}')
+              paths.append(path)
+          print(json.dumps(paths))
+          " "$RUNNER_TEMP/repo-tools.yaml")
+          echo "dirs=$dirs" >> "$GITHUB_OUTPUT"
+          echo "Release targets: $dirs" >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJson(needs.discover.outputs.dirs) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Read package name/version
+        id: pkg
+        working-directory: ${{ matrix.dir }}
+        run: |
+          json=$(uv version --output-format json)
+          name=$(echo "$json" | jq -r '.package_name')
+          version=$(echo "$json" | jq -r '.version')
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "tag=$name-v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether tag already exists
+        id: check
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.pkg.outputs.tag }}" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip (no version change)
+        if: steps.check.outputs.exists == 'true'
+        run: echo "${{ steps.pkg.outputs.tag }} already exists — skipping release (no version bump for ${{ matrix.dir }})." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build package
+        if: steps.check.outputs.exists == 'false'
+        working-directory: ${{ matrix.dir }}
+        run: uv build --out-dir "$GITHUB_WORKSPACE/dist"
+
+      - name: Create tag and release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.pkg.outputs.tag }}" \
+            --target "${{ github.sha }}" \
+            --title "${{ steps.pkg.outputs.tag }}" \
+            --notes "Automated release for ${{ steps.pkg.outputs.name }}." \
+            dist/*
