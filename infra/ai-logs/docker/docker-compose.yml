@@ -1,0 +1,62 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.153.0
+    container_name: ai-logs-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    env_file:
+      - .env   # OTLP_AUTH_TOKEN=<ランダムトークン> を記載。.gitignore対象、VM上にのみ置く
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "13133:13133" # health_check
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otelcol/config.yaml"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: ai-logs-loki
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.4.10
+    container_name: ai-logs-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "127.0.0.1:3000:3000"   # ホストのループバックのみにバインド。外部インターフェースに公開しない
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  archive-exporter:
+    build: ./archive-exporter
+    container_name: ai-logs-archive-exporter
+    command: ["serve"]
+    env_file:
+      - .env
+    environment:
+      LOKI_URL: http://loki:3100
+      AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-ai-logs}
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+volumes:
+  loki-data:
+  grafana-data:

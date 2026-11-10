@@ -1,0 +1,20 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "enableWeakerNestedSandbox": true,
+    "network": {
+      "allowManagedDomainsOnly": true,
+      "allowedDomains": [
+        "api.anthropic.com",
+        "github.com",
+        "api.github.com",
+        "*.githubusercontent.com",
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org"
+      ]
+    }
+  }
+}

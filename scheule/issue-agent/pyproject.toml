@@ -1,0 +1,17 @@
+[project]
+name = "issue-agent"
+version = "0.1.0"
+description = "GitHub ISSUEのラベルを検知し、worktree上でClaude Code等を起動する自動対応エージェント"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2",
+    "claude-agent-sdk",
+    "python-dotenv",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["issue_agent*"]

@@ -1,0 +1,29 @@
+# jobs.yaml のサンプル。コピーして使う:
+#   cp config/jobs.example.yaml config/jobs.yaml
+#
+# enabled: false にしたジョブは `ai-schedule sync` 実行時にタスクスケジューラから削除される。
+# 設定ファイルから丸ごと削除した場合も同様に削除される(設定ファイルが唯一の正)。
+jobs:
+  - name: example-daily-job
+    enabled: false
+    script: C:\path\to\script.ps1
+    args: []
+    schedule:
+      type: daily
+      time: "09:00"
+
+  - name: example-weekly-job
+    enabled: false
+    script: C:\path\to\weekly-script.ps1
+    args: ["-Verbose"]
+    schedule:
+      type: weekly
+      time: "22:30"
+      days: [MON, WED, FRI]
+
+  - name: example-interval-job
+    enabled: false
+    script: C:\path\to\interval-script.ps1
+    schedule:
+      type: interval
+      minutes: 30

@@ -1,0 +1,5 @@
+.venv/
+uv.lock
+
+# 実行時に生成される TODO 実体。スキーマ見本は todo_runner/todo.json.example
+*.json

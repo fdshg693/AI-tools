@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vscode-profiles"
+version = "0.1.0"
+description = "List, diff, and apply VS Code stable user profile settings keys"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+vscode-profiles = "vscode_profiles.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["vscode_profiles*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

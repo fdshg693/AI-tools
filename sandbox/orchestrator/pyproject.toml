@@ -1,0 +1,15 @@
+[project]
+name = "sandbox-orchestrator"
+version = "0.1.0"
+description = "ISSUE駆動DockerサンドボックスエージェントのポーリングワーカーCLI"
+requires-python = ">=3.10"
+dependencies = [
+    "PyJWT[crypto]",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["poller", "run_agent", "github_client", "state", "logging_setup"]

@@ -1,0 +1,20 @@
+[project]
+name = "ai-schedule"
+version = "0.1.0"
+description = "設定ファイル(YAML)をもとに、登録済みPowerShellスクリプトの定期実行をWindowsタスクスケジューラへ同期するCLI"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "pydantic>=2",
+]
+
+[project.scripts]
+ai-schedule = "ai_schedule.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ai_schedule*"]

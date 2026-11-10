@@ -1,0 +1,30 @@
+# tav-cli settings example. Copy to one of:
+#   global : ~/.config/tav/config.toml   ($TAV_CONFIG_HOME/config.toml or $XDG_CONFIG_HOME/tav/config.toml if set)
+#   project: <any dir from cwd up to the git root>/.tav.toml   (nearest wins per key)
+# Precedence: env var (TAVILY_*) > nearest .tav.toml > global config.toml > default.
+# Check what is in effect with `tav config`.
+
+# Global config only (rejected in .tav.toml, which may be committed). Env: TAVILY_API_KEY
+api_key = "replace-with-your-tavily-api-key"
+
+# Base directory for --topic output. Default "temp/web". Env: TAVILY_OUTPUT_DIR
+# A relative path's base depends on WHERE it is written:
+#   in a project .tav.toml -> that .tav.toml's directory
+#   anywhere else          -> the git root of the cwd (the cwd itself outside git)
+#                             (global config.toml, TAVILY_OUTPUT_DIR, the default)
+# Example: cwd = C:\repo\sub, git root = C:\repo, output_dir = "temp/web"
+#   written in C:\repo\sub\.tav.toml   -> C:\repo\sub\temp\web
+#   written in ~/.config/tav/config.toml -> C:\repo\temp\web
+# Absolute paths and ~ are used as-is.
+output_dir = "temp/web"
+
+# Where audit logs <script>-log.json go. Default "<output_dir>/.logs". Env: TAVILY_LOG_DIR
+# Relative paths follow the same rule as output_dir.
+# log_dir = "temp/tav-logs"
+
+# Write logs/<script>-log.json full audit logs. Default true. Env: TAVILY_WRITE_LOG
+write_log = true
+
+# Echo the "Wrote full log to <path>" notice (only when a log is written). Default true.
+# Result/output file paths are always shown. Env: TAVILY_SHOW_LOG_PATH
+show_log_path = true

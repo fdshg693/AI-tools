@@ -1,0 +1,16 @@
+{
+  "name": "copilot-wrapper-byok",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "start": "node main.mjs"
+  },
+  "dependencies": {
+    "@github/copilot": "1.0.81",
+    "@github/copilot-sdk": "1.0.11",
+    "zod": "4.4.3"
+  }
+}

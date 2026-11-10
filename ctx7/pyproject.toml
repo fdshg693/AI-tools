@@ -1,0 +1,37 @@
+# Packaging for the ctx7 CLI wrapper around the Context7 REST API.
+#
+# Install once (from this directory or the repo root) so the short `ctx7`
+# command is on PATH, the same way tools like `ruff`/`black` get a console
+# command:
+#
+#     uv tool install --editable tools/ctx7
+#
+# This writes a `ctx7` (Windows: ctx7.exe) shim into the tool environment's
+# Scripts/bin directory, which is already on PATH -- no manual PATH editing,
+# no EXE build. The `ctx7_cli` module and `ctx7_core` package are installed
+# editable, so code edits take effect without reinstalling.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ctx7-cli"
+version = "1.0.6"
+description = "Thin CLI wrapper around the Context7 REST API (v2), hit directly with requests"
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+    "python-dotenv",
+]
+
+[project.scripts]
+ctx7 = "ctx7_cli:main"
+
+[tool.setuptools]
+# Shared implementation lives in the ``ctx7_core`` package; the CLI entry
+# point stays a top-level module so both direct
+# ``python tools/ctx7/ctx7_cli.py`` execution and the installed ``ctx7``
+# console command keep working unchanged.
+packages = ["ctx7_core"]
+py-modules = ["ctx7_cli"]

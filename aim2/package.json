@@ -1,0 +1,31 @@
+{
+  "name": "aim2",
+  "version": "0.1.1",
+  "description": "Multi-provider AI model CLI tool",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "aim2": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.0",
+    "@ai-sdk/google": "^4.0.0",
+    "@ai-sdk/openai": "^4.0.0",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
+    "ai": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

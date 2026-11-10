@@ -1,0 +1,94 @@
+- name: get_time
+  description: '指定したIANAタイムゾーン名(既定: Asia/Tokyo)の現在時刻をISO 8601形式で返す。'
+  args:
+    tz:
+      default: Asia/Tokyo
+      title: Tz
+      type: string
+- name: load_skill
+  description: 'スキル名に対応する SKILL.md の本文(フロントマター除く)をテキストで返す。
+
+
+    利用可能なスキル名と description はシステムプロンプトの Available skills を参照。'
+  args:
+    name:
+      title: Name
+      type: string
+- name: mslearn_code_search
+  description: 'Microsoft/Azure公式のコードサンプルを検索し、結果をJSON文字列で返す。languageで言語を絞り込める(例: python)。'
+  args:
+    query:
+      title: Query
+      type: string
+    language:
+      anyOf:
+      - type: string
+      - type: 'null'
+      default: null
+      title: Language
+- name: mslearn_fetch
+  description: Microsoft Learnのページ1件をMarkdown本文として取得する。
+  args:
+    url:
+      title: Url
+      type: string
+- name: mslearn_search
+  description: Microsoft Learn / Azure公式ドキュメントを検索し、結果(title/content/contentUrl)をJSON文字列で返す。
+  args:
+    query:
+      title: Query
+      type: string
+- name: tavily_extract
+  description: '指定したURLの本文をTavilyで抽出し、結果のリストをJSON文字列で返す。
+
+
+    query を渡すとその関連性でフォーカス抽出できる(省略可)。
+
+    detail は "quick" / "balanced" / "max" のいずれか(既定: balanced)。'
+  args:
+    urls:
+      items:
+        type: string
+      title: Urls
+      type: array
+    query:
+      anyOf:
+      - type: string
+      - type: 'null'
+      default: null
+      title: Query
+    detail:
+      default: balanced
+      title: Detail
+      type: string
+- name: tavily_search
+  description: 'Tavily で Web 検索を行い、結果(title/url/content)のリストをJSON文字列で返す。
+
+
+    detail は "quick" / "balanced" / "max" のいずれか(既定: balanced)。
+
+    include_domains / exclude_domains でドメイン絞り込みが可能(例: ["example.com"])。'
+  args:
+    query:
+      title: Query
+      type: string
+    detail:
+      default: balanced
+      title: Detail
+      type: string
+    include_domains:
+      anyOf:
+      - items:
+          type: string
+        type: array
+      - type: 'null'
+      default: null
+      title: Include Domains
+    exclude_domains:
+      anyOf:
+      - items:
+          type: string
+        type: array
+      - type: 'null'
+      default: null
+      title: Exclude Domains

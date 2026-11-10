@@ -1,0 +1,19 @@
+[project]
+name = "mslearn-cli"
+version = "0.1.6"
+description = "fastmcp-based CLI wrapper around the official Microsoft Learn MCP server"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp",
+]
+
+[project.scripts]
+mslearn = "mslearn_cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["mslearn_cli"]
+packages = ["mslearn_core"]

@@ -1,0 +1,16 @@
+[project]
+name = "claude-wrapper"
+version = "0.1.0"
+description = "Claude Agent SDK を使ったカスタマイズ Claude 利用ツール"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# 独立スクリプトはサブフォルダ直下の .py として実行する。インストール対象のモジュールは持たない。
+packages = []

@@ -1,0 +1,6 @@
+output/*.html
+
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/

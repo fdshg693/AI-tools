@@ -1,0 +1,15 @@
+{
+  "default": "glm-5.3-flash",
+  "models": {
+    "glm-5.3-flash": {
+      "enable": true,
+      "id": "z-ai/glm-5.3-flash",
+      "description": "デフォルトモデル。"
+    },
+    "gemini-3.8-flash": {
+      "enable": true,
+      "id": "google/gemini-3.8-flash",
+      "description": "高精度が求められる場合のエスカレーション先。"
+    }
+  }
+}

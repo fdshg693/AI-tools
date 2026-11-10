@@ -1,0 +1,23 @@
+{
+  "base_url": "https://learn.microsoft.com/en-us/fabric/fundamentals/",
+  "results": [
+    {
+      "url": "https://learn.microsoft.com/en-us/fabric/fundamentals",
+      "raw_content": "This browser is no longer supported.\n\nUpgrade to Microsoft Edge to take advantage of the latest features, security updates, and technical support.\n\n[Download Microsoft Edge](https://go.microsoft.com/fwlink/p/?LinkID=2092881 )   [More info about Internet Explorer and Microsoft Edge](https://learn.microsoft.com/en-us/lifecycle/faq/internet-explorer-microsoft-edge)\n\n[Read in English](#)   [Edit](http"
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/fabric/fabric-terminology",
+      "raw_content": null
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/fabric/microsoft-fabric-overview",
+      "raw_content": null
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/fabric/fabric-home",
+      "raw_content": null
+    }
+  ],
+  "response_time": 3.16,
+  "request_id": "5df881c1-b8fc-485a-8d10-25a87c2540da"
+}

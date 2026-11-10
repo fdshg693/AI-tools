@@ -1,0 +1,21 @@
+uv.lock
+logs/
+
+# ここから下は skill-tools 自身の dev 用だけでなく、install がローカル source の
+# スキルをコピーするときのバンドル除外パターンの SSOT でもある。詳しい優先順位と
+# include による復帰は README.md の「バンドルコピーの除外/包含ポリシー」を参照。
+.venv/
+venv/
+node_modules/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.tox/
+.codegraph/
+.pnpm-store/
+.turbo/
+.next/
+.astro/
+*.egg-info/
+.env

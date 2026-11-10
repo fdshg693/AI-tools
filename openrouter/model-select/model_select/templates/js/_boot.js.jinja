@@ -1,0 +1,15 @@
+var FLOOR = {{ floor }};
+var PROVIDER_STORAGE_KEY = "model-select-providers";
+var DISPLAY_STORAGE_KEY = "model-select-display-mode";
+var records = JSON.parse(document.getElementById("model-data").textContent);
+var allProviders = uniqueProviders(records);
+
+// 以下、model_select/rank.py・model_select/dominance.py・model_select/cli.py の
+// _build_axis_view・model_select/render.py の空bucket省略ロジックをJSへ移植したもの。
+// 元のPythonテストケース（tests/test_rank_dominance.py、削除済み）の代表例:
+//   - bucket境界: minimum=65, step=3 のとき coding_index=65 は [65,68)、68 は [68,71)（上端は次のbucket）
+//   - minimum未満（例: 64.9）は除外
+//   - Pareto: 価格・指標ともに同じ以下かつ少なくとも一方が厳密に優れる他要素があれば支配される
+//   - 価格・指標が完全同値の要素同士は互いに支配しない（両方残る）
+// プロバイダ絞り込みは上記の前段で行い、残ったモデルだけをbucket分けする。
+// Paretoフィルタは表示モードが Pareto のときだけ適用する（フル表示ではbucket内の全モデルを出す）。

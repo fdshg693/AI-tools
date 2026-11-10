@@ -1,0 +1,45 @@
+<button type="button" id="theme-toggle" aria-label="ライト/ダークモード切り替え"></button>
+<h1>model-select report</h1>
+<fieldset>
+  <legend>ランク分け設定</legend>
+  <label>coding_index 下限（閾値）:
+    <input type="number" id="threshold-input" min="{{ floor }}" step="1" value="{{ threshold_default }}">
+  </label>
+  <label>bucketステップ幅:
+    <input type="number" id="step-input" min="0.1" step="1" value="{{ step_default }}">
+  </label>
+  <p class="display-mode">
+    表示:
+    <label>
+      <input type="radio" name="display-mode" id="display-pareto" value="pareto" checked>
+      Pareto表示
+    </label>
+    <label>
+      <input type="radio" name="display-mode" id="display-full" value="full">
+      フル表示
+    </label>
+  </p>
+  <p class="summary">coding_index &lt; {{ floor }} のモデルはPython側取得段階で恒久的に除外されており、この閾値では復活しません。Pareto表示は同じbucket内で価格・ベンチマーク双方において劣るモデルを隠します。</p>
+</fieldset>
+<fieldset>
+  <legend>プロバイダ絞り込み</legend>
+  <div id="provider-filters"></div>
+  <div class="provider-actions">
+    <button type="button" id="providers-all">すべて選択</button>
+    <button type="button" id="providers-none">すべて解除</button>
+  </div>
+</fieldset>
+
+<section>
+  <h2>入力重視（prompt価格が安い順）</h2>
+  <p class="summary" id="summary-prompt"></p>
+  <div id="buckets-prompt"></div>
+</section>
+
+<section>
+  <h2>出力重視（completion価格が安い順）</h2>
+  <p class="summary" id="summary-completion"></p>
+  <div id="buckets-completion"></div>
+</section>
+
+<footer>生成日時: <time datetime="{{ generated_at_iso }}">{{ generated_at_display }}</time></footer>

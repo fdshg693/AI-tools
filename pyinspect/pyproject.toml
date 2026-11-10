@@ -1,0 +1,29 @@
+# Packaging for the pyinspect CLI (PyPI wheel fetch + on-disk index).
+#
+#     uv tool install --editable tools/pyinspect
+#
+# This writes a `pyinspect` (Windows: pyinspect.exe) shim into the tool
+# environment's Scripts/bin directory. The `pyinspect_cli` module and
+# `pyinspect_core` package are installed editable.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyinspect-cli"
+version = "0.1.1"
+description = "Fetch a PyPI wheel and write a local file-tree index for agents to Read"
+requires-python = ">=3.11"
+dependencies = [
+    "packaging",
+    "python-dotenv",
+    "requests",
+]
+
+[project.scripts]
+pyinspect = "pyinspect_cli:main"
+
+[tool.setuptools]
+packages = ["pyinspect_core"]
+py-modules = ["pyinspect_cli"]

@@ -1,0 +1,25 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "春と夏の俳句をそれぞれ spring.txt と summer.txt に1句ずつ書く",
+      "status": "pending",
+      "detail": true,
+      "model": "haiku"
+    },
+    {
+      "id": 2,
+      "title": "autumn.txt に秋の俳句を1句書く",
+      "status": "pending",
+      "detail": false,
+      "model": "haiku"
+    },
+    {
+      "id": 3,
+      "title": "冬の俳句と、その句の短い解説を別ファイルに残す",
+      "status": "pending",
+      "detail": "auto",
+      "model": "sonnet"
+    }
+  ]
+}

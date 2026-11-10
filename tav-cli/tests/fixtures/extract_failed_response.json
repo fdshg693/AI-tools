@@ -1,0 +1,15 @@
+{
+  "results": [],
+  "failed_results": [
+    {
+      "url": "https://this-domain-should-not-exist-zzz123.example/page",
+      "error": "Failed to fetch url"
+    },
+    {
+      "url": "https://httpstat.us/404",
+      "error": "Failed to fetch url"
+    }
+  ],
+  "response_time": 16.05,
+  "request_id": "90b839d5-340b-4c82-8491-32629b3b21d2"
+}

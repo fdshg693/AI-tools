@@ -1,0 +1,19 @@
+[project]
+name = "grepapp-cli"
+version = "0.1.6"
+description = "fastmcp-based CLI wrapper around the grep.app MCP server"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp",
+]
+
+[project.scripts]
+grepapp = "grepapp_cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["grepapp_cli"]
+packages = ["grepapp_core"]

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="generated-at" content="{{ generated_at_iso }}">
+<title>model-select report</title>
+<style>
+{% include "_styles.css" %}
+</style>
+</head>
+<body>
+{% include "_body.html.jinja" %}
+
+<script type="application/json" id="model-data">{{ records_json | safe }}</script>
+<script>
+(function () {
+  "use strict";
+
+{% include "js/_theme.js" %}
+{% include "js/_providers.js" %}
+{% include "js/_rank.js" %}
+{% include "js/_boot.js.jinja" %}
+{% include "js/_render.js" %}
+})();
+</script>
+</body>
+</html>

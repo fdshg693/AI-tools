@@ -1,0 +1,25 @@
+{
+  "results": [
+    {
+      "url": "https://learn.microsoft.com/en-us/training/fabric",
+      "title": "Training for Microsoft Fabric",
+      "raw_content": "## Microsoft Fabric Overview\n\nMicrosoft Fabric is an end-to-end analytics platform that provides a single, integrated environment for data professionals and the business to collaborate on data projects. Fabric provides a set of integrated services that enable you to ingest, store, process, and analyze data in a single environment.\n\nStart learning about Microsoft Fabric Start the Fabric Analytics E",
+      "images": []
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/industry/financial-services/microsoft-fabric-fsi",
+      "title": "Microsoft Fabric - Microsoft for Financial Services",
+      "raw_content": "# Microsoft Fabric\n\nMicrosoft Fabric is the next-generation data platform that unifies various tools and services to provide a comprehensive, end-to-end data analytics experience. It combines data ingestion, processing, transformation, real-time event routing, and report building into a single solution. Leveraging AI, Fabric manages and acts on data more effectively, making it a one-stop shop for ",
+      "images": []
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/fabric/database/sql/overview",
+      "title": "SQL database Overview - Microsoft Fabric",
+      "raw_content": "A screenshot of the SQL database icon in Fabric.\n\nWith your SQL database in Fabric, you don't need to piece together different services from multiple vendors. Instead, you can enjoy a highly integrated, end-to-end, and easy-to-use product that is designed to simplify your analytics needs, and built for openness and collaboration between technology solutions that can read the open-source Delta Lake",
+      "images": []
+    }
+  ],
+  "failed_results": [],
+  "response_time": 0.37,
+  "request_id": "e3d8b894-f31e-472f-ab71-cfed8cc8b46a"
+}

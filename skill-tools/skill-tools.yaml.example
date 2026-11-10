@@ -1,0 +1,53 @@
+# Copy this file to a project's skill-tools.yaml for project-specific overrides.
+# The global file is created by `skill-tools config init`; this file is merged
+# on top of it, so only the values that differ need to be listed.
+source:
+  type: local
+  path: C:/src/ai
+
+# Omit index.path to use the platform cache:
+# Windows: %LOCALAPPDATA%/skill-tools/skill-index.json
+# XDG systems: $XDG_CACHE_HOME/skill-tools/skill-index.json
+index:
+  path: ~/.cache/skill-tools/skill-index.json
+
+# Feedback files from `skill-tools --fb`. Omit the key to use <project>/fb in a
+# checkout, or the OS cache skill-tools/fb when pyproject.toml is not shipped.
+# SKILL_TOOLS_FB_DIR overrides this path. Relative paths are resolved from this file.
+fb:
+  path: ~/.cache/skill-tools/fb
+
+# Canonical ID that `skill-tools install-skills self` expands to. Optional; the
+# built-in default is the skill-tools-cli companion skill shown here.
+self_skill: claude-plugins/my-tools/skills/skill-tools-cli/SKILL.md
+
+# Optional destination overrides used by install-skills.
+skills:
+  claude-plugins/coding/skills/example/SKILL.md:
+    destination: .claude/skills
+    destinations:
+      agents: .agents/custom-skills
+
+# Optional named targets for installing one bundle to multiple destinations.
+# Use `skill-tools install-skills --target claude,agents <skill>`.
+targets:
+  claude:
+    destination: .claude/skills
+  agents:
+    destination: .agents/skills
+
+# Per-target skill overrides above take priority over the target's default destination.
+# The legacy `destination` is still used when `--target` is omitted.
+
+# Optional hook install settings used by `skill-tools hooks install/update`.
+hooks:
+  default_agents: [claude]
+  agents:
+    claude:
+      destination: .claude/hooks
+      settings_file: project # or local (.claude/settings.local.json)
+    codex:
+      destination: .codex/hooks
+
+# Successful skill and hook installs are recorded in the project-local .skill-tools/manifest.json.
+# The CLI does not edit .gitignore or require the manifest to be committed.

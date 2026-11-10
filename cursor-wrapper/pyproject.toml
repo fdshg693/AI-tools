@@ -1,0 +1,15 @@
+[project]
+name = "cursor-wrapper"
+version = "0.1.0"
+description = "Cursor Agent SDK を使った2フェーズのマルチエージェント実行ラッパー"
+requires-python = ">=3.10"
+dependencies = [
+    "cursor-sdk",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main"]

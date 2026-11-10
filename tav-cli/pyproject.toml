@@ -1,0 +1,45 @@
+# Packaging for the tav-cli wrapper scripts.
+#
+# Install once (from this directory or the repo root) so the short `tav` command
+# is on PATH, the same way tools like `ruff`/`black` get a console command:
+#
+#     uv tool install --editable tools/tav-cli
+#
+# This writes a `tav` (Windows: tav.exe) shim into the tool environment's
+# Scripts/bin directory, which is already on PATH — no manual PATH editing, no
+# EXE build. The wrapper modules are installed as editable top-level modules,
+# so editing a script takes effect without reinstalling.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tav-cli"
+version = "3.2.8"
+description = "Thin CLI wrappers around Tavily"
+requires-python = ">=3.11"
+dependencies = [
+    "tavily-python",
+]
+
+[project.scripts]
+tav = "tav_cli:main"
+
+[tool.setuptools]
+# Shared implementation lives in the ``tav_core`` package; the command wrappers
+# stay as top-level modules so direct ``python tools/tav-cli/<name>.py`` runs
+# and the ``importlib.import_module`` dispatch in ``tav_cli`` keep working
+# unchanged.
+packages = ["tav_core"]
+py-modules = [
+    "tav_cli",
+    "search_topic",
+    "search_extract_topic",
+    "research_topic",
+    "research_background_poll",
+    "extract_url_content",
+    "map_site_titles",
+    "map_extract_site_content",
+    "crawl_site_content",
+]

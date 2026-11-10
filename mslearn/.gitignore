@@ -1,0 +1,4 @@
+mslearn_cli.egg-info/
+__pycache__/
+*.pyc
+*.pyo

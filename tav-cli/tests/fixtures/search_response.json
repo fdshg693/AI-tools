@@ -1,0 +1,45 @@
+{
+  "query": "Microsoft Fabric overview",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "url": "https://learn.microsoft.com/en-us/training/fabric",
+      "title": "Training for Microsoft Fabric | Microsoft Learn",
+      "content": "## Microsoft Fabric Overview\n\nMicrosoft Fabric is an end-to-end analytics platform that provides a single, integrated environment for data professionals and the business to collaborate on data projects. Fabric provides a set of integrated services that enable you to ingest, store, process, and analyze data in a single environment.\n\nStart learning about Microsoft Fabric Start the Fabric Analytics E",
+      "score": 0.87807417,
+      "raw_content": null
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/industry/financial-services/microsoft-fabric-fsi",
+      "title": "Microsoft Fabric - Microsoft for Financial Services | Microsoft Learn",
+      "content": "# Microsoft Fabric\n\nMicrosoft Fabric is the next-generation data platform that unifies various tools and services to provide a comprehensive, end-to-end data analytics experience. It combines data ingestion, processing, transformation, real-time event routing, and report building into a single solution. Leveraging AI, Fabric manages and acts on data more effectively, making it a one-stop shop for ",
+      "score": 0.8724455,
+      "raw_content": null
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/fabric/database/sql/overview",
+      "title": "SQL database Overview - Microsoft Fabric | Microsoft Learn",
+      "content": "A screenshot of the SQL database icon in Fabric.\n\nWith your SQL database in Fabric, you don't need to piece together different services from multiple vendors. Instead, you can enjoy a highly integrated, end-to-end, and easy-to-use product that is designed to simplify your analytics needs, and built for openness and collaboration between technology solutions that can read the open-source Delta Lake",
+      "score": 0.8332299,
+      "raw_content": null
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/fabric/fundamentals/microsoft-fabric-overview",
+      "title": "What is Microsoft Fabric - Microsoft Fabric",
+      "content": "This SaaS foundation enables end‑to‑end analytics scenarios such as ingesting data with Data Factory, processing it with engineering or real‑time workloads, and visualizing it in Power BI without manually integrating separate services or managing underlying infrastructure. Fabric centralizes data discovery, administration, and governance, with Microsoft Purview built in to enforce consistent secur",
+      "score": 0.8235701,
+      "raw_content": null
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/fabric",
+      "title": "Microsoft Fabric documentation - Microsoft Fabric | Microsoft Learn",
+      "content": "This browser is no longer supported.\n\nUpgrade to Microsoft Edge to take advantage of the latest features, security updates, and technical support.\n\nDownload Microsoft Edge   More info about Internet Explorer and Microsoft Edge\n\n# Microsoft Fabric documentation\n\nMicrosoft Fabric is a unified platform that can meet your organization's data and analytics needs. Discover the capabilities Fabric has to",
+      "score": 0.81770587,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.0,
+  "request_id": "f9816690-070e-44ab-9059-7541212f0850"
+}

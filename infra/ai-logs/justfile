@@ -1,0 +1,143 @@
+set shell := ["C:/Program Files/Git/bin/bash.exe", "-uc"]
+
+# SSH key: ~/.ssh/ai_logs_ed25519 (dedicated key for the sakura cloud VM)
+# Prereq: terraform.tfvars must exist under terraform/ (see terraform/terraform.tfvars.example)
+# Recipes run with this directory (tools/infra/ai-logs) as cwd, so paths below are relative to it.
+
+tf_dir := "terraform"
+docker_dir := "docker"
+scripts_dir := "scripts"
+ssh_key := "~/.ssh/ai_logs_ed25519"
+archive_script := docker_dir + "/archive-exporter/archive_logs.py"
+# Azure Blob archive. Do NOT use the skills-site SWA RG (rg-ai-skill-catalog).
+archive_rg := env_var_or_default("AI_LOGS_ARCHIVE_RG", "rg-ai-logs-archive")
+archive_account := env_var_or_default("AI_LOGS_ARCHIVE_ACCOUNT", "stailogsfdshg693")
+archive_container := env_var_or_default("AI_LOGS_ARCHIVE_CONTAINER", "ai-logs")
+archive_location := env_var_or_default("AI_LOGS_ARCHIVE_LOCATION", "japaneast")
+
+# List available recipes
+default:
+    @just --list
+
+# Terraform: init the ai-logs sakura cloud project
+tf-init:
+    terraform -chdir={{tf_dir}} init
+
+# Terraform: show planned changes
+tf-plan:
+    terraform -chdir={{tf_dir}} plan
+
+# Terraform: apply (creates/updates the sakura cloud VM + disk)
+tf-apply:
+    terraform -chdir={{tf_dir}} apply
+
+# Terraform: destroy the VM and disk
+tf-destroy:
+    terraform -chdir={{tf_dir}} destroy
+
+# Print the VM's global IP address
+ip:
+    @terraform -chdir={{tf_dir}} output -raw server_ip_address
+
+# SSH into the VM
+ssh:
+    ssh -i {{ssh_key}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address)
+
+# Install Docker / Docker Compose on the VM (AlmaLinux 9, idempotent)
+# 1コア/1GBプランだとdnfの依存解決だけでOOM Killed(exit 137)になることがあるため、
+# 先にswapfileを用意してから実行する(swapファイル作成もidempotent)。
+provision:
+    ssh -i {{ssh_key}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address) 'if [ ! -f /swapfile ]; then fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo "/swapfile none swap sw 0 0" >> /etc/fstab; fi && dnf install -y dnf-plugins-core && dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo && dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin && systemctl enable --now docker'
+
+# Create /opt/ai-logs/.env on the VM with random secrets, unless it already exists (run before first deploy)
+vm-env:
+    ssh -i {{ssh_key}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address) 'mkdir -p /opt/ai-logs && cd /opt/ai-logs && if [ ! -f .env ]; then echo "OTLP_AUTH_TOKEN=$(openssl rand -hex 32)" > .env && echo "GRAFANA_ADMIN_PASSWORD=$(openssl rand -base64 18)" >> .env && echo "Generated new .env on the VM."; else echo ".env already exists on the VM, leaving it as-is."; fi'
+
+# Copy docker/ to the VM (staging dir; drop any local .env before merge so /opt/ai-logs/.env is kept) and start the stack
+deploy:
+    scp -i {{ssh_key}} -r {{docker_dir}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address):/tmp/ai-logs-docker
+    ssh -i {{ssh_key}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address) 'mkdir -p /opt/ai-logs && rm -f /tmp/ai-logs-docker/.env && cp -rf /tmp/ai-logs-docker/. /opt/ai-logs/ && rm -rf /tmp/ai-logs-docker && cd /opt/ai-logs && docker compose up -d --build'
+
+# Show the generated secrets stored in /opt/ai-logs/.env on the VM
+show-secrets:
+    ssh -i {{ssh_key}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address) "cat /opt/ai-logs/.env"
+
+# SSH tunnel (foreground; Ctrl+C to stop). Default Grafana at localhost:3000. Args: [local] [remote] (e.g. `just tunnel 3001` or `just tunnel 4318 4318`)
+tunnel local="3000" remote="3000":
+    @echo "Forwarding localhost:{{local}} -> VM localhost:{{remote}} (Ctrl+C to stop)"
+    ssh -i {{ssh_key}} -N -L {{local}}:localhost:{{remote}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address)
+
+# Show container resource usage on the VM
+stats:
+    ssh -i {{ssh_key}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address) "docker stats --no-stream"
+
+# Fetch recent logs straight from Loki (no Grafana/tunnel/password needed). e.g. `just logs 15m 200 claude-code`
+logs since="1h" limit="200" service="":
+    @python {{scripts_dir}}/fetch_logs.py --server-ip $(terraform -chdir={{tf_dir}} output -raw server_ip_address) --ssh-key {{ssh_key}} logs --since {{since}} --limit {{limit}} --service "{{service}}"
+
+# List every service_name Loki has ever seen (useful to check if a given tool has ever sent anything)
+log-services:
+    @python {{scripts_dir}}/fetch_logs.py --server-ip $(terraform -chdir={{tf_dir}} output -raw server_ip_address) --ssh-key {{ssh_key}} list-services
+
+# E2E-verify Collector -> Loki -> Grafana using a synthetic curl'd OTLP log (no AI CLI involved)
+verify-pipeline:
+    bash {{scripts_dir}}/verify_pipeline.sh
+
+# E2E-verify the REAL `claude` CLI sends telemetry that reaches Loki (env vars passed explicitly, not relying on ambient shell)
+verify-client:
+    bash {{scripts_dir}}/verify_client.sh
+
+# Verify the OTLP endpoint rejects requests without a bearer token (expect HTTP 401)
+verify-otlp-auth:
+    curl -s -o /dev/null -w "HTTP %{http_code} (expect 401)\n" http://$(terraform -chdir={{tf_dir}} output -raw server_ip_address):4318/v1/logs
+
+# Verify Grafana's port 3000 is NOT reachable from outside the VM (expect a connection failure/timeout)
+verify-grafana-private:
+    curl -s -m 5 -o /dev/null -w "HTTP %{http_code}\n" http://$(terraform -chdir={{tf_dir}} output -raw server_ip_address):3000 || echo "connection failed as expected (Grafana is not publicly exposed)"
+
+# --- Azure Blob archive (Loki filesystem stays hot; Blob is a daily gzip JSONL copy) ---
+# Dates are UTC. JST "yesterday" is 9 hours ahead of the UTC date used here.
+# Resource group is rg-ai-logs-archive, not the skills-site SWA RG.
+
+# Create the archive resource group, LRS Cool storage account, and container
+archive-provision:
+    bash {{scripts_dir}}/archive_azure.sh provision "{{archive_rg}}" "{{archive_account}}" "{{archive_container}}" "{{archive_location}}"
+
+# Append/refresh Blob connection settings on the VM (/opt/ai-logs/.env) and in local .env
+archive-env:
+    bash {{scripts_dir}}/archive_azure.sh env "{{archive_rg}}" "{{archive_container}}" "{{ssh_key}}" "{{tf_dir}}"
+
+# One-shot export of one UTC date on the VM (e.g. `just archive-export 2026-09-11`)
+archive-export date:
+    ssh -i {{ssh_key}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address) "cd /opt/ai-logs && docker compose run --rm archive-exporter export --date {{date}}"
+
+# Backfill existing Loki logs on the VM (serial query_range). Extra args are passed through (e.g. `--from 2026-07-01`)
+archive-backfill *args:
+    ssh -i {{ssh_key}} root@$(terraform -chdir={{tf_dir}} output -raw server_ip_address) "cd /opt/ai-logs && docker compose run --rm archive-exporter backfill {{args}}"
+
+# List archived UTC dates and _status markers (local; needs azure-storage-blob)
+archive-list:
+    uv run python {{archive_script}} list
+
+# Download one UTC date into temp/ai-logs-archive/ as .jsonl (local). e.g. `just archive-pull 2026-09-11`
+archive-pull date:
+    uv run python {{archive_script}} pull --date {{date}}
+
+# --- Local dev machine client env (Claude Code OTLP export) ---
+# Prereq: .env must exist in this directory with SERVER_IP / OTLP_AUTH_TOKEN filled in
+# (cp .env.example .env, then fill via `just ip` / `just show-secrets`).
+# just is a thin wrapper; the actual logic lives in scripts/client_env.py.
+
+# Print the Claude Code OTLP env vars for the CURRENT shell only (temporary): eval "$(just env-emit bash)", or `just env-emit pwsh | Invoke-Expression` in PowerShell
+env-emit shell="pwsh":
+    @python {{scripts_dir}}/client_env.py emit --shell {{shell}}
+
+# Set the Claude Code OTLP env vars as persistent Windows User environment variables
+# (applies to any newly-started process, e.g. VS Code opened from the Start Menu -- unlike a shell profile).
+# Already-running apps (an open VS Code window, an already-running `claude`) must be restarted to pick it up.
+env-install shell="pwsh":
+    @python {{scripts_dir}}/client_env.py install --shell {{shell}}
+
+# Remove the Claude Code OTLP env vars from the Windows User environment, and print unset statements for the CURRENT shell
+env-purge shell="pwsh":
+    @python {{scripts_dir}}/client_env.py purge --shell {{shell}}

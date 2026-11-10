@@ -1,0 +1,17 @@
+{
+  "name": "cline-wrapper-example",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node main.mjs",
+    "search": "node repo-search.mjs",
+    "test": "node test-repo-tools.mjs"
+  },
+  "dependencies": {
+    "@cline/sdk": "0.0.65",
+    "zod": "4.4.3"
+  }
+}

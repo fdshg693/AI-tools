@@ -1,0 +1,32 @@
+# Packaging for the interactive-cli-wrapper core driver + its toy test fixture
+# + the session-persisting `icw` console command.
+#
+# `uv sync` from the repo root pulls this package (a uv workspace member)
+# into the shared dev venv, so `uv run pytest tools/interactive-cli-wrapper`
+# works without a separate install step.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "interactive-cli-wrapper"
+version = "0.1.1"
+description = "PTY-driven core driver for scripting interactive (REPL) CLIs one turn at a time"
+requires-python = ">=3.11"
+dependencies = [
+    # ConPTY-backed pseudo-console spawning (Windows only). See README.md's
+    # "なぜPTY駆動が必要か" section for why raw subprocess pipes and the
+    # winpty CLI don't work here.
+    "pywinpty; sys_platform == 'win32'",
+    # Terminal screen emulation: turns raw ANSI-laden bytes into a stable
+    # screen snapshot instead of regex-stripping escape sequences.
+    "pyte",
+]
+
+[project.scripts]
+icw = "icw_cli:main"
+
+[tool.setuptools]
+packages = ["icw_core"]
+py-modules = ["toy_repl", "icw_cli"]

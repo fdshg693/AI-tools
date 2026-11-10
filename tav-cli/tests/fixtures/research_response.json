@@ -1,0 +1,34 @@
+{
+  "content": "The Global Interpreter Lock (GIL) is a mutex in CPython that guarantees only one native thread can execute Python bytecode at any moment, protecting reference‑counted objects and other interpreter state from concurrent modification [1]. It was added because CPython’s reference‑counting memory management would be unsafe without a single lock, offering a simple and fast solution for single‑threaded ",
+  "sources": [
+    {
+      "url": "https://wiki.python.org/moin/GlobalInterpreterLock",
+      "title": "GlobalInterpreterLock",
+      "favicon": "https://wiki.python.org/favicon.ico"
+    },
+    {
+      "url": "https://www.geeksforgeeks.org/python/what-is-the-python-global-interpreter-lock-gil",
+      "title": "What is the Python Global Interpreter Lock (GIL) - GeeksforGeeks",
+      "favicon": "https://media.geeksforgeeks.org/wp-content/cdn-uploads/gfg_favicon.png"
+    },
+    {
+      "url": "https://realpython.com/python-gil",
+      "title": "What Is the Python Global Interpreter Lock (GIL)? - Real Python",
+      "favicon": "https://realpython.com/static/favicon.68cbf4197b0c.png"
+    },
+    {
+      "url": "https://www.codecademy.com/article/understanding-the-global-interpreter-lock-gil-in-python",
+      "title": "Understanding the Global Interpreter Lock (GIL) in Python",
+      "favicon": "https://www.codecademy.com/apple-touch-icon.png"
+    },
+    {
+      "url": "https://dev.to/ohdylan/understanding-pythons-global-interpreter-lock-gil-mechanism-benefits-and-limitations-4aha",
+      "title": "Understanding Python’s Global Interpreter Lock (GIL) Mechanism: Benefits and Limitations - DEV Community",
+      "favicon": "https://media2.dev.to/dynamic/image/width=128,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png"
+    }
+  ],
+  "status": "completed",
+  "created_at": "2026-06-10T11:44:41.124296+00:00",
+  "response_time": 11.94,
+  "request_id": "0c27a16f-730b-4625-9742-732f809eb577"
+}

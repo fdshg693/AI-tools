@@ -1,0 +1,15 @@
+# skill-tools の install がスキルバンドルへコピーするときの include 上書き。
+# tools/skill-tools/.gitignore の除外パターンと組み込み既定除外を打ち消して、
+# ここに挙げたパターンだけをバンドルへ復帰させる。判定順序・適用範囲は
+# tools/skill-tools/README.md の「バンドルコピーの除外/包含ポリシー」を参照。
+#
+# uv.lock: スキルに同梱した CLI を `uv run --project` で揃えるスキル
+# (claude-plugins/my-tools-no-install/skills/web-lookup 等) が、依存を固定して
+# 再現性を保つために commit している lockfile。.gitignore の `uv.lock` 除外を
+# 打ち消して同梱する。
+include:
+  - uv.lock
+
+# `.env` は既定で除外したまま。スキルに `.env` を同梱させたい場合だけ、下の
+# ように利用者が明示的に追加する。秘密情報がコピーされる点に注意:
+#   - .env

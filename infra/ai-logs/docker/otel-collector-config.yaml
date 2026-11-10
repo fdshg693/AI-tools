@@ -1,0 +1,45 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth
+
+processors:
+  # 1コア/1GB VMでの運用を見据え、Collectorが持つメモリの上限を明示的に絞る
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+    spike_limit_mib: 50
+  batch:
+    timeout: 10s
+
+exporters:
+  otlphttp/loki:
+    endpoint: "http://loki:3100/otlp"
+    tls:
+      insecure: true
+  # Phase1のdebug exporterはVMでのリソース節約のため外した(必要ならverbosity: basicで一時的に有効化)
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  bearertokenauth:
+    scheme: "Bearer"
+    tokens: ["${env:OTLP_AUTH_TOKEN}"]
+
+service:
+  extensions: [health_check, bearertokenauth]
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/loki]
+  telemetry:
+    logs:
+      level: info

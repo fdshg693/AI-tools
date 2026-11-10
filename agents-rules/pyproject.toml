@@ -1,0 +1,31 @@
+# Packaging for the agents-rules CLI (AGENTS.md -> per-tool rule files).
+#
+#     uv tool install --editable tools/agents-rules
+#
+# This writes an `agents-rules` (Windows: agents-rules.exe) shim into the
+# tool environment's Scripts/bin directory.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agents-rules"
+version = "0.1.0"
+description = "Generate Cline / Copilot / Antigravity / Cursor rule files from nested AGENTS.md files"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml",
+]
+
+[project.scripts]
+agents-rules = "agents_rules.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["agents_rules*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

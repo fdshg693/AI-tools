@@ -1,0 +1,108 @@
+set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+
+# List available recipes
+default:
+    @just --list
+
+# --- precommit: single in-process entry used by lefthook ---
+
+# Run staged-relevant SKILL.md fixers, generators and tool version bumps in-process.
+# Pass --all to run every task regardless of staged files.
+precommit-fix *args:
+    uv run python -m precommit fix {{ args }}
+
+# Run staged-relevant read-only checks in-process. Pass --all to run every check.
+precommit-check *args:
+    uv run python -m precommit check {{ args }}
+
+# --- plugin_meta/generate: plugin/marketplace/catalog meta-info generators ---
+
+# Regenerate .claude-plugin/marketplace.json
+marketplace:
+    uv run python -m plugin_meta.generate.generate_marketplace
+
+# Regenerate .agents/plugins/marketplace.json
+codex-marketplace:
+    uv run python -m plugin_meta.generate.generate_codex_marketplace
+
+# Regenerate copilot-plugins/meta/plugin.json and .github/plugin/marketplace.json
+copilot-marketplace:
+    uv run python -m plugin_meta.generate.generate_copilot_marketplace
+
+# Regenerate .claude-plugin/skill-catalog.json
+skill-catalog:
+    uv run python -m plugin_meta.generate.generate_skill_catalog
+
+# Regenerate CATALOG.md under every skills/ folder in the repo
+skills-catalog-md:
+    uv run python -m plugin_meta.generate.generate_skills_catalog_md
+
+# Regenerate README.md's AIツールごとの設定・プラグインルート section
+readme-tools-section:
+    uv run python -m plugin_meta.generate.generate_readme_tools_section
+
+# Regenerate all generated marketplace and skill catalog files.
+# AGENTS.md -> Cline/Copilot/Antigravity rules are not generated here; run the
+# tools/agents-rules CLI (`uv run agents-rules`) explicitly when needed.
+generate: marketplace codex-marketplace copilot-marketplace skill-catalog skills-catalog-md readme-tools-section
+
+# --- skill/set, skill/check, skill/query: SKILL.md frontmatter and relation graph ---
+
+# Ensure every SKILL.md has a non-empty meta.version (defaults missing ones to 1.0.0)
+skill-versions:
+    uv run python -m skill.set.set_skill_versions
+
+# Ensure every SKILL.md has a non-empty meta.description (defaults missing ones to "no description")
+skill-descriptions:
+    uv run python -m skill.set.set_skill_descriptions
+
+# Ensure every SKILL.md has a meta.tag array (defaults missing ones to [])
+skill-tags:
+    uv run python -m skill.set.set_skill_tags
+
+# Fill missing skill-meta fields using aim (explicit execution only; calls OpenRouter)
+skill-meta-fields-fill:
+    uv run python -m skill.set.skill_meta_field_fill
+
+# Fail if a staged SKILL.md's content changed without a meta.version bump
+skill-version-bump-check *paths:
+    uv run python -m skill.check.check_skill_version_bump {{ paths }}
+
+# Fail if a SKILL.md's requires_repo_tools/requires_install references a
+# tools/ path that isn't registered (or is stale) in repo-tools.yaml, or if
+# repo-tools.yaml requires_tools edges are invalid / drift from workspace deps
+skill-repo-tools-check:
+    uv run python -m skill.check.check_skill_repo_tools
+    uv run python -m skill.check.check_repo_tool_relations
+
+# Fail if source uses find_dotenv / usecwd=True / pathless load_dotenv()
+# (cwd or parent .env search). Not wired into lefthook.
+tool-env-loading-check:
+    uv run python -m check.check_tool_env_loading
+
+# Scan currently staged files with secretlint. Batches argv so Windows
+# leftover pre-commit does not hit CreateProcess command-line limits.
+scan-staged-secrets:
+    uv run python -m check.scan_staged_secrets
+
+# Bump meta.version (last numeric segment, e.g. 1.2.3 -> 1.2.4) on SKILL.md
+# files flagged by skill-version-bump-check. Pass path args to bump specific
+# files unconditionally instead of auto-detecting staged ones.
+skill-version-bump *paths:
+    uv run python -m skill.set.bump_skill_versions {{ paths }}
+
+# List downstream skills/tools for a changed skill name, tool key, SKILL.md,
+# or registered tools/ path. Not wired into lefthook (query, not a check).
+skill-tool-impact *targets:
+    mise exec -- uv run python -m skill.query.list_skill_tool_impact {{ targets }}
+
+# --- release: manifest version bumps for repo-tools.yaml registered tools ---
+
+# Bump patch version in the package manifest for any repo-tools.yaml registered
+# tool folder touched by the given (default: staged) files.
+tool-version-bump *paths:
+    uv run python -m release.bump_tool_versions {{ paths }}
+
+# Deprecated alias kept for existing docs/scripts until they are migrated.
+release-version-bump *paths:
+    uv run python -m release.bump_tool_versions {{ paths }}

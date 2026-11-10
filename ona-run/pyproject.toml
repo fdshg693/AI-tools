@@ -1,0 +1,15 @@
+[project]
+name = "ona-run-cli"
+version = "0.1.1"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+ona-run = "ona_run_cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["ona_run_cli"]

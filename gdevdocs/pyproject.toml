@@ -1,0 +1,19 @@
+[project]
+name = "gdevdocs-cli"
+version = "0.1.0"
+description = "fastmcp-based CLI wrapper around the Google Developer Knowledge MCP server"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp",
+]
+
+[project.scripts]
+gdevdocs = "gdevdocs_cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["gdevdocs_cli"]
+packages = ["gdevdocs_core"]

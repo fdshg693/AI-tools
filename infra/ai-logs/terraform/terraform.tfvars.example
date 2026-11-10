@@ -1,0 +1,10 @@
+# cp terraform.tfvars.example terraform.tfvars して値を埋める。
+# terraform.tfvars 自体は .gitignore 対象なのでコミットしないこと。
+
+sakura_token  = "your-api-token"
+sakura_secret = "your-api-token-secret"
+
+# zone はデフォルト(is1a, 石狩第1ゾーン)のままで良ければ省略可
+
+# ~/.ssh/ai_logs_ed25519.pub の中身をそのまま貼る
+ssh_public_key = "ssh-ed25519 AAAA..."

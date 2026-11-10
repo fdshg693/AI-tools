@@ -1,0 +1,21 @@
+# gdevdocs settings example. Copy to one of:
+#   global : ~/.config/gdevdocs/config.toml
+#            ($GDEVDOCS_CONFIG_HOME/config.toml or $XDG_CONFIG_HOME/gdevdocs/config.toml if set)
+#   project: <any dir from cwd up to the git root>/.gdevdocs.toml   (nearest wins per key)
+# Precedence: env var > nearest .gdevdocs.toml > global config.toml > default.
+# Check what is in effect with `gdevdocs config`.
+
+# api_key is read only from GDEVDOCS_API_KEY or the global config.
+# A project .gdevdocs.toml must not contain api_key (it may be committed).
+# api_key = "replace-with-your-developer-knowledge-api-key"
+
+# Base directory for search/fetch/answer folders. Default "temp/gdevdocs_mcp".
+# Env: GDEVDOCS_MCP_OUTPUT_DIR
+# A relative path in a project .gdevdocs.toml resolves against that file's directory.
+# A relative path from the environment, the global config, or the default resolves
+# against the git root of the cwd (the cwd itself outside a git repo).
+# output_dir = "temp/gdevdocs_mcp"
+
+# MCP endpoint. Default "https://developerknowledge.googleapis.com/mcp".
+# Env: GDEVDOCS_MCP_ENDPOINT. The CLI flag --endpoint wins over all of these.
+# endpoint = "https://developerknowledge.googleapis.com/mcp"

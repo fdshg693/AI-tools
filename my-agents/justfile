@@ -1,0 +1,13 @@
+set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+
+# Recipes run with this directory (tools/my-agents) as cwd, so paths below are relative to it.
+
+# List available recipes
+default:
+    @just --list
+
+# Regenerate tools/tools.yaml from TOOL_REGISTRY (name/description/args, machine-readable).
+# justfile_directory() で justfile 自身のディレクトリ(= tools/my-agents)を基準にした
+# 絶対パスへ出力するため、呼び出し位置(cwd)に依らず常に tools/my-agents/tools/tools.yaml に生成される。
+tools-yaml:
+    uv run my-agents list-tools --format yaml --output {{justfile_directory()}}/tools/tools.yaml

@@ -1,0 +1,52 @@
+[
+  {
+    "url": "https://learn.microsoft.com/en-us/fabric/fundamentals",
+    "title": "Fabric fundamentals documentation - Microsoft Fabric",
+    "short_title": "Fabric fundamentals documentation",
+    "title_source": "html",
+    "final_url": "https://learn.microsoft.com/en-us/fabric/fundamentals/",
+    "content_type": "text/html",
+    "status_code": 200,
+    "error": null
+  },
+  {
+    "url": "https://learn.microsoft.com/en-us/fabric/end-to-end-tutorials",
+    "title": "End To End Tutorials",
+    "short_title": null,
+    "title_source": "url_fallback",
+    "final_url": null,
+    "content_type": null,
+    "status_code": null,
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "url": "https://learn.microsoft.com/en-us/principles-for-ai-generated-content",
+    "title": "Principles for AI-Generated Content",
+    "short_title": "Principles for AI",
+    "title_source": "html",
+    "final_url": "https://learn.microsoft.com/en-us/principles-for-ai-generated-content",
+    "content_type": "text/html",
+    "status_code": 200,
+    "error": null
+  },
+  {
+    "url": "https://learn.microsoft.com/en-us/fabric/microsoft-fabric-overview",
+    "title": "Microsoft Fabric Overview",
+    "short_title": null,
+    "title_source": "url_fallback",
+    "final_url": null,
+    "content_type": null,
+    "status_code": null,
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "url": "https://learn.microsoft.com/en-us/fabric/fabric-help-pane",
+    "title": "Fabric Help Pane",
+    "short_title": null,
+    "title_source": "url_fallback",
+    "final_url": null,
+    "content_type": null,
+    "status_code": null,
+    "error": "HTTP Error 404: Not Found"
+  }
+]

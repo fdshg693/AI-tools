@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skill-tools"
+version = "0.5.0"
+description = "Configure, index, search, and install registered Agent Skills"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pathspec>=0.12",
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+skill-tools = "skill_tools.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["skill_tools*"]

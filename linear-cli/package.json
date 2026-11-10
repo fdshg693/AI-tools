@@ -1,0 +1,15 @@
+{
+  "name": "linear-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "linear-cli": "src/cli.mjs"
+  },
+  "dependencies": {
+    "@linear/sdk": "^89.0.0"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "春を題材にした俳句を haiku_spring.txt に1句書く",
+      "status": "done"
+    },
+    {
+      "id": 2,
+      "title": "夏を題材にした俳句を haiku_summer.txt に1句書く",
+      "status": "in_progress"
+    },
+    {
+      "id": 3,
+      "title": "秋を題材にした俳句を haiku_autumn.txt に1句書く",
+      "status": "pending"
+    },
+    {
+      "id": 4,
+      "title": "冬を題材にした俳句を haiku_winter.txt に1句書く",
+      "status": "pending"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "default": "glm-5.3-flash",
+  "models": {
+    "glm-5.3-flash": {
+      "enable": true,
+      "provider": "openrouter",
+      "id": "z-ai/glm-5.3-flash",
+      "description": "OpenRouter 経由の高速・低コストモデル（デフォルト）。"
+    },
+    "gemini-2.5-flash": {
+      "enable": true,
+      "provider": "google",
+      "id": "gemini-2.5-flash",
+      "description": "Google Gemini 2.5 Flash 高速マルチモーダルモデル。"
+    },
+    "gpt-4o-mini": {
+      "enable": true,
+      "provider": "openai",
+      "id": "gpt-4o-mini",
+      "description": "OpenAI の高速・低コストモデル。"
+    },
+    "claude-3-7-sonnet": {
+      "enable": true,
+      "provider": "anthropic",
+      "id": "claude-3-7-sonnet-20250219",
+      "description": "Anthropic Claude 3.7 Sonnet。"
+    },
+    "llama3.2": {
+      "enable": true,
+      "provider": "ollama",
+      "id": "llama3.2",
+      "description": "Ollama ローカル実行モデル。"
+    }
+  }
+}

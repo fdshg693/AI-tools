@@ -1,0 +1,19 @@
+[project]
+name = "awsdocs-cli"
+version = "0.1.0"
+description = "fastmcp-based CLI wrapper around the official AWS Knowledge MCP server"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp",
+]
+
+[project.scripts]
+awsdocs = "awsdocs_cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["awsdocs_cli"]
+packages = ["awsdocs_core"]
