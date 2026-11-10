@@ -54,7 +54,7 @@ node tools\copilot-wrapper\main.mjs --tool get_time --tool http_get --stream --j
 | `--system`            | システムメッセージに追記する内容                                                           |
 | `--json`              | 最終応答をテキストではなくJSONで出力                                                       |
 
-`provider`（BYOK設定）の各フィールドの意味は`@github/copilot-sdk`パッケージ本体の`README.md`（`Custom Providers`節）が一次情報。詳しい機能やイベントの仕様は[github-copilot-sdk-docs](../../copilot-plugins/meta/github-copilot-sdk-docs/SKILL.md)スキル経由で公式ドキュメントを参照する。
+`provider`（BYOK設定）の各フィールドの意味は`@github/copilot-sdk`パッケージ本体の`README.md`（`Custom Providers`節）が一次情報。詳しい機能やイベントの仕様は[github-copilot-sdk-docs](../../skills/plugins/ai-tools-knowledge/skills/github-copilot-sdk-docs/SKILL.md)スキル経由で公式ドキュメントを参照する。
 
 ## 権限ポリシー（既定）
 

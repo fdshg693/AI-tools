@@ -23,4 +23,4 @@ python tools\codex-wrapper\main.py "1+1="
 
 ## 関連ファイル
 
-- `codex-plugins\meta\skills\codex-sdk-use\SKILL.md`
+- `skills\plugins\ai-tools-knowledge\skills\codex-sdk-use\SKILL.md`

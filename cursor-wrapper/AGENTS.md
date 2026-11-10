@@ -11,7 +11,7 @@
 
 ## SDKの使い方
 
-SDKのAPI・実践パターンは `cursor-plugins/meta/skills/cursor-sdk-use/SKILL.md`（同梱の `custom-tools.md` / `subagents.md`）を確認すること。実装前に公式ドキュメント（`cursor-docs` スキル）で最新を確認する。
+SDKのAPI・実践パターンは `skills/plugins/ai-tools-knowledge/skills/cursor-sdk-use/SKILL.md`（同梱の `custom-tools.md` / `subagents.md`）を確認すること。実装前に公式ドキュメント（`cursor-docs` スキル）で最新を確認する。
 
 ## 実行
 
@@ -29,5 +29,5 @@ uv run python tools/cursor-wrapper/main.py "..." --model grok-4.5-medium
 
 コードの編集・作成・デバッグ時は必ず以下のファイルを参照してください。
 
-- `cursor-plugins/meta/skills/cursor-sdk-use/`
+- `skills/plugins/ai-tools-knowledge/skills/cursor-sdk-use/`
   - Cursor SDK のドキュメントを Markdown 形式でまとめたものです。特に `custom-tools.md`（カスタムツール）と `subagents.md`（サブエージェント / `AgentDefinition`）を参照してください。

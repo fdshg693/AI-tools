@@ -6,7 +6,7 @@ AGENTS.md is written as ``root`` and applies to every file.
 
 Antigravity frontmatter key names (trigger/glob/description) are not
 documented by Antigravity's official docs (only the trigger *kinds* are);
-see _agents/plugins/antigravity-meta/skills/antigravity-memory/SKILL.md.
+see skills/plugins/ai-tools-knowledge/skills/antigravity-memory/SKILL.md.
 They were confirmed by inspecting a Rule created through the Antigravity IDE.
 
 Cursor project rules must use the .mdc extension (a plain .md file under

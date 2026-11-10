@@ -69,7 +69,7 @@ npm test --prefix tools\cline-wrapper
 
 コードの編集・作成・デバッグ時は必ず以下のファイルを参照してください。
 
-- `.cline\skills\cline-sdk-docs\`
+- `skills\plugins\ai-tools-knowledge\skills\cline-sdk-docs\`
   - Cline SDK のドキュメントを Markdown 形式でまとめたものです。
 - [NEXT.md](NEXT.md) — 今後の機能追加アイデア。
 - [REFACTOR.md](REFACTOR.md) — リファクタ候補。

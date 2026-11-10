@@ -1,6 +1,6 @@
 # interactive-cli-wrapper — 対話型CLI用PTY駆動コア(Python実装)
 
-このディレクトリは、対話的(TTY前提でREPLとして動く)CLIプロセスを、AIエージェントから「入力を書き込む → そのターンの操作が落ち着くまで待つ → 出力を返す」という単位(1ターン)で駆動するための **PTY駆動コア** の実体です。特定CLIに依存させない汎用ラッパーとして設計しており、検証・実運用の題材はCursor CLI(`agent`コマンド)の対話モード([cursor-cli-use](../../cursor-plugins/meta/skills/cursor-cli-use/SKILL.md)スキルが非対話`-p`実行のみを対象とし、意図的に対象外としているREPL利用)です。
+このディレクトリは、対話的(TTY前提でREPLとして動く)CLIプロセスを、AIエージェントから「入力を書き込む → そのターンの操作が落ち着くまで待つ → 出力を返す」という単位(1ターン)で駆動するための **PTY駆動コア** の実体です。特定CLIに依存させない汎用ラッパーとして設計しており、検証・実運用の題材はCursor CLI(`agent`コマンド)の対話モード([cursor-cli-use](../../skills/plugins/ai-tools-knowledge/skills/cursor-cli-use/SKILL.md)スキルが非対話`-p`実行のみを対象とし、意図的に対象外としているREPL利用)です。
 
 Step2でコアドライバ(`icw_core/session.py` / `icw_core/screen.py`)とトイ対話CLI(`toy_repl.py`)を用意し、Step3で「1アクション=1回のCLI呼び出し」で使えるセッション永続化つきコンソールコマンド `icw`(`start`/`send`/`stop`/`list`)を追加、Step4で実CLI(Cursor CLIの`agent`対話モード)への接続を実地検証しました。実CLI固有のチューニング内容は[カスタマイズ箇所](#カスタマイズ箇所)の下にある「`agent`対話モードへの接続で判明した癖」を参照してください。AIエージェント向けの使い方は[tools/_plugin/my-tools/skills/interactive-cli-wrapper/SKILL.md](../_plugin/my-tools/skills/interactive-cli-wrapper/SKILL.md)にまとめてあります。
 
