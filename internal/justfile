@@ -106,3 +106,21 @@ tool-version-bump *paths:
 # Deprecated alias kept for existing docs/scripts until they are migrated.
 release-version-bump *paths:
     uv run python -m release.bump_tool_versions {{ paths }}
+
+# --- links: junctions declared in .links.yaml (see docs/repo-wide/repo-layout.md) ---
+
+# Create/repair declared junctions; registers them in info/exclude first
+links-sync *args:
+    uv run python -m links sync {{ args }}
+
+# Fail on missing/stale/unexcluded/undeclared junctions or tracked files under a link
+links-check *args:
+    uv run python -m links check {{ args }}
+
+# Remove every declared junction (never its target) and clear the exclude block
+links-clean *args:
+    uv run python -m links clean {{ args }}
+
+# Advisory warning run by lefthook post-checkout (always exits 0)
+links-post-checkout:
+    uv run python -m links post-checkout
