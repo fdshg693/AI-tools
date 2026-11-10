@@ -281,7 +281,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 - parallel-agent-worktree
@@ -330,7 +330,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.3
+  version: 1.2.4
 ---
 
 - task-tracker
@@ -440,7 +440,7 @@ meta:
   requires_skills: none
   status: experimental
   description: テキストローカルリンクの impact / check / fix 判断
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 - use-context

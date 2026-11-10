@@ -93,8 +93,8 @@ tools/_plugin/my-tools/skills/task-tracker/
 
 - 既存hookの書式踏襲: 当時の `.claude/hooks/block_large_read.py`, `.claude/hooks/_hook_log.py`（現在は `agent-tooling/agent_tooling/adapters/claude/` と `adapters/claude/common/`）
 - hooks_manager運用ルール: 当時の `.claude/scripts/AGENTS.md`, `.claude/scripts/hooks_manager.py`（廃止済み。現在は [hook-distribution](../../../../../maintenance/docs/hook-distribution.md)）
-- `UserPromptExpansion` の最新入出力スキーマ: `claude-plugins/meta/skills/claude-code-docs/output/llms-full.txt` 内 `### UserPromptExpansion` セクション（バージョン差異があり得るので実装直前に再取得推奨。`claude-code-docs`スキル経由で最新化できる）
-- セッショントランスクリプトの所在・形式: [claude-plugins/meta/skills/claude-code-debugging/logs-and-settings.md](../../../../../claude-plugins/meta/skills/claude-code-debugging/logs-and-settings.md)、参考実装 [claude-plugins/meta/skills/claude-code-debugging/scripts/extract_log.py](../../../../../claude-plugins/meta/skills/claude-code-debugging/scripts/extract_log.py)
+- `UserPromptExpansion` の最新入出力スキーマ: `skills/plugins/cc-knowledge/skills/claude-code-docs/output/llms-full.txt` 内 `### UserPromptExpansion` セクション（バージョン差異があり得るので実装直前に再取得推奨。`claude-code-docs`スキル経由で最新化できる）
+- セッショントランスクリプトの所在・形式: [skills/plugins/cc-knowledge/skills/claude-code-debugging/logs-and-settings.md](../../../../../skills/plugins/cc-knowledge/skills/claude-code-debugging/logs-and-settings.md)、参考実装 [skills/plugins/cc-knowledge/skills/claude-code-debugging/scripts/extract_log.py](../../../../../skills/plugins/cc-knowledge/skills/claude-code-debugging/scripts/extract_log.py)
 
 ## 決定事項・注意点
 

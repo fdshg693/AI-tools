@@ -3,7 +3,7 @@
 - **関連スキル**:
   - `tools\_plugin\my-tools\skills\aim-cli\SKILL.md`
   - `tools\_plugin\my-tools\skills\aim-lib`
-  - `claude-plugins\topics\skills\openrouter-docs\SKILL.md`
+  - `skills\plugins\topics\skills\openrouter-docs\SKILL.md`
 
 CLIのフラグや`@path`/`--parallel`の挙動を変えたら、同じ変更で`aim --ai-help`と`aim-cli`スキルの判断節を見る。フラグ表はスキルに戻さない。
 
@@ -179,7 +179,7 @@ aim --web --prompt "2026年8月時点の最新ニュースは？"
 - `cost` / `*_tokens` / `generation_id` は OpenRouter レスポンスの `usage` / `id` フィールドからそのまま転記（追加のAPI呼び出しは発生しない）
 - 応答本文（completion）はログに含めない
 - `logs/`配下のログファイルはプロンプト本文を含み得るため Git管理対象外（`.gitignore` 参照）。ディレクトリ自体は `.gitkeep` で追跡
-- `call()`/`call_async()` は呼び出し元が `user`/`session_id`/`trace` を渡せる（いずれも省略時は `None`）。`trace` はOpenRouterのSDKの `trace`（`trace_id`/`trace_name`/`span_name`/`generation_name`/`parent_span_id`の既知キー + 任意の追加キーを持つdict）にそのまま渡され、Grafana Cloudへのブロードキャスト設定時にはトレースのカスタム属性としても反映される（詳細は`claude-plugins/topics/skills/openrouter-docs`スキルの`references/observability.md`参照）
+- `call()`/`call_async()` は呼び出し元が `user`/`session_id`/`trace` を渡せる（いずれも省略時は `None`）。`trace` はOpenRouterのSDKの `trace`（`trace_id`/`trace_name`/`span_name`/`generation_name`/`parent_span_id`の既知キー + 任意の追加キーを持つdict）にそのまま渡され、Grafana Cloudへのブロードキャスト設定時にはトレースのカスタム属性としても反映される（詳細は`skills/plugins/topics/skills/openrouter-docs`スキルの`references/observability.md`参照）
 - `aim` コマンドを直接実行した場合は常に `trace: {"tool": "aim-cli"}` が記録される。`--parallel` の各ジョブには同じ `tool` に加えて `prompt_index`（1始まり）を付与する。そのプロンプトに `@path` があれば先頭のものを `file_path`（`@` を付けない解決前のパス）にも付ける
 - `trace.trace_id`（32桁hex、OTel準拠のtrace id）は呼び出し元が指定しない限り `call()`/`call_async()` が自動生成し、OpenRouterへの送信・ログ記録の両方に使う。これがGrafana Cloud連携時のTrace IDそのものになるため、ログの`trace.trace_id`をそのままGrafana CloudのTempoで検索すれば対応するトレースにたどり着ける（詳細は下記「Grafana Cloudへのログ配信」参照）
 - `call()`/`call_async()` に `return_trace_id=True` を渡すと、戻り値が `(応答テキスト, trace_id)` のタプルになる（省略時は従来通り応答テキストのみ）。呼び出し元が自身の処理単位（例: 対象ファイルパスやDBレコード）とtrace_idを紐づけて保存したい場合に使う
@@ -189,7 +189,7 @@ aim --web --prompt "2026年8月時点の最新ニュースは？"
 OpenRouterのBroadcast機能を使うと、`aim`経由の呼び出しをGrafana Cloud（OTLP/Tempoトレース）にも並行して送信できる。ローカルの`logs/calls.jsonl`は今まで通り残るため、これは二重化であり置き換えではない。
 
 - 設定はOpenRouterダッシュボード（[`https://openrouter.ai/settings/observability`](https://openrouter.ai/settings/observability)）での手動設定のみ。このCLI/リポジトリ側に自動設定コードは持たない（Broadcast設定にはManagement API Keyという別種の強い権限を持つキーが必要になるため）
-- 設定手順・カスタムメタデータのマッピング（`user`→`user.id`、`session_id`→`session.id`、`trace`の各キー→`trace.metadata.*`等）・TraceQLクエリ例の詳細は `claude-plugins/topics/skills/openrouter-docs` スキルの `references/observability.md` を参照
+- 設定手順・カスタムメタデータのマッピング（`user`→`user.id`、`session_id`→`session.id`、`trace`の各キー→`trace.metadata.*`等）・TraceQLクエリ例の詳細は `skills/plugins/topics/skills/openrouter-docs` スキルの `references/observability.md` を参照
 - **ローカルログとGrafana側トレースの突き合わせ**: OpenRouterのレスポンスにはGrafana Cloud側のtrace_id/span_idは含まれない（APIが返さない）。そのため `aim` 側で毎回trace_idを自前生成し、OpenRouterへの送信とローカルログの両方に使うことで、ローカルログの`trace.trace_id`＝Grafana CloudのTrace IDという対応を保証している。span_id自体はAPI経由で取得・指定する手段が無いが、1リクエスト＝1トレース（実質1スパン）のため、trace_idでトレースを開けば中のスパンも自動的に見え、実務上span_idの保存は不要
 
 ## エラー時の挙動

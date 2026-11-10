@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.3
+  version: 1.2.4
 ---
 
 # skill-tools の使い方
@@ -64,7 +64,7 @@ index:
 self_skill: tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md
 
 skills:
-  claude-plugins/coding/skills/testing/SKILL.md:
+  skills/plugins/coding/skills/testing/SKILL.md:
     destination: .agents/skills
 ```
 
@@ -77,7 +77,7 @@ targets:
   agents:
     destination: .agents/skills
 skills:
-  claude-plugins/coding/skills/testing/SKILL.md:
+  skills/plugins/coding/skills/testing/SKILL.md:
     destinations:
       agents: .agents/custom-skills
 ```
@@ -96,7 +96,7 @@ skill-tools list-skills
 
 ```powershell
 skill-tools install-skills alpha
-skill-tools install-skills claude-plugins/coding/skills/testing/SKILL.md --dry-run
+skill-tools install-skills skills/plugins/coding/skills/testing/SKILL.md --dry-run
 skill-tools install-skills alpha --overwrite
 skill-tools install-skills --target claude,agents alpha --dry-run
 skill-tools install-skills self
@@ -107,7 +107,7 @@ skill-tools install-skills self
 - `self_skill`の値は設定ロード時に存在確認しない。カタログに無ければinstall時に`skill not found`（終了コード`2`）になる
 - 旧名（`list` / `install` / `installed` / `update` / `remove`）は廃止済みで、未知のコマンドとしてエラーになる。コマンドは`list-skills` / `install-skills` / `installed-skills` / `update-skills` / `remove-skills`を使う
 
-- 選択子は **source path / リポジトリ相対の canonical ID（`claude-plugins/.../SKILL.md`） / 一意なskill名** のいずれか。名前が一意でないときは canonical ID か source path を使う
+- 選択子は **source path / リポジトリ相対の canonical ID（`skills/plugins/.../SKILL.md`） / 一意なskill名** のいずれか。名前が一意でないときは canonical ID か source path を使う
 - 配置先はCWD基準。既定は`.claude/skills/<skill-name>/`。`.agents/skills/`等へ変えるなら`skill-tools.yaml`の`skills:`に canonical ID ごとの`destination`を書く
 - `--target name[,name...]`を指定すると、同じbundleを複数targetへ配置する。`targets.<name>.destination`がtargetの既定配置先で、`skills.<canonical-id>.destinations.<target>`がskill単位の上書き。target指定時の優先順位はskill target override → target既定 → legacy `skills.<id>.destination` → `.claude/skills`。`--target`未指定時はこれまでのdestination設定・既定値を維持する
 - **既存のskillディレクトリは`--overwrite`なしでは変更しない。** 上書きになる場合はまず`--dry-run`で配置先を確認し、ユーザーに上書き可否を確認してから`--overwrite`を付ける

@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 # ona-run CLI の使い方
@@ -49,7 +49,7 @@ meta:
 
 `--command`使用時は`{task}`がタスク文字列に置換される。`--command`は以降の全トークンをそのままコマンドとして扱うため、他のオプションより後ろ・末尾に置く。
 
-`ona-run`自体が内部で組み立てる`ona environment exec`コマンドの詳細（利用可能なフラグ等）を知りたい場合や、`ona-run`の抽象化では表現できず素のOna公式CLI（`ona`コマンド）を直接操作する必要がある場合は、[ona-cli-docs](../../../../../claude-plugins/topics/skills/ona-cli-docs/SKILL.md)スキルを参照する。
+`ona-run`自体が内部で組み立てる`ona environment exec`コマンドの詳細（利用可能なフラグ等）を知りたい場合や、`ona-run`の抽象化では表現できず素のOna公式CLI（`ona`コマンド）を直接操作する必要がある場合は、[ona-cli-docs](../../../../../skills/plugins/topics/skills/ona-cli-docs/SKILL.md)スキルを参照する。
 
 ## `--cleanup` モードの選び方
 

@@ -4,7 +4,7 @@
 # tools/skill-tools/README.md の「バンドルコピーの除外/包含ポリシー」を参照。
 #
 # uv.lock: スキルに同梱した CLI を `uv run --project` で揃えるスキル
-# (claude-plugins/my-tools-no-install/skills/web-lookup 等) が、依存を固定して
+# (skills/plugins/web-lookup/skills/web-lookup 等) が、依存を固定して
 # 再現性を保つために commit している lockfile。.gitignore の `uv.lock` 除外を
 # 打ち消して同梱する。
 include:

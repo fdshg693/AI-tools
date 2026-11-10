@@ -2,7 +2,7 @@
 
 ## 関連スキル
 
-- `claude-plugins\meta\skills\claude-agent-sdk`
+- `skills\plugins\cc-knowledge\skills\claude-agent-sdk`
 
 ## ファイル構成
 

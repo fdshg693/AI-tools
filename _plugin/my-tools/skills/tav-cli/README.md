@@ -57,8 +57,8 @@ Python ラッパー)を、Claudeが会話の中からすぐ使えるようにす
 
 ## 関連スキル
 
-- [tav-lit](../../../../../claude-plugins/my-tools-no-install/skills/tav-lit/README.md): 1 URL・その場限りで読むだけの用途に絞った軽量版
+- [tav-lit](../../../../../skills/plugins/web-lookup/skills/tav-lit/README.md): 1 URL・その場限りで読むだけの用途に絞った軽量版
   (ライブラリの前提条件は共有するが、`tav-cli`本体には依存しない独立スクリプト)
 - [ms-learn](../ms-learn/README.md): Microsoft/Azure公式ドキュメントが対象ならこちらを優先
-- `zenn`(`claude-plugins/others/skills/zenn`): 記事執筆時の外部調査を`tav-cli`経由に
+- `zenn`(`skills/plugins/others/skills/zenn`): 記事執筆時の外部調査を`tav-cli`経由に
   固定する上位スキル

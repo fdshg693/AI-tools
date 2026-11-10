@@ -1,6 +1,6 @@
 # my-agents — YAML定義のLangchainエージェント
 
-**Langchain スキル: `claude-plugins\topics\skills\langchain-docs\SKILL.md`**
+**Langchain スキル: `skills\plugins\topics\skills\langchain-docs\SKILL.md`**
 **このCLI利用スキル: `tools/_plugin/my-tools/skills/my-agents`**
 
 - ツール（Python関数）はコード内（`my_agents/tools/`）で責務ごとにファイルを分けて定義し、レジストリに登録する

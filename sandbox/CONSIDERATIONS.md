@@ -1,7 +1,7 @@
 # サンドボックス構想の検討
 
 `README.md` に書かれたラフプランを実現可能か、どのあたりが要調査かを整理する検討メモ。
-Claude Code の仕様は、`claude-plugins/meta/skills/CATALOG.md` から関連スキルを参照して根拠とした
+Claude Code の仕様は、`skills/plugins/cc-knowledge/skills/CATALOG.md` から関連スキルを参照して根拠とした
 （出典は末尾「Claude Code 仕様の参照根拠」に明記）。
 
 ## 結論サマリ

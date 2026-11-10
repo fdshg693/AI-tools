@@ -1,6 +1,6 @@
 # model-select — OpenRouterモデル選定ツール
 
-**関連スキル: `claude-plugins/topics/skills/openrouter-docs/SKILL.md`（特に[references/models-pricing-benchmarks.md](../../../claude-plugins/topics/skills/openrouter-docs/references/models-pricing-benchmarks.md)）**
+**関連スキル: `skills/plugins/topics/skills/openrouter-docs/SKILL.md`（特に[references/models-pricing-benchmarks.md](../../../skills/plugins/topics/skills/openrouter-docs/references/models-pricing-benchmarks.md)）**
 
 OpenRouterの[Models API](https://openrouter.ai/api/v1/models)から取得したArtificial Analysisベンチマーク（`coding_index`）と価格を判断材料に、OpenAI/Anthropic/Google/Qwen/Z.ai/MiniMax/xAI/Moonshot AI/DeepSeek系列モデルの選択を行いやすくするCLIツール。実行するたびにOpenRouter APIをライブ取得し（キャッシュ無し）、結果を自己完結HTML（サーバー・外部JS/CSS取得不要）として出力する。ランク分けの閾値・bucketステップ幅・プロバイダ絞り込み・表示モード（フル/Pareto）はHTML上でインタラクティブに変更できる。
 

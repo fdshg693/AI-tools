@@ -18,7 +18,7 @@
 
 ## 関連スキル
 
-`--agent`/`--command`のテンプレートでは表現できない、Ona公式CLI（`ona`コマンド）自体の細かい使い方（フラグ、認証、コマンド一覧等）は[ona-cli-docs](../../../../../claude-plugins/topics/skills/ona-cli-docs/SKILL.md)スキルが担当する。こちらは`ona-run`（およびそれがラップする`ona`コマンド呼び出し）自体の設計意図・保守情報に特化する。
+`--agent`/`--command`のテンプレートでは表現できない、Ona公式CLI（`ona`コマンド）自体の細かい使い方（フラグ、認証、コマンド一覧等）は[ona-cli-docs](../../../../../skills/plugins/topics/skills/ona-cli-docs/SKILL.md)スキルが担当する。こちらは`ona-run`（およびそれがラップする`ona`コマンド呼び出し）自体の設計意図・保守情報に特化する。
 
 ## 情報源と保守
 

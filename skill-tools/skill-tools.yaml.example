@@ -23,7 +23,7 @@ self_skill: tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md
 
 # Optional destination overrides used by install-skills.
 skills:
-  claude-plugins/coding/skills/example/SKILL.md:
+  skills/plugins/coding/skills/example/SKILL.md:
     destination: .claude/skills
     destinations:
       agents: .agents/custom-skills

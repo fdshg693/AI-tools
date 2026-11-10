@@ -13,7 +13,7 @@ meta:
   requires_skills: none
   status: experimental
   description: テキストローカルリンクの impact / check / fix 判断
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 # textgraph CLI の使い方
@@ -40,7 +40,7 @@ meta:
 
 `impact` の `<path>` はリポジトリ相対・絶対・basename。複数ヒットなら候補を出して止まるので、相対パスに絞る。
 
-コードの流れ・定義・呼び出しは [codegraph-docs](../../../../../claude-plugins/topics/skills/codegraph-docs/SKILL.md)。テキストのローカル参照は textgraph。両方いるときは先にそれぞれの 1 hop を取り、混ぜて推測しない。
+コードの流れ・定義・呼び出しは [codegraph-docs](../../../../../skills/plugins/topics/skills/codegraph-docs/SKILL.md)。テキストのローカル参照は textgraph。両方いるときは先にそれぞれの 1 hop を取り、混ぜて推測しない。
 
 ## `fix --apply` してよいか
 

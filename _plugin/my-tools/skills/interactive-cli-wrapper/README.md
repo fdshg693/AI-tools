@@ -14,7 +14,7 @@
 1. 汎用の使い方を知りたいだけの場面でも対象CLI固有の詳細を読み込むことになり本文が肥大化する
 2. 別の対象CLIを繋ぐたびに`SKILL.md`本体が際限なく伸びる
 
-という問題が出る。[writing-skill](../../../../../claude-plugins/meta/skills/writing-skill/writing.md)の「同じスキルの中の観点違いなら、`SKILL.md`はルーターに徹する」方針に従い、**`SKILL.md`は汎用の使い方(start/send/stop/list、idle-timeout/ready-patternの考え方、cursor-cli-useとの使い分け)だけに留め、対象CLIごとの個別知見は`<cli-name>.md`として同階層に切り出す**構成にした。現時点では[cursor-agent.md](cursor-agent.md)(Cursor CLI `agent`対話モード)のみ存在する。今後別の対話CLIを繋いだ場合も、同じ形で`<cli-name>.md`を追加していく想定。
+という問題が出る。[writing-skill](../../../../../skills/plugins/cc-knowledge/skills/writing-skill/writing.md)の「同じスキルの中の観点違いなら、`SKILL.md`はルーターに徹する」方針に従い、**`SKILL.md`は汎用の使い方(start/send/stop/list、idle-timeout/ready-patternの考え方、cursor-cli-useとの使い分け)だけに留め、対象CLIごとの個別知見は`<cli-name>.md`として同階層に切り出す**構成にした。現時点では[cursor-agent.md](cursor-agent.md)(Cursor CLI `agent`対話モード)のみ存在する。今後別の対話CLIを繋いだ場合も、同じ形で`<cli-name>.md`を追加していく想定。
 
 ## 前提条件(重要)
 

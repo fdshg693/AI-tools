@@ -70,7 +70,7 @@ targets:
   agents:
     destination: .agents/skills
 skills:
-  claude-plugins/coding/skills/testing/SKILL.md:
+  skills/plugins/coding/skills/testing/SKILL.md:
     destination: .agents/skills
     destinations:
       agents: .agents/custom-skills
@@ -130,7 +130,7 @@ source の `repo-tools.yaml` の各エントリは、`description` にそのツ�
 
 GitHub source にも 1〜3 の判定を適用しますが、include による**追加取得**（後述）はローカルだけです。
 
-`.skill-tools` の出荷時の `include:` は `uv.lock` のみです。スキルに同梱した CLI を `uv run --project` で揃えるスキル（`claude-plugins/my-tools-no-install/skills/web-lookup` 等）が、依存を固定するために commit している lockfile を残すためで、`tools/skill-tools/.gitignore` の `uv.lock` 除外を打ち消します。
+`.skill-tools` の出荷時の `include:` は `uv.lock` のみです。スキルに同梱した CLI を `uv run --project` で揃えるスキル（`skills/plugins/web-lookup/skills/web-lookup` 等）が、依存を固定するために commit している lockfile を残すためで、`tools/skill-tools/.gitignore` の `uv.lock` 除外を打ち消します。
 
 **`.env` は既定で除外したまま**です。スキルの `.env` をコピーさせたい場合だけ、利用者が `.skill-tools` の `include:` に明示的に追加します（登録例は同ファイルにコメントで記載）。指定すると秘密情報がコピーされる点を理解した上で使ってください。
 

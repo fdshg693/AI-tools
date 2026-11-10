@@ -1,6 +1,6 @@
 # model-list — OpenRouterモデル一覧ツール
 
-**関連スキル: `claude-plugins/topics/skills/openrouter-docs/SKILL.md`**
+**関連スキル: `skills/plugins/topics/skills/openrouter-docs/SKILL.md`**
 
 OpenRouterの[Models API](https://openrouter.ai/api/v1/models)からモデルを取得して標準出力に表で出す。既定は直近1週間の処理トークン数が多い順（`sort=most-popular`）。`--id` 指定時は ID の部分一致で絞り、OpenRouter への追加が新しい順（`sort=newest`）で出す。`--pareto` は価格と `coding_index` の Pareto 最適モデルを表で出す（bucket 分けはしない）。インタラクティブな HTML レポートは[model-select](../model-select/)の責務。
 
