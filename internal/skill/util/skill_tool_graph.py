@@ -44,7 +44,7 @@ def path_appears_in(text: str, registered_path: str) -> bool:
     """True if ``registered_path`` is a path-bounded substring of ``text``.
 
     ``tools/aim`` matches ``uv tool install --editable tools/aim`` and
-    ``tools/aim/README.md``, but not ``tools/aim-use/...``.
+    ``tools/aim/README.md``, but not ``tools/aim2/...``.
     """
     if not registered_path:
         return False

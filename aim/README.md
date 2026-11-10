@@ -4,8 +4,6 @@
   - `claude-plugins\my-tools\skills\aim-cli\SKILL.md`
   - `claude-plugins\my-tools\skills\aim-lib`
   - `claude-plugins\topics\skills\openrouter-docs\SKILL.md`
-- **関連ツール**:
-  - `tools/aim-use/`: この aim CLI を前提としたツール群
 
 CLIのフラグや`@path`/`--parallel`の挙動を変えたら、同じ変更で`aim --ai-help`と`aim-cli`スキルの判断節を見る。フラグ表はスキルに戻さない。
 
@@ -159,7 +157,7 @@ aim --web --prompt "2026年8月時点の最新ニュースは？"
 
 呼び出しごとに `tools/aim/logs/<trace.tool>/<YYYY-MM-DD>.jsonl`（JSON Lines）へ1行追記される。CLIのソースディレクトリ基準の絶対パスを使うため、実行時のカレントディレクトリには依存しない。
 
-- 1ファイルに書き続けると際限なく肥大化するため、`trace.tool`（例: `aim-cli`/`aim-summarize`）でフォルダ分けした上で、`timestamp`の日付（呼び出し元のローカル日付）でファイルを分割する
+- 1ファイルに書き続けると際限なく肥大化するため、`trace.tool`（例: `aim-cli`）でフォルダ分けした上で、`timestamp`の日付（呼び出し元のローカル日付）でファイルを分割する
 - `trace`自体が無い、または`trace.tool`が空の場合は`unknown`フォルダにまとめる（`aim`直接利用時は常に`trace: {"tool": "aim-cli"}`が付くため、`unknown`は主にライブラリ利用時にtraceを渡し忘れた場合に発生する）
 
 ```json
@@ -188,7 +186,7 @@ aim --web --prompt "2026年8月時点の最新ニュースは？"
 
 ## Grafana Cloudへのログ配信（任意）
 
-OpenRouterのBroadcast機能を使うと、`aim`経由の呼び出し（および`aim-summarize`経由の呼び出し）をGrafana Cloud（OTLP/Tempoトレース）にも並行して送信できる。ローカルの`logs/calls.jsonl`は今まで通り残るため、これは二重化であり置き換えではない。
+OpenRouterのBroadcast機能を使うと、`aim`経由の呼び出しをGrafana Cloud（OTLP/Tempoトレース）にも並行して送信できる。ローカルの`logs/calls.jsonl`は今まで通り残るため、これは二重化であり置き換えではない。
 
 - 設定はOpenRouterダッシュボード（[`https://openrouter.ai/settings/observability`](https://openrouter.ai/settings/observability)）での手動設定のみ。このCLI/リポジトリ側に自動設定コードは持たない（Broadcast設定にはManagement API Keyという別種の強い権限を持つキーが必要になるため）
 - 設定手順・カスタムメタデータのマッピング（`user`→`user.id`、`session_id`→`session.id`、`trace`の各キー→`trace.metadata.*`等）・TraceQLクエリ例の詳細は `claude-plugins/topics/skills/openrouter-docs` スキルの `references/observability.md` を参照
@@ -216,6 +214,6 @@ tools/aim/
 ├── .gitignore
 └── logs/
     ├── .gitkeep
-    └── <trace.tool>/          # 例: aim-cli/, aim-summarize/, unknown/ （gitignore対象）
+    └── <trace.tool>/          # 例: aim-cli/, unknown/ （gitignore対象）
         └── <YYYY-MM-DD>.jsonl
 ```
