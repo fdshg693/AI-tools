@@ -1,0 +1,4 @@
+# Hooks come from the umbrella (fdshg693/AI): maintenance/lefthook/submodule.yml.
+# In a standalone clone the file is missing and lefthook runs nothing.
+extends:
+  - ../maintenance/lefthook/submodule.yml
