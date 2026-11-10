@@ -1,6 +1,6 @@
 # mslearn — fastmcp で自作した Microsoft Learn MCP CLI ラッパー
 
-**関連スキル: `claude-plugins/my-tools/skills/ms-learn`**
+**関連スキル: `tools/_plugin/my-tools/skills/ms-learn`**
 
 `memo/00-overview.md` の調査結論としては、公式が Microsoft Learn MCP サーバー本体と
 `microsoft-docs` / `microsoft-code-reference` の Agent Skill 一式を配布しており
@@ -11,7 +11,7 @@
 (`jq` など)に流し込んで柔軟にカスタマイズできる点が公式スキルにはない利点になる。
 
 設計意図とセットアップはこのファイルに、AI に読ませる判断フロー・引数・出力形式は
-`claude-plugins/my-tools/skills/ms-learn/SKILL.md` を参照。
+`tools/_plugin/my-tools/skills/ms-learn/SKILL.md` を参照。
 
 ## 前提条件
 
@@ -41,7 +41,7 @@ mslearn call microsoft_docs_search --args '{"query": "..."}'
 ```
 
 サブコマンド・オプション・出力形式・終了コードの詳細は
-`claude-plugins/my-tools/skills/ms-learn/SKILL.md` を正本とする(AIが実行時に読む前提で
+`tools/_plugin/my-tools/skills/ms-learn/SKILL.md` を正本とする(AIが実行時に読む前提で
 自己完結して書かれている)。
 
 ## このツールの目的
@@ -100,6 +100,6 @@ tools/mslearn/
 └── memo/                   ← 事前調査メモ(公式 MCP サーバー/Agent Skill の調査結果)
 ```
 
-`claude-plugins/my-tools/skills/ms-learn/` 側には `SKILL.md`(AI が実行時に読む判断フロー・
+`tools/_plugin/my-tools/skills/ms-learn/` 側には `SKILL.md`(AI が実行時に読む判断フロー・
 使い方)と `README.md`(スキルの設計意図)だけが残る。CLI 本体はこのライブラリ依存として
 明示的に切り出してあり、スキル側から `mslearn_cli.py` を直接叩くことはしない。

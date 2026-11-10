@@ -497,7 +497,7 @@ def test_config_init_creates_global_config(
     assert f"self_skill: {SELF_SKILL_DEFAULT}" in written
 
 
-SELF_SKILL_DEFAULT = "claude-plugins/my-tools/skills/skill-tools-cli/SKILL.md"
+SELF_SKILL_DEFAULT = "tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md"
 
 
 def test_embedded_default_self_skill_is_the_companion_skill() -> None:

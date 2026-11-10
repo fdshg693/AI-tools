@@ -1,6 +1,6 @@
 # gdevdocs — Google Developer Knowledge MCP の fastmcp ラッパー
 
-**関連スキル: `claude-plugins/my-tools/skills/gdev-docs`**
+**関連スキル: `tools/_plugin/my-tools/skills/gdev-docs`**
 
 Google の **Developer Knowledge MCP**（`https://developerknowledge.googleapis.com/mcp`）を、
 Python の `fastmcp` クライアントで叩く CLI。GCP と Google Workspace の開発者ドキュメントは

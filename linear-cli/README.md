@@ -1,8 +1,8 @@
 # linear-cli — Linear連携CLI
 
-**関連スキル: `claude-plugins/my-tools/skills/linear-cli`**
+**関連スキル: `tools/_plugin/my-tools/skills/linear-cli`**
 
-[`@linear/sdk`](https://www.npmjs.com/package/@linear/sdk)を使い、[parallel-agent-worktree](../../claude-plugins/coding/skills/parallel-agent-worktree/)スキルが必要とする最小限のLinear操作（issue検索・作成・ステータス更新・ラベル付与/更新・コメント追加/一覧取得/削除・issue詳細取得）だけを提供するNode CLI。設計の背景・決定事項は[.claude/plans/linear-integration/](../../.claude/plans/linear-integration/)（初期実装）・[.claude/plans/parallel-agent-worktree-task-groups/03-linear-cli-extension.md](../../.claude/plans/parallel-agent-worktree-task-groups/03-linear-cli-extension.md)（ラベル・`show`拡張）を参照。
+[`@linear/sdk`](https://www.npmjs.com/package/@linear/sdk)を使い、[parallel-agent-worktree](../_plugin/my-tools/skills/parallel-agent-worktree/)スキルが必要とする最小限のLinear操作（issue検索・作成・ステータス更新・ラベル付与/更新・コメント追加/一覧取得/削除・issue詳細取得）だけを提供するNode CLI。設計の背景・決定事項は[.claude/plans/linear-integration/](../../.claude/plans/linear-integration/)（初期実装）・[.claude/plans/parallel-agent-worktree-task-groups/03-linear-cli-extension.md](../../.claude/plans/parallel-agent-worktree-task-groups/03-linear-cli-extension.md)（ラベル・`show`拡張）を参照。
 
 CLIオプション・設定ファイル形式・挙動を変更した場合は、上記スキルの`SKILL.md`も同じ変更の中で更新すること（スキル側は自動追随しない）。
 
@@ -88,7 +88,7 @@ linear-cli create --title "..." --team ENG --project "My Project" --description 
 linear-cli create --title "..." --team ENG --label "branch:my-feature-slug"
 ```
 
-`--title`/`--team`は必須（`--team`省略時は設定ファイルの既定値）。`--project`省略時はどのprojectにも属さないissueになる。issueの新規作成・削除・複数team横断操作は原則スコープ外だが、[parallel-agent-worktree](../../claude-plugins/coding/skills/parallel-agent-worktree/)がトラッキングissueを「無ければ作る」ために必要な最小限のみ実装している（他ユースケース向けの汎用issue作成機能ではない）。
+`--title`/`--team`は必須（`--team`省略時は設定ファイルの既定値）。`--project`省略時はどのprojectにも属さないissueになる。issueの新規作成・削除・複数team横断操作は原則スコープ外だが、[parallel-agent-worktree](../_plugin/my-tools/skills/parallel-agent-worktree/)がトラッキングissueを「無ければ作る」ために必要な最小限のみ実装している（他ユースケース向けの汎用issue作成機能ではない）。
 
 `--label`は複数指定可（`--label a --label b`）。ラベル名はteam-scopedで既存ラベルからID解決し、存在しないラベル名を指定した場合はエラー終了する（自動作成はしない。ラベルの新設はLinear UI側で行う）。
 

@@ -1,10 +1,10 @@
 # ctx7 — Context7 REST API の薄い CLI ラッパー(Python 実装)
 
-**関連スキル: `claude-plugins/my-tools/skills/use-context`**
+**関連スキル: `tools/_plugin/my-tools/skills/use-context`**
 
 このディレクトリは、[Context7](https://context7.com/)(外部ライブラリ・フレームワークの最新ドキュメントをコードスニペット付きで返すサービス)の REST API を **`requests` で直接叩く** CLI の実体です。Context7 は公式に MCP サーバーと Node 製 CLI(`npx ctx7`)を配布していますが、このツールはそれとは別に、Python から素の REST API(`https://context7.com/api/v2/...`)を叩く自前実装です。
 
-設計意図はこのファイルに、AI に読ませる利用判断・ワークフローは [claude-plugins/my-tools/skills/use-context/](../../claude-plugins/my-tools/skills/use-context/) の memo を参照してください。
+設計意図はこのファイルに、AI に読ませる利用判断・ワークフローは [tools/_plugin/my-tools/skills/use-context/](../_plugin/my-tools/skills/use-context/) の memo を参照してください。
 
 ## 前提条件
 

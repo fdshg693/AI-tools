@@ -1,7 +1,7 @@
 # aim2 — 複数プロバイダ対応 AI モデル呼び出し CLI ツール
 
 - **関連スキル**:
-  - `claude-plugins/my-tools/skills/aim2-cli/SKILL.md`
+  - `tools/_plugin/my-tools/skills/aim2-cli/SKILL.md`
 - **設計思想**:
   - エージェント機能は持たせず、AI モデルの呼び出しとローカルログベースの軽量な会話継続に特化
   - 複数プロバイダ（OpenAI, Anthropic, Google Gemini, OpenRouter, Ollama 等）に直接対応

@@ -1,6 +1,6 @@
 # awsdocs — fastmcp で自作した AWS Knowledge MCP CLI ラッパー
 
-**関連スキル: `claude-plugins/my-tools/skills/aws-docs`**
+**関連スキル: `tools/_plugin/my-tools/skills/aws-docs`**
 
 AWS 公式のリモート MCP サーバー **AWS Knowledge MCP Server**(`https://knowledge-mcp.global.api.aws`、
 認証不要・無料・GA)を、Python の `fastmcp` クライアントで叩いて CLI にしたもの。
@@ -8,7 +8,7 @@ AWS 公式のリモート MCP サーバー **AWS Knowledge MCP Server**(`https:/
 `--json`、`tools`/`call` パススルー)を AWS 向けに移植している。
 
 設計意図とセットアップはこのファイルに、AI に読ませる判断フロー・引数・出力形式・終了コードは
-`claude-plugins/my-tools/skills/aws-docs/SKILL.md` を正本とする。ツール選定の経緯と
+`tools/_plugin/my-tools/skills/aws-docs/SKILL.md` を正本とする。ツール選定の経緯と
 サーバーの実測挙動は [`memo/`](memo/00-overview.md) を参照。
 
 ## 前提条件

@@ -4,6 +4,10 @@
 
 公開する CLI のインストールパス（`uv tool install --editable tools/<name>` など）と [`repo-tools.yaml`](../registry/repo-tools.yaml) の `path` は、この平坦な配置が契約である。方針は [tools-directory-layout](../maintenance/docs/tools-directory-layout.md)。
 
+## 付属スキル
+
+- [_plugin/my-tools](_plugin/my-tools/README.md) — このディレクトリの CLI を前提にした使い方スキルの Claude Code プラグイン（`my-tools`）。ツールではないので `_` 始まりにしている
+
 ## リポジトリ内部
 
 カタログ生成・スキル meta・pre-commit などリポジトリ保守用のスクリプトは [maintenance/scripts](../maintenance/scripts/AGENTS.md) にある（tools/ ではない）。

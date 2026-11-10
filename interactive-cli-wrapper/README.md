@@ -2,7 +2,7 @@
 
 このディレクトリは、対話的(TTY前提でREPLとして動く)CLIプロセスを、AIエージェントから「入力を書き込む → そのターンの操作が落ち着くまで待つ → 出力を返す」という単位(1ターン)で駆動するための **PTY駆動コア** の実体です。特定CLIに依存させない汎用ラッパーとして設計しており、検証・実運用の題材はCursor CLI(`agent`コマンド)の対話モード([cursor-cli-use](../../cursor-plugins/meta/skills/cursor-cli-use/SKILL.md)スキルが非対話`-p`実行のみを対象とし、意図的に対象外としているREPL利用)です。
 
-Step2でコアドライバ(`icw_core/session.py` / `icw_core/screen.py`)とトイ対話CLI(`toy_repl.py`)を用意し、Step3で「1アクション=1回のCLI呼び出し」で使えるセッション永続化つきコンソールコマンド `icw`(`start`/`send`/`stop`/`list`)を追加、Step4で実CLI(Cursor CLIの`agent`対話モード)への接続を実地検証しました。実CLI固有のチューニング内容は[カスタマイズ箇所](#カスタマイズ箇所)の下にある「`agent`対話モードへの接続で判明した癖」を参照してください。AIエージェント向けの使い方は[claude-plugins/my-tools/skills/interactive-cli-wrapper/SKILL.md](../../claude-plugins/my-tools/skills/interactive-cli-wrapper/SKILL.md)にまとめてあります。
+Step2でコアドライバ(`icw_core/session.py` / `icw_core/screen.py`)とトイ対話CLI(`toy_repl.py`)を用意し、Step3で「1アクション=1回のCLI呼び出し」で使えるセッション永続化つきコンソールコマンド `icw`(`start`/`send`/`stop`/`list`)を追加、Step4で実CLI(Cursor CLIの`agent`対話モード)への接続を実地検証しました。実CLI固有のチューニング内容は[カスタマイズ箇所](#カスタマイズ箇所)の下にある「`agent`対話モードへの接続で判明した癖」を参照してください。AIエージェント向けの使い方は[tools/_plugin/my-tools/skills/interactive-cli-wrapper/SKILL.md](../_plugin/my-tools/skills/interactive-cli-wrapper/SKILL.md)にまとめてあります。
 
 ## 前提条件
 
@@ -135,7 +135,7 @@ Cursor CLI(`agent`)を対話モードで実地駆動して初めて分かった�
 - **起動直後の初期化猶予期間が必要** — `icw start`が返す最初の画面(バナー+入力欄プレースホルダ)は見た目上「入力待ち」に見えるが、実際にはこの直後(目安15秒未満)に`send`しても入力がまったく反映されない(テキストが入力欄に残ったまま無反応)。実測では起動から**15〜20秒程度**待ってから最初の`send`を行うと安定して送信できた。以後のターンではこの猶予は不要(1回だけのコスト)。原因は未確定だが、MCP接続やワークスペース解析等の非同期初期化がEnterキーのハンドラ登録より先に完了していないことが疑われる。
 - **Enterキーはテキストと同じ`write()`に含めると送信されない** — `send()`の既定動作(`text + "\r\n"`を1回の`write()`で書き込む)は、トイCLI(行バッファ的な標準入力読み取り)には有効だが、`agent`の生キー入力ハンドリングには効かない。埋め込まれた改行を含む1回の書き込みを「(複数行の)貼り付け」とみなし、Enterとして扱わない(通常の複数行貼り付けはこのCLIでも改行挿入として振る舞う仕様のため、区別できていないと考えられる)。`icw send --submit-separately`(既定`--submit-key`はCRのみ、`--submit-delay`既定0.3秒)でテキストとEnterを別の`write()`呼び出しに分けると送信できることを確認した。**この2条件(起動猶予・separate submit)がどちらも揃わないと送信は成立しない**(delay長を0.3〜3秒の範囲で変えても、猶予期間なしでは常に失敗した)。
 - **確実な`ready_pattern`はまだ見つかっていない** — 入力欄が空のとき常時表示されるプレースホルダ文字列(初回は`Plan, search, build anything`、2ターン目以降は`Add a follow-up`)は、生成が完了していなくても表示され続ける(生成中を示す`Working`スピナー行と同時に出現することを実機確認済み)。これをそのまま`ready_pattern`にすると誤って早期return(まだ生成中なのに`ready=True`)になるため、**`agent`向けには`ready_pattern`を使わずidle-timeoutのみに頼る**(idle-timeoutは長めの`overall_timeout`と組み合わせ、ツール呼び出しを伴う複雑なターンでは応答が数十秒単位になりうることを見込んでおく)。
-- 上記はCursor CLI `2026.07.23-e383d2b`での実地検証結果。CLIのアップデートで挙動が変わった場合は再検証が必要。切り分け過程(否定された仮説含む)は[claude-plugins/my-tools/skills/interactive-cli-wrapper/cursor-agent.md](../../claude-plugins/my-tools/skills/interactive-cli-wrapper/cursor-agent.md)を参照。
+- 上記はCursor CLI `2026.07.23-e383d2b`での実地検証結果。CLIのアップデートで挙動が変わった場合は再検証が必要。切り分け過程(否定された仮説含む)は[tools/_plugin/my-tools/skills/interactive-cli-wrapper/cursor-agent.md](../_plugin/my-tools/skills/interactive-cli-wrapper/cursor-agent.md)を参照。
 
 ## カスタマイズ箇所
 

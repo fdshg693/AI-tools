@@ -1,6 +1,6 @@
 # grepapp — fastmcp で自作した grep.app MCP CLI ラッパー
 
-**関連スキル: `claude-plugins/my-tools/skills/grep-app`**
+**関連スキル: `tools/_plugin/my-tools/skills/grep-app`**
 
 Vercel が公開している grep.app MCP サーバー(`https://mcp.grep.app`、紹介記事:
 https://vercel.com/blog/grep-a-million-github-repositories-via-mcp )を、
@@ -10,7 +10,7 @@ https://vercel.com/blog/grep-a-million-github-repositories-via-mcp )を、
 利点になる。
 
 設計意図とセットアップはこのファイルに、AI に読ませる判断フロー・引数・出力形式は
-`claude-plugins/my-tools/skills/grep-app/SKILL.md` を参照。
+`tools/_plugin/my-tools/skills/grep-app/SKILL.md` を参照。
 
 ## 前提条件
 
@@ -41,7 +41,7 @@ grepapp call searchGitHub --args '{"query": "useState("}'
 ```
 
 サブコマンド・オプション・出力形式・終了コードの詳細は
-`claude-plugins/my-tools/skills/grep-app/SKILL.md` を正本とする(AIが実行時に読む前提で
+`tools/_plugin/my-tools/skills/grep-app/SKILL.md` を正本とする(AIが実行時に読む前提で
 自己完結して書かれている)。
 
 ## このツールの目的
@@ -107,6 +107,6 @@ tools/grepapp/
 └── memo/                   ← 事前調査メモ(実測したエンドポイント仕様・レスポンス形状)
 ```
 
-`claude-plugins/my-tools/skills/grep-app/` 側には `SKILL.md`(AI が実行時に読む判断フロー・
+`tools/_plugin/my-tools/skills/grep-app/` 側には `SKILL.md`(AI が実行時に読む判断フロー・
 使い方)と `README.md`(スキルの設計意図)だけが残る。CLI 本体はこのライブラリ依存として
 明示的に切り出してあり、スキル側から `grepapp_cli.py` を直接叩くことはしない。

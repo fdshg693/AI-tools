@@ -1,8 +1,8 @@
 # aim — シンプルなモデル呼び出しCLIツール
 
 - **関連スキル**:
-  - `claude-plugins\my-tools\skills\aim-cli\SKILL.md`
-  - `claude-plugins\my-tools\skills\aim-lib`
+  - `tools\_plugin\my-tools\skills\aim-cli\SKILL.md`
+  - `tools\_plugin\my-tools\skills\aim-lib`
   - `claude-plugins\topics\skills\openrouter-docs\SKILL.md`
 
 CLIのフラグや`@path`/`--parallel`の挙動を変えたら、同じ変更で`aim --ai-help`と`aim-cli`スキルの判断節を見る。フラグ表はスキルに戻さない。

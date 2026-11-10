@@ -1,10 +1,10 @@
 # Tavily ラッパースクリプト群(Python 実装)
 
-**関連スキル: `claude-plugins/my-tools/skills/tav-cli`**
+**関連スキル: `tools/_plugin/my-tools/skills/tav-cli`**
 
 このディレクトリは、Tavily SDK を **プロジェクト固有のデフォルト引数で固定した Python ラッパー** の実体です。AI や利用者には `--detail=quick|balanced|max` のような抽象化された少数引数だけ握らせ、Tavily SDK の細かいオプションはスクリプト側のプリセットでロックします。
 
-設計意図・実装の詳細はこのファイルに、AI に読ませる判断フローや命名規約は [claude-plugins/my-tools/skills/tav-cli/SKILL.md](../../claude-plugins/my-tools/skills/tav-cli/SKILL.md) にあります。このファイルは **Python コードそのものの説明** に責務を絞っています。
+設計意図・実装の詳細はこのファイルに、AI に読ませる判断フローや命名規約は [tools/_plugin/my-tools/skills/tav-cli/SKILL.md](../_plugin/my-tools/skills/tav-cli/SKILL.md) にあります。このファイルは **Python コードそのものの説明** に責務を絞っています。
 
 ## 前提条件
 
@@ -75,7 +75,7 @@ tav config   # 読み込んだファイルと各設定値の出どころを確�
   - 公開シンボルは `tav_core/__init__.py` が再エクスポートするので、各スクリプトは `from tav_core import ...` だけ書けば内部のファイル分割に依存しない
 - 各スクリプトにはファイル冒頭コメントを書き、用途・最小引数・どこを編集すれば挙動を変えられるかを明示する
 - スクリプトの詳細な引数や最新の使い方は各スクリプトの `--help` を確認する
-- 複数スクリプトは薄いディスパッチャ `tav_cli.py` で 1 つのエントリポイントにまとめ、`pyproject.toml` の `[project.scripts]` 経由で `tav` という console コマンドとして公開する。`tav <サブコマンド>` は対応スクリプトの `main(argv)` に残り引数を委譲するだけで、各スクリプトの引数・プリセット・戻り値契約は不変。サブコマンド対応表は [SKILL.md](../../claude-plugins/my-tools/skills/tav-cli/SKILL.md) の「エントリポイント: `tav` コマンド」を参照
+- 複数スクリプトは薄いディスパッチャ `tav_cli.py` で 1 つのエントリポイントにまとめ、`pyproject.toml` の `[project.scripts]` 経由で `tav` という console コマンドとして公開する。`tav <サブコマンド>` は対応スクリプトの `main(argv)` に残り引数を委譲するだけで、各スクリプトの引数・プリセット・戻り値契約は不変。サブコマンド対応表は [SKILL.md](../_plugin/my-tools/skills/tav-cli/SKILL.md) の「エントリポイント: `tav` コマンド」を参照
 
 ## 使い方
 
@@ -226,7 +226,7 @@ content 系の `pages/index.json` が唯一の url↔ファイル対応表で、
 
 ## どのスクリプトを使うか
 
-迷ったら以下を出発点にしてください。詳細な判断フローは [SKILL.md](../../claude-plugins/my-tools/skills/tav-cli/SKILL.md) の「最初に見るべき判断フロー」を参照。
+迷ったら以下を出発点にしてください。詳細な判断フローは [SKILL.md](../_plugin/my-tools/skills/tav-cli/SKILL.md) の「最初に見るべき判断フロー」を参照。
 
 | 状況                                       | 使うスクリプト                |
 | ------------------------------------------ | ----------------------------- |
@@ -274,23 +274,23 @@ tools/tav-cli/
 
 コマンドラッパー(`search_topic.py` 等)と `tav_cli.py` は **トップレベルのまま** にしてある。`python tools/tav-cli/<script>.py` の直接実行と、`tav_cli` の `importlib` ディスパッチをそのまま動かすため。共通実装だけを `tav_core/` パッケージにまとめている。
 
-`claude-plugins/my-tools/skills/tav-cli/` 側には `SKILL.md`(AI が実行時に読む判断フロー・使い方)と `README.md`(スキルの設計意図)だけが残る。CLI 本体はこの `tools/tav-cli/` に切り出してあり、スキル側から Python スクリプトを直接叩くことはしない(インストール済みの `tav` コマンド経由が前提)。
+`tools/_plugin/my-tools/skills/tav-cli/` 側には `SKILL.md`(AI が実行時に読む判断フロー・使い方)と `README.md`(スキルの設計意図)だけが残る。CLI 本体はこの `tools/tav-cli/` に切り出してあり、スキル側から Python スクリプトを直接叩くことはしない(インストール済みの `tav` コマンド経由が前提)。
 
 ## カスタマイズ箇所
 
-| 変えたいこと                                                                                                                                   | 編集場所                                                                                                        |
-| ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `--detail` プリセット(検索深さ / 結果数 / チャンク数)                                                                                          | 各スクリプト冒頭の `DETAIL_PRESETS` 辞書                                                                        |
-| デフォルトの詳細度                                                                                                                             | 各スクリプトの `DEFAULT_DETAIL` 定数                                                                            |
-| `include_answer` / `include_raw_content` などの固定フラグ                                                                                      | 各スクリプト冒頭の定数(`INCLUDE_ANSWER` 等)                                                                     |
-| タイムアウト                                                                                                                                   | 各スクリプトの `REQUEST_TIMEOUT_SECONDS`                                                                        |
-| `research` の前景 / 背景待機(`foreground_wait_seconds` / `background_wait_seconds` とポーリング間隔)                                           | `research_topic.py` の `DETAIL_PRESETS`(実測の根拠は `experiments/measure_research_timing.py`)                  |
-| 設定のレイヤー解決                                                                                                                             | `tav_core/environment.py`                                                                                       |
-| JSON 出力フォーマット・出力シンク `emit()`                                                                                                     | `tav_core/output.py`                                                                                            |
-| 出力先ベースディレクトリ(`--topic` の解決先、未設定時 `temp/web`)                                                                              | 設定の `output_dir`                                                                                             |
-| 監査ログ `<log_dir>/<script>-log.json` を書くか(未設定=`true`、`false`/`0`/`no`/`off`/空で抑止)                                                | 設定の `write_log`                                                                                              |
-| 監査ログのパス通知「Wrote full log to `<path>`」を出すか(未設定=`true`、falsey で抑止。監査ログ書き込み時のみ。結果ファイルのパス通知は常に表示) | 設定の `show_log_path`                                                                                          |
-| 出力先と `--topic` レイアウト                                                                                                                  | [SKILL.md](../../claude-plugins/my-tools/skills/tav-cli/SKILL.md) の「出力先と `--topic` レイアウト」セクション |
-| AI に提示する判断フロー / 引数例                                                                                                               | [SKILL.md](../../claude-plugins/my-tools/skills/tav-cli/SKILL.md) 本体                                          |
+| 変えたいこと                                                                                                                                     | 編集場所                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `--detail` プリセット(検索深さ / 結果数 / チャンク数)                                                                                            | 各スクリプト冒頭の `DETAIL_PRESETS` 辞書                                                              |
+| デフォルトの詳細度                                                                                                                               | 各スクリプトの `DEFAULT_DETAIL` 定数                                                                  |
+| `include_answer` / `include_raw_content` などの固定フラグ                                                                                        | 各スクリプト冒頭の定数(`INCLUDE_ANSWER` 等)                                                           |
+| タイムアウト                                                                                                                                     | 各スクリプトの `REQUEST_TIMEOUT_SECONDS`                                                              |
+| `research` の前景 / 背景待機(`foreground_wait_seconds` / `background_wait_seconds` とポーリング間隔)                                             | `research_topic.py` の `DETAIL_PRESETS`(実測の根拠は `experiments/measure_research_timing.py`)        |
+| 設定のレイヤー解決                                                                                                                               | `tav_core/environment.py`                                                                             |
+| JSON 出力フォーマット・出力シンク `emit()`                                                                                                       | `tav_core/output.py`                                                                                  |
+| 出力先ベースディレクトリ(`--topic` の解決先、未設定時 `temp/web`)                                                                                | 設定の `output_dir`                                                                                   |
+| 監査ログ `<log_dir>/<script>-log.json` を書くか(未設定=`true`、`false`/`0`/`no`/`off`/空で抑止)                                                  | 設定の `write_log`                                                                                    |
+| 監査ログのパス通知「Wrote full log to `<path>`」を出すか(未設定=`true`、falsey で抑止。監査ログ書き込み時のみ。結果ファイルのパス通知は常に表示) | 設定の `show_log_path`                                                                                |
+| 出力先と `--topic` レイアウト                                                                                                                    | [SKILL.md](../_plugin/my-tools/skills/tav-cli/SKILL.md) の「出力先と `--topic` レイアウト」セクション |
+| AI に提示する判断フロー / 引数例                                                                                                                 | [SKILL.md](../_plugin/my-tools/skills/tav-cli/SKILL.md) 本体                                          |
 
 新しい使い方を追加したい場合は、`tools/tav-cli/` 配下に同じスタイルで新スクリプトを作り、`SKILL.md` に判断フローと引数例を追記してください。`--detail` プリセットやデフォルト値は新スクリプト冒頭にも同じ形で置きます。

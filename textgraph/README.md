@@ -1,6 +1,6 @@
 # textgraph
 
-**関連スキル: `claude-plugins/my-tools/skills/textgraph`**
+**関連スキル: `tools/_plugin/my-tools/skills/textgraph`**
 
 テキストファイルのローカルファイルリンクを索引し、参照関係をクエリするための CLI。索引の作成・更新・健康確認、索引済みファイル一覧・1 hop の impact、リンク切れの報告と一意候補の書き換えを提供する（`init` / `sync` / `status` / `files` / `impact` / `check` / `fix`）。
 

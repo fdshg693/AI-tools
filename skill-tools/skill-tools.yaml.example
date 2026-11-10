@@ -19,7 +19,7 @@ fb:
 
 # Canonical ID that `skill-tools install-skills self` expands to. Optional; the
 # built-in default is the skill-tools-cli companion skill shown here.
-self_skill: claude-plugins/my-tools/skills/skill-tools-cli/SKILL.md
+self_skill: tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md
 
 # Optional destination overrides used by install-skills.
 skills:

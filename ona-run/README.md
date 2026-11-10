@@ -1,6 +1,6 @@
 # ona-run — リポジトリ+タスク指定でOnaにAIエージェント作業を委任するCLI
 
-**関連スキル: `claude-plugins/my-tools/skills/ona-run`**
+**関連スキル: `tools/_plugin/my-tools/skills/ona-run`**
 
 「リポジトリURL（またはOnaプロジェクトID）」と「タスク内容（自然文プロンプト）」を指定すると、Onaの環境（コンテナ）を作成/起動し、その中でタスク（既定はAIエージェントCLIのheadless実行）を実行し、完了後に環境を停止する。Ona公式CLI（`ona environment create`/`get`/`exec`/`stop`/`delete`）をsubprocessでラップするだけで、Connect-RPC APIの再実装はしない。
 

@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ctx7-cli"
-version = "1.0.6"
+version = "1.0.7"
 description = "Thin CLI wrapper around the Context7 REST API (v2), hit directly with requests"
 requires-python = ">=3.11"
 dependencies = [

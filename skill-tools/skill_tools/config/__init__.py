@@ -20,7 +20,7 @@ DEFAULT_GITHUB_OWNER = "fdshg693"
 DEFAULT_GITHUB_REPOSITORY = "ai"
 DEFAULT_GITHUB_REF = "main"
 DEFAULT_DESTINATION = ".claude/skills"
-DEFAULT_SELF_SKILL = "claude-plugins/my-tools/skills/skill-tools-cli/SKILL.md"
+DEFAULT_SELF_SKILL = "tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md"
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,7 @@
 # skill-tools
 
 - 関連スキル
-  - **claude-plugins\my-tools\skills\skill-tools-cli\SKILL.md**
+  - **tools\_plugin\my-tools\skills\skill-tools-cli\SKILL.md**
   - **maintenance\plugin\skills\discovering-skills\SKILL.md**
 
 `skill-tools` は、`ai-tools.yaml` に登録された Agent Skill の一覧・配置・検索を一つの CLI にまとめたツールです。`maintenance/plugin/` のような未登録領域は対象にしません。目的別の組み合わせは `repo-workflows.yaml` の read-only catalog で確認できます。スキルの取得元（ローカル clone または GitHub）と CLI 専用インデックスの場所は、実行時の CWD から推測せず、設定ファイルで明示します。
@@ -61,7 +61,7 @@ fb:
   path: ~/.cache/skill-tools/fb
 
 # Canonical ID that `install-skills self` expands to (the default is shown).
-self_skill: claude-plugins/my-tools/skills/skill-tools-cli/SKILL.md
+self_skill: tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md
 
 # Optional named install targets. Select one or more with `install-skills --target`.
 targets:
@@ -186,7 +186,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 - `install-skills` は config の source から bundle を全件 staging してから配置します。選択子は source path・リポジトリ相対の canonical ID・一意な skill 名のいずれかです。既存 skill は `--overwrite` なしでは変更しません。`--dry-run` はコピーしません。コピー対象はバンドルコピーの除外/包含ポリシーで絞り込まれ、`.venv` などの生成物や `.env` は既定で同梱されません。
 - `install-skills --target name[,name...]` は選択bundleを指定された全targetへ配置します。target名は `skill-tools.yaml` の `targets` に定義し、destinationはproject相対の安全なパスにします。すべてのtargetを事前検査し、installはproject単位lock内でpathを再検証してからstage・replaceします。`--dry-run` はsource、canonical ID、target名、最終相対pathをtargetごとに表示します。`--target`省略時は従来の単一destination動作です。
 - `install-skills` 成功時は、管理情報をCWDの`.skill-tools/manifest.json`へ記録します。manifestはschema version、canonical ID、bundle名、target/destination、project-relative install path、source descriptor、配置ファイルごとのSHA-256を持ちます。絶対install pathは保存せず、manifestや`.gitignore`の共有・管理方法も強制しません。
-- `install-skills self` は、予約語 `self` を設定の `self_skill`（skill-tools を使うコンパニオンスキルの canonical ID）へ展開して通常の install と同じ経路で配置します。既定値は `claude-plugins/my-tools/skills/skill-tools-cli/SKILL.md` で、`--dry-run` / `--overwrite` / `--target` もそのまま使えます。`self` はカタログ上の同名スキルより優先されるため、同名のスキルを入れたいときは canonical ID を渡します。`install-skills self other-name` は両方を入れ、引数なしの `install-skills` は全件インストールにならずエラーです。
+- `install-skills self` は、予約語 `self` を設定の `self_skill`（skill-tools を使うコンパニオンスキルの canonical ID）へ展開して通常の install と同じ経路で配置します。既定値は `tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md` で、`--dry-run` / `--overwrite` / `--target` もそのまま使えます。`self` はカタログ上の同名スキルより優先されるため、同名のスキルを入れたいときは canonical ID を渡します。`install-skills self other-name` は両方を入れ、引数なしの `install-skills` は全件インストールにならずエラーです。
 - `installed-skills` はsource・catalog・networkを参照せず、manifest記録を一覧します。`--json`でmanifest entryの配列を出力します。
 - `update-skills [skill...]` はmanifest記録を起点に、同じsource identityのentryだけを更新します。GitHubは同じowner/repository/refを再解決します。選択したentryのsourceが設定と異なる場合は暗黙切替を拒否し、catalogから消えたskillは警告して配置を保持します。`remove-skills [skill...]` はsource・catalog・network不要で、manifest entryのみを対象にします。選択子はcanonical ID、bundle名またはproject-relative install pathです。
 - `update-skills` / `remove-skills` は既定で配置済みファイルのhash、欠落・追加file、symlinkを検証し、driftがあれば変更を中止します。`--force`は対象managed directory内の変更・追加fileを置換または削除し得る破壊的操作です。実行前に`--dry-run`で対象を確認してください。manifest外のdirectoryは`--force`でも探索・削除しません。

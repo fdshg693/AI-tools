@@ -1,0 +1,9 @@
+zenn_use_tavily.egg-info/
+logs/
+__pycache__/
+*.pyc
+*.pyo
+
+tests/fixtures/captured_at.txt
+
+.env
