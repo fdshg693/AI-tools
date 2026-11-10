@@ -349,7 +349,7 @@ meta:
   requires_skills: none
   status: draft
   description: no description
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 - tav-cli
