@@ -5,7 +5,7 @@ GitHub ISSUEのラベル（`tool:claude-code`必須、`model:<alias>`任意）�
 ## 関連ファイル
 
 - `README.md` — 概要・前提条件・`tools/schedule/ai-schedule`への登録手順・停止方法・環境変数一覧・トラブルシュート
-- 元の実装プランは完了に伴い削除済み（[.claude/plans/README.md](../../.claude/plans/README.md)の「完了後の後片付け」節参照）。設計判断の要約は本ファイルに集約する
+- 元の実装プランは完了に伴い削除済み（[plans/guides/plan-execution.md](../../../plans/guides/plan-execution.md)の「完了後の後片付け」節参照）。設計判断の要約は本ファイルに集約する
 
 ## 前提となる設計方針
 
