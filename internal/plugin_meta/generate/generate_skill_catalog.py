@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from plugin_meta.util.ai_tools_config import REPO_ROOT, load_tool
+from links.fs import is_link_like
 from skill.util.skill_frontmatter import read_frontmatter
 
 TOOL_KEY = "claude-code"
@@ -44,7 +45,9 @@ def discover_skills(tool: dict) -> dict[str, list[dict[str, str]]]:
             continue
 
         entries = []
-        for sub_dir in sorted(p for p in skills_dir.iterdir() if p.is_dir()):
+        for sub_dir in sorted(
+            p for p in skills_dir.iterdir() if p.is_dir() and not is_link_like(p)
+        ):
             skill_md_path = sub_dir / "SKILL.md"
             if not skill_md_path.is_file():
                 continue

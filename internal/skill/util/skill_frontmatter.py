@@ -8,12 +8,13 @@ repo often contains hand-written comments that a round-trip dump would destroy.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from links.fs import walk_no_links
 
 EXCLUDED_DIRECTORY_NAMES = {
     ".git",
@@ -43,9 +44,10 @@ class SkillFrontmatter:
 def find_skill_md_files(root: Path) -> list[Path]:
     # Prune excluded directories during the walk: rglob() would descend into
     # node_modules/.venv first and filter afterwards, which costs seconds per call.
+    # Junctions are pruned too (os.walk follows them), so a skill reachable through
+    # a junction is never counted or rewritten twice.
     found = []
-    for dir_path, dir_names, file_names in os.walk(root):
-        dir_names[:] = [name for name in dir_names if name not in EXCLUDED_DIRECTORY_NAMES]
+    for dir_path, _dir_names, file_names in walk_no_links(root, EXCLUDED_DIRECTORY_NAMES):
         if "SKILL.md" in file_names:
             found.append(Path(dir_path) / "SKILL.md")
     return sorted(found)

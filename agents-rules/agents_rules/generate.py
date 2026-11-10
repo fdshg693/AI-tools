@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -59,11 +60,25 @@ def discover_agents(repo_root: Path, excludes: list[str]) -> list[Path]:
             name
             for name in dir_names
             if name not in IGNORED_DIR_NAMES
+            and not _is_link_like(os.path.join(current_dir, name))
             and not _excluded(f"{name}" if rel_dir == "." else f"{rel_dir}/{name}", excludes)
         )
         if "AGENTS.md" in file_names:
             agents.append(Path(current_dir) / "AGENTS.md")
     return sorted(agents, key=lambda path: path.relative_to(repo_root).as_posix())
+
+
+def _is_link_like(path: str) -> bool:
+    """Symlink or Windows junction. os.walk descends into junctions otherwise."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    if stat.S_ISLNK(st.st_mode):
+        return True
+    return getattr(st, "st_reparse_tag", 0) == getattr(
+        stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003
+    )
 
 
 def _excluded(rel_path: str, excludes: list[str]) -> bool:

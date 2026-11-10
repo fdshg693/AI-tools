@@ -252,6 +252,7 @@ logs/
 ## Safety and exit codes
 
 - GitHub source は指定 ref を commit SHA に固定し、truncated tree は拒否します。
+- symlink の検査・走査の除外は Windows の Junction にも同じく効きます（`Path.is_symlink()` は Junction で False のため、`skill_tools/fs_links.py` の `is_link_like` で判定）。local source で git が Junction 越しに列挙したファイルは数えません。
 - local source は Git 管理対象または `.gitignore` 対象外のファイルだけを束ね、さらにバンドルコピーの除外/包含ポリシー（既定除外 → `.gitignore` → `.skill-tools` の `include:`）で絞り込みます。
 - 配置は staging 完了後に置換し、後続失敗時は完了済みの置換を rollback します。
 - managed install/update/removeはproject単位lockと`.skill-tools/transaction.json` journalで複数directoryとmanifestの変更を追跡し、次回のmanaged操作時に中断journalを検出してrollbackまたは安全に停止します。通常のprocess terminationで復旧できるよう設計していますが、複数directoryとmanifestを単一OS atomic operationとはみなさず、電断・ストレージ障害時の完全な原子性は保証しません。

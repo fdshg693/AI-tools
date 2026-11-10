@@ -34,6 +34,7 @@ from ..install.installer import (
 from ..install.manifest import hook_file_paths, normalized_source
 from ..models import CatalogError, ConfigError, HookAgent, HookRecord, InstallError
 from ..source import LocalSource
+from ..fs_links import is_link_like
 
 
 @dataclass(frozen=True)
@@ -160,7 +161,7 @@ class _Planner:
         key = relative.casefold()
         if key not in self.documents:
             path = self.root / relative
-            if path.is_symlink() or (path.exists() and not path.is_file()):
+            if is_link_like(path) or (path.exists() and not path.is_file()):
                 raise InstallError(f"registration file is not a regular file: {path}")
             raw = path.read_bytes() if path.is_file() else None
             self.documents[key] = RegistrationDocument(agent, relative, raw)

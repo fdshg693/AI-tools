@@ -13,12 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from plugin_meta.util.ai_tools_config import REPO_ROOT, load_config
+from links.fs import is_link_like
 from skill.util.skill_frontmatter import read_frontmatter
 
 
 def has_skill_subdir(skills_dir: Path) -> bool:
     return any(
-        sub_dir.is_dir() and (sub_dir / "SKILL.md").is_file() for sub_dir in skills_dir.iterdir()
+        sub_dir.is_dir() and not is_link_like(sub_dir) and (sub_dir / "SKILL.md").is_file()
+        for sub_dir in skills_dir.iterdir()
     )
 
 
@@ -37,7 +39,7 @@ def find_skills_dirs(config: dict[str, Any]) -> list[Path]:
 
 def build_catalog(skills_dir: Path) -> str:
     entries = []
-    for sub_dir in sorted(p for p in skills_dir.iterdir() if p.is_dir()):
+    for sub_dir in sorted(p for p in skills_dir.iterdir() if p.is_dir() and not is_link_like(p)):
         skill_md_path = sub_dir / "SKILL.md"
         if not skill_md_path.is_file():
             continue

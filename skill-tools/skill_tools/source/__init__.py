@@ -16,6 +16,7 @@ from typing import Protocol
 
 from ..install.policy import DEFAULT_EXCLUDED_DIRECTORIES, BundlePolicy
 from ..models import SourceError
+from ..fs_links import is_link_like
 
 _USER_AGENT = "skill-tools/0.1"
 
@@ -158,6 +159,11 @@ class LocalSource:
                 raise SourceError(f"git returned an unsafe source path: {relative}")
             path = PurePosixPath(relative.as_posix())
             candidate = self._resolve(path)
+            # A file reached through a junction or symlink that git still lists
+            # (not excluded) resolves elsewhere; skip it so nothing is counted twice.
+            lexical = self.root / Path(*path.parts)
+            if os.path.normcase(str(candidate)) != os.path.normcase(str(lexical)):
+                continue
             if candidate.is_file():
                 paths.add(path)
         return tuple(sorted(paths))
@@ -177,13 +183,13 @@ class LocalSource:
                     child
                     for child in child_dirs
                     if child not in DEFAULT_EXCLUDED_DIRECTORIES
-                    and not (directory_path / child).is_symlink()
+                    and not is_link_like(directory_path / child)
                 ]
                 for child in child_files:
                     candidate = directory_path / child
                     # Symlinked files are skipped instead of resolved: `_resolve` costs a
                     # realpath syscall per file, which dominates the walk on large trees.
-                    if candidate.is_symlink():
+                    if is_link_like(candidate):
                         continue
                     relative = PurePosixPath(candidate.relative_to(self.root).as_posix())
                     discovered.add(relative)
@@ -223,11 +229,11 @@ class LocalSource:
                 child
                 for child in child_dirs
                 if child not in DEFAULT_EXCLUDED_DIRECTORIES
-                and not (directory_path / child).is_symlink()
+                and not is_link_like(directory_path / child)
             ]
             for child in child_files:
                 candidate = directory_path / child
-                if candidate.is_symlink():
+                if is_link_like(candidate):
                     continue
                 relative = PurePosixPath(candidate.relative_to(directory_root).as_posix())
                 if policy.included(relative):

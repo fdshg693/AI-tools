@@ -23,6 +23,7 @@ from .manifest import (
     write_manifest,
 )
 from ..models import ConfigError, InstallError, SkillBundle
+from ..fs_links import is_link_like
 
 # v1 journals hold only directory swaps; v2 adds per-file operations ("kind": "file").
 JOURNAL_SCHEMA_VERSIONS = (1, 2)
@@ -41,14 +42,14 @@ class InstallPlan:
 def manifest_path(project: Path) -> Path:
     root = project.resolve()
     directory = root / MANIFEST_RELATIVE_PATH.parent
-    if directory.is_symlink() or not directory.resolve().is_relative_to(root):
+    if is_link_like(directory) or not directory.resolve().is_relative_to(root):
         raise InstallError(f"managed metadata directory is unsafe: {directory}")
     return directory / "manifest.json"
 
 
 def load_project_manifest(project: Path) -> dict:
     path = manifest_path(project)
-    if path.is_symlink():
+    if is_link_like(path):
         raise InstallError(f"managed manifest must not be a symlink: {path}")
     return load_manifest(path)
 
@@ -82,12 +83,12 @@ def _write_journal(path: Path, journal: dict) -> None:
 
 
 def _tree_hashes(directory: Path) -> dict[str, str] | None:
-    if directory.is_symlink() or not directory.is_dir():
+    if is_link_like(directory) or not directory.is_dir():
         return None
     hashes: dict[str, str] = {}
     for current, dirs, files in os.walk(directory, followlinks=False):
         current_path = Path(current)
-        if any((current_path / name).is_symlink() for name in [*dirs, *files]):
+        if any(is_link_like(current_path / name) for name in [*dirs, *files]):
             return None
         for name in files:
             file_path = current_path / name
@@ -125,7 +126,7 @@ def recover_transaction(project: Path) -> None:
     """Roll back an interrupted transaction or finish cleanup after commit."""
 
     journal_path = _journal_path(project)
-    if journal_path.is_symlink():
+    if is_link_like(journal_path):
         raise InstallError(f"managed transaction journal must not be a symlink: {journal_path}")
     if not journal_path.exists():
         return
@@ -351,12 +352,14 @@ def _write_staging_bundle(source, bundle: SkillBundle, destination: Path) -> Non
 
 
 def _remove_directory(path: Path) -> None:
-    if path.exists():
+    if is_link_like(path):
+        path.unlink()  # drop the link (junction or symlink), never its target
+    elif path.exists():
         shutil.rmtree(path)
 
 
 def _remove_path(path: Path) -> None:
-    if path.is_dir() and not path.is_symlink():
+    if path.is_dir() and not is_link_like(path):
         shutil.rmtree(path)
     else:
         path.unlink(missing_ok=True)
@@ -400,7 +403,7 @@ def execute_file_transaction(
         current = root
         for part in PurePosixPath(relative).parts:
             current = current / part
-            if current.is_symlink():
+            if is_link_like(current):
                 raise InstallError(f"managed hook path contains a symlink: {current}")
         if target.exists() and not target.is_file():
             raise InstallError(f"managed hook path is not a regular file: {target}")

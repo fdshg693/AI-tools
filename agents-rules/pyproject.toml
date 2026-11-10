@@ -11,7 +11,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agents-rules"
-version = "0.1.0"
+version = "0.1.1"
 description = "Generate Cline / Copilot / Antigravity / Cursor rule files from nested AGENTS.md files"
 requires-python = ">=3.11"
 dependencies = [

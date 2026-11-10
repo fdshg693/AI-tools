@@ -18,6 +18,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from ..models import InstallError, SkillBundle
+from ..fs_links import is_link_like
 
 MANIFEST_SCHEMA_VERSION = 2
 _READABLE_SCHEMA_VERSIONS = (1, 2)
@@ -253,7 +254,7 @@ def make_entry(
     for relative in bundle.files:
         safe = _safe_relative(relative.as_posix(), "bundle file")
         path = target.joinpath(*safe.parts)
-        if path.is_symlink() or not path.is_file():
+        if is_link_like(path) or not path.is_file():
             raise InstallError(f"installed bundle file is missing or a symlink: {path}")
         files[safe.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     entry = {
@@ -276,7 +277,7 @@ def resolve_install_path(project_root: Path, entry: Mapping[str, Any]) -> Path:
     current = root
     for part in relative.parts:
         current = current / part
-        if current.is_symlink():
+        if is_link_like(current):
             raise InstallError(f"managed install path contains a symlink: {current}")
     resolved = path.resolve()
     if not resolved.is_relative_to(root):
@@ -296,7 +297,7 @@ def verify_entry(project_root: Path, entry: Mapping[str, Any], *, force: bool = 
         current_path = Path(current)
         for name in [*dirs, *files]:
             child = current_path / name
-            if child.is_symlink():
+            if is_link_like(child):
                 raise InstallError(f"managed installation contains a symlink: {child}")
         for name in files:
             actual.add((current_path / name).relative_to(target).as_posix())

@@ -14,6 +14,7 @@ import json
 import sys
 from pathlib import Path
 
+from links.fs import is_link_like
 from plugin_meta.util.ai_tools_config import REPO_ROOT, load_tool
 
 TOOL_KEY = "copilot"
@@ -33,7 +34,7 @@ def discover_skills(plugin_dir: Path) -> list[str]:
     return sorted(
         entry.name
         for entry in plugin_dir.iterdir()
-        if entry.is_dir() and (entry / "SKILL.md").is_file()
+        if entry.is_dir() and not is_link_like(entry) and (entry / "SKILL.md").is_file()
     )
 
 
