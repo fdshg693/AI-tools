@@ -15,6 +15,8 @@ from .targets import Target, output_name, render
 
 IGNORED_DIR_NAMES = {".git", "node_modules", ".venv", "__pycache__"}
 CONFIG_FILE_NAME = "ai-tools.yaml"
+# registry/ai-tools.yaml is preferred; a root ai-tools.yaml is the older layout.
+CONFIG_CANDIDATES = (f"registry/{CONFIG_FILE_NAME}", CONFIG_FILE_NAME)
 
 
 class GenerateError(RuntimeError):
@@ -40,7 +42,7 @@ def find_repo_root(start: Path) -> Path:
 
     start = start.resolve()
     candidates = [start, *start.parents]
-    for marker in (".git", CONFIG_FILE_NAME):
+    for marker in (".git", *CONFIG_CANDIDATES):
         for directory in candidates:
             if (directory / marker).exists():
                 return directory
@@ -88,8 +90,10 @@ def _excluded(rel_path: str, excludes: list[str]) -> bool:
 def configured_output_dir(repo_root: Path, target: Target) -> str:
     """Return ``output_dir`` from ai-tools.yaml when present, else the target default."""
 
-    config_path = repo_root / CONFIG_FILE_NAME
-    if not config_path.is_file():
+    config_path = next(
+        (repo_root / name for name in CONFIG_CANDIDATES if (repo_root / name).is_file()), None
+    )
+    if config_path is None:
         return target.default_output_dir
     data: Any = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     tool_key, section_key = target.config_key

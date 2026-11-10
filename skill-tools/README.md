@@ -6,6 +6,8 @@
 
 `skill-tools` は、`ai-tools.yaml` に登録された Agent Skill の一覧・配置・検索を一つの CLI にまとめたツールです。`maintenance/plugin/` のような未登録領域は対象にしません。目的別の組み合わせは `repo-workflows.yaml` の read-only catalog で確認できます。スキルの取得元（ローカル clone または GitHub）と CLI 専用インデックスの場所は、実行時の CWD から推測せず、設定ファイルで明示します。
 
+source の SSOT yaml（`ai-tools.yaml`・`repo-tools.yaml`・`repo-workflows.yaml`・`repo-hooks.yaml`）は `registry/<name>` を先に探し、無ければ source ルートの `<name>` を読みます。yaml 内のパスはどちらでもリポジトリルート相対です。
+
 同じ source（設定中の `source`）の `repo-tools.yaml` に登録された `tools/` 配下の first-class CLI ツールも、`list-tools` で列挙し `install-tools` でインストールコマンドを実行できます。`release` の値はここでは参照しません（タグ+GitHub Release の対象判定は別の関心事で、全エントリが列挙・インストール対象です）。
 
 同じ source の `repo-hooks.yaml` が指すフックカタログ（agent-tooling が生成する `catalog.json`）から、Claude Code / Codex / Cursor / Antigravity / Kilo 向けのエージェントフックを `hooks list` で一覧し、`hooks install` で CWD のプロジェクトへファイル配置と登録ファイル（`.claude/settings.json` / `.codex/hooks.json` 等）へのエントリ追加まで行えます。`hooks installed` / `hooks update` / `hooks remove` はスキルと同じ manifest で管理します。

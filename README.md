@@ -2,7 +2,7 @@
 
 `tools/` は1ツール1ディレクトリのまま置く。このファイルは役割で引く索引であり、使い方は書かない。リンク先の README（無いディレクトリは AGENTS.md）を読む。
 
-公開する CLI のインストールパス（`uv tool install --editable tools/<name>` など）と [`repo-tools.yaml`](../repo-tools.yaml) の `path` は、この平坦な配置が契約である。方針は [tools-directory-layout](../maintenance/docs/tools-directory-layout.md)。
+公開する CLI のインストールパス（`uv tool install --editable tools/<name>` など）と [`repo-tools.yaml`](../registry/repo-tools.yaml) の `path` は、この平坦な配置が契約である。方針は [tools-directory-layout](../maintenance/docs/tools-directory-layout.md)。
 
 ## リポジトリ内部
 
@@ -13,7 +13,7 @@
 
 ## 配布する CLI
 
-[`repo-tools.yaml`](../repo-tools.yaml) に載っているツール。`my-agents` と `interactive-cli-wrapper` は下の区分に置く。
+[`repo-tools.yaml`](../registry/repo-tools.yaml) に載っているツール。`my-agents` と `interactive-cli-wrapper` は下の区分に置く。
 
 - [agents-rules](agents-rules/README.md)
 - [aim](aim/README.md)

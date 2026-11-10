@@ -12,6 +12,7 @@ import yaml
 
 from ..install.policy import load_bundle_policy
 from ..models import CatalogError, SkillBundle, SkillRecord, SourceError
+from ..registry import registry_file
 from ..source import CatalogSource, LocalSource, display_skill_path
 
 _VALID_LAYOUTS = {"subdir", "direct"}
@@ -75,7 +76,7 @@ def _load_yaml(source: CatalogSource, path: PurePosixPath, label: str) -> Any:
 
 
 def _registry(source: CatalogSource) -> tuple[_RegistryEntry, ...]:
-    config = _load_yaml(source, PurePosixPath("ai-tools.yaml"), "ai-tools.yaml")
+    config = _load_yaml(source, registry_file(source, "ai-tools.yaml"), "ai-tools.yaml")
     if not isinstance(config, dict) or not isinstance(config.get("tools"), dict):
         raise CatalogError("ai-tools.yaml must contain a tools mapping")
 

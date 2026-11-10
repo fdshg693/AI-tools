@@ -19,10 +19,10 @@ from typing import Any
 import yaml
 
 from ..models import CatalogError, InstallError, SourceError
+from ..registry import registry_file
 from ..source import CatalogSource, LocalSource
 
 REPO_TOOLS_FILENAME = "repo-tools.yaml"
-_REPO_TOOLS_PATH = PurePosixPath(REPO_TOOLS_FILENAME)
 # requires_tools is accepted but ignored: intra-repo tool dependencies are
 # already expressed by each package's pyproject.toml / workspace deps, so
 # installing a tool never implies installing or ordering its dependencies.
@@ -131,7 +131,7 @@ def load_repo_tools(source: CatalogSource) -> tuple[RepoTool, ...]:
     """Read and validate repo-tools.yaml, checking that each registered path exists."""
 
     try:
-        raw = source.read_file(_REPO_TOOLS_PATH)
+        raw = source.read_file(registry_file(source, REPO_TOOLS_FILENAME))
     except SourceError as exc:
         raise CatalogError(f"could not read {REPO_TOOLS_FILENAME}: {exc}") from exc
     try:

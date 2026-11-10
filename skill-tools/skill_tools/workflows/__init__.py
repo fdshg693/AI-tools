@@ -12,10 +12,10 @@ import yaml
 
 from ..models import CatalogError, SkillRecord, SourceError
 from ..repo_tools.load import RepoTool, load_repo_tools
+from ..registry import registry_file
 from ..source import CatalogSource
 
 WORKFLOWS_FILENAME = "repo-workflows.yaml"
-_WORKFLOWS_PATH = PurePosixPath(WORKFLOWS_FILENAME)
 _FRONTMATTER = re.compile(r"\A---\r?\n(?P<body>.*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL)
 _WORKFLOW_KEYS = {"id", "title", "purpose", "requires_env", "steps"}
 _STEP_KEYS = {"id", "skill", "tool", "optional", "choice", "when", "handoff"}
@@ -146,7 +146,7 @@ def list_workflow_ids(source: CatalogSource) -> tuple[str, ...]:
     """
 
     try:
-        raw = source.read_file(_WORKFLOWS_PATH)
+        raw = source.read_file(registry_file(source, WORKFLOWS_FILENAME))
     except SourceError as exc:
         if "does not exist" in str(exc):
             return ()
@@ -187,7 +187,7 @@ def load_workflows(
     """Load workflow definitions and validate their skill/tool prerequisite graph."""
 
     try:
-        data = yaml.safe_load(source.read_file(_WORKFLOWS_PATH))
+        data = yaml.safe_load(source.read_file(registry_file(source, WORKFLOWS_FILENAME)))
     except yaml.YAMLError as exc:
         raise CatalogError(f"{WORKFLOWS_FILENAME} is invalid YAML: {exc}") from exc
     except SourceError as exc:

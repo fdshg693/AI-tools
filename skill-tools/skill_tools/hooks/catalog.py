@@ -23,10 +23,10 @@ from typing import Any
 import yaml
 
 from ..models import CatalogError, HookAgent, HookFile, HookRecord, SourceError
+from ..registry import registry_file
 from ..source import CatalogSource
 
 REPO_HOOKS_FILENAME = "repo-hooks.yaml"
-_REPO_HOOKS_PATH = PurePosixPath(REPO_HOOKS_FILENAME)
 CATALOG_SCHEMA_VERSION = 1
 AGENTS = ("claude", "codex", "cursor", "antigravity", "kilo")
 RUNNERS = ("python", "uv-script", "uv-project")
@@ -208,10 +208,11 @@ def parse_hook_catalog(data: Any, catalog_path: PurePosixPath) -> tuple[HookReco
 
 def _read_catalog_location(source: CatalogSource) -> PurePosixPath | None:
     # Probe first so "no repo-hooks.yaml" (no hooks) differs from "cannot read it".
-    if not source.list_files((_REPO_HOOKS_PATH,)):
+    repo_hooks_path = registry_file(source, REPO_HOOKS_FILENAME)
+    if not source.list_files((repo_hooks_path,)):
         return None
     try:
-        data = yaml.safe_load(source.read_file(_REPO_HOOKS_PATH))
+        data = yaml.safe_load(source.read_file(repo_hooks_path))
     except yaml.YAMLError as exc:
         raise CatalogError(f"{REPO_HOOKS_FILENAME} is invalid YAML: {exc}") from exc
     except SourceError as exc:
