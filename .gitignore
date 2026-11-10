@@ -32,3 +32,10 @@ fb/
 
 # this repository
 sandbox/orchestrator/data/
+
+# Claude Code: hooks installed by `just sub-agent-hooks-install` and local settings (generated)
+.claude/settings.json
+.claude/settings.local.json
+.claude/hooks/
+.claude/tasks/
+.skill-tools/

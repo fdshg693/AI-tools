@@ -1,0 +1,22 @@
+# Junctions for opening this submodule on its own in Claude Code (created by `just links-sync`
+# at the umbrella root; never committed). `path` is relative to this repository, `target` to the
+# umbrella (fdshg693/AI). In a standalone clone the targets are missing and sync skips them.
+links:
+  - path: .claude/skills/committing
+    target: maintenance/plugin/skills/committing
+    why: commit procedure and lefthook wrapper (two-step submodule commit)
+  - path: .claude/skills/changing-skills-and-tools
+    target: maintenance/plugin/skills/changing-skills-and-tools
+    why: downstream checklist when a tools/ CLI or a _plugin skill changes
+  - path: .claude/skills/meta
+    target: maintenance/plugin/skills/meta
+    why: routes to the repository conventions in maintenance/docs (tools layout, repo-tools.yaml)
+  - path: .claude/skills/writing-skill
+    target: skills/plugins/cc-knowledge/skills/writing-skill
+    why: authoring guide for the skills under _plugin/my-tools
+  - path: _umbrella/maintenance-docs
+    target: maintenance/docs
+    why: repository conventions the skills above link to
+  - path: _umbrella/registry
+    target: registry
+    why: SSOT yaml (repo-tools.yaml registers the CLIs here; ai-tools.yaml the _plugin)

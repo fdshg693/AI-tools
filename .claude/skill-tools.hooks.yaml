@@ -1,0 +1,16 @@
+# skill-tools config for installing the umbrella's agent hooks into this submodule, so a
+# Claude Code session opened here gets the same hooks as one opened at the umbrella root.
+# Run `just sub-agent-hooks-install` at the umbrella root (it runs skill-tools with this file
+# from this directory, so the project is this submodule). The installed .claude/hooks/,
+# .claude/settings.json and .skill-tools/ are gitignored. Relative paths resolve against
+# this file's directory: `../..` is the umbrella (fdshg693/AI), where the hook catalog lives.
+source:
+  type: local
+  path: ../..
+
+hooks:
+  default_agents: [claude]
+  agents:
+    claude:
+      destination: .claude/hooks
+      settings_file: project
