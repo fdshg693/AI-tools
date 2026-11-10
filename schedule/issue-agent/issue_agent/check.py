@@ -1,5 +1,5 @@
 """チェックスクリプト本体。1回の実行で1周期分だけ処理して終了する（`while True`は持たない。
-繰り返しは`tools/schedule`のタスクスケジューラintervalに委ねる。00-overview.mdの決定事項）。
+繰り返しは`tools/schedule/ai-schedule`のタスクスケジューラintervalに委ねる。00-overview.mdの決定事項）。
 
 周期ごとの流れ:
   1. `config.tracked_tool_labels`の各ラベルについて、そのラベルが付いたopen issueを検索する

@@ -16,7 +16,7 @@ Windowsタスクスケジューラの状態がその内容に一致するよう�
 リポジトリルートで `uv sync` 済みであること(ルートの `pyproject.toml` のworkspace memberとして本パッケージが含まれる)。
 
 ```bash
-cp tools/schedule/config/jobs.example.yaml tools/schedule/config/jobs.yaml
+cp tools/schedule/ai-schedule/config/jobs.example.yaml tools/schedule/ai-schedule/config/jobs.yaml
 # config/jobs.yaml を編集(登録したいPowerShellスクリプトとスケジュールを記述)
 ```
 
@@ -30,16 +30,16 @@ uv run ai-schedule --help
 uv run ai-schedule help
 
 # 設定ファイルの内容にタスクスケジューラを同期する(作成/更新/削除)
-uv run ai-schedule sync tools/schedule/config/jobs.yaml
+uv run ai-schedule sync tools/schedule/ai-schedule/config/jobs.yaml
 
 # 実際には変更せず、実行予定の操作だけ確認する
-uv run ai-schedule sync tools/schedule/config/jobs.yaml --dry-run
+uv run ai-schedule sync tools/schedule/ai-schedule/config/jobs.yaml --dry-run
 
 # 設定ファイルのジョブ一覧と、タスクスケジューラへの現在の登録状況を表示する
-uv run ai-schedule list tools/schedule/config/jobs.yaml
+uv run ai-schedule list tools/schedule/ai-schedule/config/jobs.yaml
 ```
 
-グローバルCLIとして使う場合は `uv tool install --editable tools/schedule` でエディタブルインストールする。
+グローバルCLIとして使う場合は `uv tool install --editable tools/schedule/ai-schedule` でエディタブルインストールする。
 
 `sync` はWindows標準の `schtasks.exe` を呼び出すため、対象スクリプトを実行できる権限を持つユーザーで
 実行すること(管理者権限のスクリプトを登録する場合は管理者権限のシェルから `sync` を実行する)。
@@ -76,7 +76,7 @@ jobs:
 ## ファイル構成
 
 ```
-tools/schedule/
+tools/schedule/ai-schedule/
 ├── README.md                  # 概要(ローカル/クラウドでの定期実行方針)
 ├── AGENTS.md / CLAUDE.md        # 本ファイル
 ├── pyproject.toml                 # パッケージ定義 + console script (ai-schedule)

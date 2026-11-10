@@ -37,8 +37,8 @@
 
 - [my-agents](my-agents/AGENTS.md) — `repo-tools.yaml` に登録済み
 - [sandbox](sandbox/README.md)
-- [scheule/ai-schedule](scheule/ai-schedule/README.md)
-- [scheule/issue-agent](scheule/issue-agent/README.md)
+- [schedule/ai-schedule](schedule/ai-schedule/README.md)
+- [schedule/issue-agent](schedule/issue-agent/README.md)
 
 ## ラッパー
 

@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 <#
-    tools/schedule のinterval jobから呼ばれる薄いラッパー。
+    tools/schedule/ai-schedule のinterval jobから呼ばれる薄いラッパー。
     実処理は issue_agent.check（1周期分だけ処理して終了する）に委ねる。
 #>
 $ErrorActionPreference = "Stop"

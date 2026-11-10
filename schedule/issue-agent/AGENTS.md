@@ -4,13 +4,13 @@ GitHub ISSUEのラベル（`tool:claude-code`必須、`model:<alias>`任意）�
 
 ## 関連ファイル
 
-- `README.md` — 概要・前提条件・`tools/schedule`への登録手順・停止方法・環境変数一覧・トラブルシュート
+- `README.md` — 概要・前提条件・`tools/schedule/ai-schedule`への登録手順・停止方法・環境変数一覧・トラブルシュート
 - 元の実装プランは完了に伴い削除済み（[.claude/plans/README.md](../../.claude/plans/README.md)の「完了後の後片付け」節参照）。設計判断の要約は本ファイルに集約する
 
 ## 前提となる設計方針
 
 - **チェック/worker分離**: `check.py`はラベル検索・認可判定・試行記録管理のみ行う。実際の作業（worktree作成・Claude起動・コミット確認・PR確認・ISSUEコメント・後片付け）は`worker.py`を`python -m issue_agent.worker --issue-number N`としてsubprocessで**同期呼び出し**し、完了を待ってから終了する。
-- **1周期=1プロセス、内部でループしない**: `check.py`は`while True`もsleepも持たない。繰り返しは`tools/schedule`（Windowsタスクスケジューラのinterval）に委ねる。非同期detach起動にすると、タスクスケジューラがプロセスツリーを終了させた際にworkerが巻き添えで死ぬリスクや、同一worktreeへの同時操作が起きるリスクがあるため。
+- **1周期=1プロセス、内部でループしない**: `check.py`は`while True`もsleepも持たない。繰り返しは`tools/schedule/ai-schedule`（Windowsタスクスケジューラのinterval）に委ねる。非同期detach起動にすると、タスクスケジューラがプロセスツリーを終了させた際にworkerが巻き添えで死ぬリスクや、同一worktreeへの同時操作が起きるリスクがあるため。
 - **認可判定**: ラベル`tool:`を最後に付与したユーザー（`gh api repos/{owner}/{repo}/issues/{issue_number}/events`の`labeled`イベントの`actor.login`。複数回付け外しされていれば最後のもの）が`gh api repos/{owner}/{repo}/collaborators`のcollaborator一覧に含まれるかで判定する（issue/PRの`author_association`は使わない。ラベル付与イベントには付与されないため）。
 - **隔離はgit worktreeのみ**（Dockerは使わない）。worktreeはリポジトリの**外側**（既定`<repo親>/ai-worktrees/issue-<N>`、`ISSUE_AGENT_WORKTREE_ROOT`で変更可）に配置する。メインの作業ツリー内部に置くと通常のgit操作やこのリポジトリ自身の各種チェックスクリプトが誤って巻き込まれるため。
 - **権限設計**: Claude Codeは`permission_mode="bypassPermissions"`で通常のAUTO実行させる。危険コマンド（`gh pr merge`・`git push --force`系・`git push -f`・`git push --force-with-lease`・`git branch -D`）のみ`deny_permissions.json`（`ClaudeAgentOptions.settings`経由で渡す追加settings JSON）の`permissions.deny`で拒否する。`can_use_tool`コールバックは`bypassPermissions`下では完全にシャドーイングされ呼ばれないため使わない（明示的denyルールだけが`bypassPermissions`下でも有効という、SDKが保証する数少ない例外）。
@@ -22,11 +22,11 @@ GitHub ISSUEのラベル（`tool:claude-code`必須、`model:<alias>`任意）�
 ## ファイル構成
 
 ```
-tools/issue-agent/
+tools/schedule/issue-agent/
 ├── README.md / AGENTS.md / CLAUDE.md
 ├── pyproject.toml
 ├── scripts/
-│   └── check.ps1                   # tools/scheduleから呼ばれる薄いラッパー。issue_agent.checkを1回だけ実行する
+│   └── check.ps1                   # tools/schedule/ai-scheduleから呼ばれる薄いラッパー。issue_agent.checkを1回だけ実行する
 ├── issue_agent/
 │   ├── config.py                    # 環境変数駆動の設定（Config.from_env()）
 │   ├── environment.py               # .env読込（load_environment()、各エントリポイントのmain()冒頭から呼ぶ）
