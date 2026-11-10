@@ -1,6 +1,6 @@
 # task-tracker スキル 実装プラン
 
-> **2026-09 追記**: フックの配置・登録方式は変わった。`.claude/hooks/` と hooks_manager（`hooks.yml` / sync / reflect）は廃止され、フック本体の正本は `agent-tooling/agent_tooling/adapters/claude/task_tracker_session.py`（メタデータは `agent-tooling/agent_tooling/hooks/scenarios/task_tracker_session/hook.yaml`）、配置・登録は `skill-tools hooks install --agent claude task_tracker_session`（このリポジトリではルートの `just hooks-install`）で行う。経緯は [hook-distribution](../../../../../maintenance/docs/hook-distribution.md)。以下は実装当時のプランとして残す。
+> **2026-09 追記**: フックの配置・登録方式は変わった。`.claude/hooks/` と hooks_manager（`hooks.yml` / sync / reflect）は廃止され、フック本体の正本は `agent-compat/agent-tooling/agent_tooling/adapters/claude/task_tracker_session.py`（メタデータは `agent-compat/agent-tooling/agent_tooling/hooks/scenarios/task_tracker_session/hook.yaml`）、配置・登録は `skill-tools hooks install --agent claude task_tracker_session`（このリポジトリではルートの `just hooks-install`）で行う。経緯は [hook-distribution](../../../../../maintenance/docs/hook-distribution.md)。以下は実装当時のプランとして残す。
 
 ## 目的
 
@@ -91,7 +91,7 @@ tools/_plugin/my-tools/skills/task-tracker/
 
 ## 読むべきファイル・実行推奨Grep（実装直前に再確認）
 
-- 既存hookの書式踏襲: 当時の `.claude/hooks/block_large_read.py`, `.claude/hooks/_hook_log.py`（現在は `agent-tooling/agent_tooling/adapters/claude/` と `adapters/claude/common/`）
+- 既存hookの書式踏襲: 当時の `.claude/hooks/block_large_read.py`, `.claude/hooks/_hook_log.py`（現在は `agent-compat/agent-tooling/agent_tooling/adapters/claude/` と `adapters/claude/common/`）
 - hooks_manager運用ルール: 当時の `.claude/scripts/AGENTS.md`, `.claude/scripts/hooks_manager.py`（廃止済み。現在は [hook-distribution](../../../../../maintenance/docs/hook-distribution.md)）
 - `UserPromptExpansion` の最新入出力スキーマ: `skills/plugins/cc-knowledge/skills/claude-code-docs/output/llms-full.txt` 内 `### UserPromptExpansion` セクション（バージョン差異があり得るので実装直前に再取得推奨。`claude-code-docs`スキル経由で最新化できる）
 - セッショントランスクリプトの所在・形式: [skills/plugins/cc-knowledge/skills/claude-code-debugging/logs-and-settings.md](../../../../../skills/plugins/cc-knowledge/skills/claude-code-debugging/logs-and-settings.md)、参考実装 [skills/plugins/cc-knowledge/skills/claude-code-debugging/scripts/extract_log.py](../../../../../skills/plugins/cc-knowledge/skills/claude-code-debugging/scripts/extract_log.py)

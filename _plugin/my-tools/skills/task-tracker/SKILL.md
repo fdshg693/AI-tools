@@ -13,10 +13,10 @@ meta:
   requires_skills: none
   status: draft
   description: no description
-  version: 1.0.3
+  version: 1.0.4
 ---
 
-`/task-tracker <task-name>` は、複数タスクを行き来する開発で「このタスクの話はこのファイルにメモする」という人間側のマッピングコストをなくすためのスキル。呼び出すたびに `.claude/tasks/{task-name}/` にセッションIDが自動記録され（フック `task_tracker_session`、`UserPromptExpansion`。正本は `agent-tooling/agent_tooling/adapters/claude/task_tracker_session.py`、配置は `skill-tools hooks install --agent claude task_tracker_session`）、このSKILL本体は同じ場所の `CURRENT.md` を都度更新してタスクの現状を追跡する。
+`/task-tracker <task-name>` は、複数タスクを行き来する開発で「このタスクの話はこのファイルにメモする」という人間側のマッピングコストをなくすためのスキル。呼び出すたびに `.claude/tasks/{task-name}/` にセッションIDが自動記録され（フック `task_tracker_session`、`UserPromptExpansion`。正本は `agent-compat/agent-tooling/agent_tooling/adapters/claude/task_tracker_session.py`、配置は `skill-tools hooks install --agent claude task_tracker_session`）、このSKILL本体は同じ場所の `CURRENT.md` を都度更新してタスクの現状を追跡する。
 
 ## 1. タスク名（`$0`）の扱い
 
