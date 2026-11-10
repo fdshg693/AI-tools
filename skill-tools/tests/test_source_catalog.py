@@ -260,3 +260,88 @@ def test_display_skill_path_uses_source_kind() -> None:
     assert display_skill_path("plugins/one/skills/alpha/SKILL.md", None) == (
         "plugins/one/skills/alpha/SKILL.md"
     )
+
+
+def _install_fake_github_repos(
+    monkeypatch: pytest.MonkeyPatch,
+    repos: dict[str, tuple[dict[str, bytes], dict[str, str]]],
+) -> list[str]:
+    """repos: "owner/repo" -> (blobs, gitlinks path -> commit sha). Returns requested URLs."""
+    requested: list[str] = []
+    blob_sha: dict[tuple[str, str], str] = {}
+    blob_content: dict[str, bytes] = {}
+    for name, (blobs, _links) in repos.items():
+        for path, content in blobs.items():
+            sha = f"blob{len(blob_content)}"
+            blob_sha[(name, path)] = sha
+            blob_content[sha] = content
+
+    def fake_request(self: GitHubSource, url: str):
+        requested.append(url)
+        if "/commits/" in url:
+            return {"sha": "commit-sha"}
+        repo = url.split("/repos/", 1)[1].split("/git/", 1)[0]
+        blobs, links = repos[repo]
+        if "/git/trees/" in url:
+            tree = [{"type": "blob", "path": p, "sha": blob_sha[(repo, p)]} for p in sorted(blobs)]
+            tree += [{"type": "commit", "path": p, "sha": sha} for p, sha in links.items()]
+            return {"truncated": False, "tree": tree}
+        content = blob_content[url.rsplit("/", 1)[-1]]
+        return {"encoding": "base64", "content": base64.b64encode(content).decode()}
+
+    monkeypatch.setattr(GitHubSource, "_request_json", fake_request)
+    return requested
+
+
+def test_github_source_follows_submodules(monkeypatch: pytest.MonkeyPatch) -> None:
+    gitmodules = (
+        b'[submodule "plugins"]\n\tpath = plugins\n'
+        b"\turl = https://github.com/owner/repo-plugins.git\n"
+        b'[submodule "extra"]\n\tpath = extra\n\turl = ../repo-extra\n'
+    )
+    requested = _install_fake_github_repos(
+        monkeypatch,
+        {
+            "owner/repo": (
+                {"ai-tools.yaml": CATALOG.encode(), ".gitmodules": gitmodules},
+                {"plugins": "plugins-sha", "extra": "extra-sha"},
+            ),
+            "owner/repo-plugins": (
+                {
+                    "one/skills/alpha/SKILL.md": _skill("alpha"),
+                    "two/beta/SKILL.md": _skill("beta"),
+                },
+                {},
+            ),
+            "owner/repo-extra": ({"note.md": b"x\n"}, {}),
+        },
+    )
+    remote = GitHubSource("owner", "repo", "main")
+    assert remote.list_files((PurePosixPath("extra"),)) == (PurePosixPath("extra/note.md"),)
+    records = discover_catalog(remote)
+    assert sorted(record.name for record in records) == ["alpha", "beta"]
+    assert remote.read_file(PurePosixPath("plugins/one/skills/alpha/SKILL.md")) == _skill("alpha")
+    assert any("/repos/owner/repo-plugins/git/trees/plugins-sha" in url for url in requested)
+    assert any("/repos/owner/repo-extra/git/trees/extra-sha" in url for url in requested)
+
+
+@pytest.mark.parametrize(
+    ("gitmodules", "message"),
+    [
+        (None, "no .gitmodules"),
+        (b'[submodule "plugins"]\n\tpath = other\n\turl = ../x\n', "missing from .gitmodules"),
+        (
+            b'[submodule "plugins"]\n\tpath = plugins\n\turl = https://gitlab.com/o/r.git\n',
+            "not on github.com",
+        ),
+    ],
+)
+def test_github_source_refuses_unresolvable_submodules(
+    monkeypatch: pytest.MonkeyPatch, gitmodules: bytes | None, message: str
+) -> None:
+    blobs = {"ai-tools.yaml": CATALOG.encode()}
+    if gitmodules is not None:
+        blobs[".gitmodules"] = gitmodules
+    _install_fake_github_repos(monkeypatch, {"owner/repo": (blobs, {"plugins": "sha"})})
+    with pytest.raises(SourceError, match=message):
+        GitHubSource("owner", "repo", "main")

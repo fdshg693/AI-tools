@@ -254,6 +254,7 @@ logs/
 ## Safety and exit codes
 
 - GitHub source は指定 ref を commit SHA に固定し、truncated tree は拒否します。
+- GitHub source はサブモジュール（gitlink）を辿ります。`.gitmodules` の URL（github.com のもの、または `../<repo>.git` の相対指定）から、記録された commit のツリーを取得し、サブモジュールのパスの下のファイルとして扱います。`.gitmodules` が無い・記載が無い・github.com 以外の URL のときは、ファイルを黙って欠落させずエラーで止まります。リポジトリ数だけ API 呼び出しが増えるので、レート制限に当たるときは環境変数 `GITHUB_TOKEN` を設定します（設定すれば `Authorization` ヘッダーで送ります）。
 - symlink の検査・走査の除外は Windows の Junction にも同じく効きます（`Path.is_symlink()` は Junction で False のため、`skill_tools/fs_links.py` の `is_link_like` で判定）。local source で git が Junction 越しに列挙したファイルは数えません。
 - local source は Git 管理対象または `.gitignore` 対象外のファイルだけを束ね、さらにバンドルコピーの除外/包含ポリシー（既定除外 → `.gitignore` → `.skill-tools` の `include:`）で絞り込みます。
 - 配置は staging 完了後に置換し、後続失敗時は完了済みの置換を rollback します。

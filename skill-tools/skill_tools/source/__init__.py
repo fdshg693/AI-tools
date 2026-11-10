@@ -19,6 +19,72 @@ from ..models import SourceError
 from ..fs_links import is_link_like
 
 _USER_AGENT = "skill-tools/0.1"
+# Nested submodules are followed this deep (umbrella -> submodule -> ...).
+_MAX_SUBMODULE_DEPTH = 3
+_GITHUB_PREFIXES = (
+    "https://github.com/",
+    "http://github.com/",
+    "ssh://git@github.com/",
+    "git@github.com:",
+)
+
+
+def _github_repo_from_url(url: str, parent: tuple[str, str]) -> tuple[str, str]:
+    """Return (owner, repository) for a ``.gitmodules`` URL hosted on github.com.
+
+    Accepts https/ssh/scp-style GitHub URLs and URLs relative to the parent
+    repository (``../other.git``). Anything else is refused: the catalog would
+    otherwise silently miss the submodule's files.
+    """
+    value = url.strip()
+    if value.startswith(("./", "../")):
+        segments = [parent[0], parent[1]]
+        for part in value.split("/"):
+            if part in ("", "."):
+                continue
+            if part == "..":
+                if not segments:
+                    raise SourceError(f"submodule URL escapes github.com: {url}")
+                segments.pop()
+            else:
+                segments.append(part)
+        parts = segments
+    else:
+        rest = next(
+            (value[len(prefix) :] for prefix in _GITHUB_PREFIXES if value.startswith(prefix)),
+            None,
+        )
+        if rest is None:
+            raise SourceError(f"submodule URL is not on github.com: {url}")
+        parts = [part for part in rest.split("/") if part]
+    if len(parts) != 2:
+        raise SourceError(f"submodule URL is not a GitHub repository: {url}")
+    owner, repository = parts
+    if repository.endswith(".git"):
+        repository = repository[: -len(".git")]
+    if not owner or not repository:
+        raise SourceError(f"submodule URL is not a GitHub repository: {url}")
+    return owner, repository
+
+
+def _parse_gitmodules(text: str) -> dict[str, str]:
+    """Map submodule path -> url from a ``.gitmodules`` file."""
+    sections: list[dict[str, str]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("["):
+            sections.append({})
+            continue
+        key, sep, value = line.partition("=")
+        if sep and sections:
+            sections[-1][key.strip()] = value.strip()
+    return {
+        PurePosixPath(section["path"]).as_posix(): section["url"]
+        for section in sections
+        if section.get("path") and section.get("url")
+    }
 
 
 class CatalogSource(Protocol):
@@ -248,7 +314,12 @@ class LocalSource:
 
 
 class GitHubSource:
-    """Fetch a GitHub ref as one resolved commit tree."""
+    """Fetch a GitHub ref as one resolved commit tree.
+
+    Submodules (gitlinks) are followed: their files appear under the submodule
+    path and are read from the submodule's GitHub repository at the recorded
+    commit. Set ``GITHUB_TOKEN`` to raise the API rate limit.
+    """
 
     def __init__(self, owner: str, repository: str, ref: str = "main") -> None:
         if not owner or "/" in owner or not repository or "/" in repository or not ref:
@@ -259,7 +330,9 @@ class GitHubSource:
         self.repository = repository
         self.ref = ref
         self.commit_sha = self._resolve_commit()
-        self._tree = self._load_tree()
+        # path -> (repository API base, blob sha)
+        self._tree: dict[PurePosixPath, tuple[str, str]] = {}
+        self._load_tree(self._repo_api, (owner, repository), self.commit_sha, PurePosixPath(), 0)
         self._blob_cache: dict[PurePosixPath, bytes] = {}
 
     @property
@@ -283,19 +356,24 @@ class GitHubSource:
 
     @property
     def _repo_api(self) -> str:
-        owner = urllib.parse.quote(self.owner, safe="")
-        repository = urllib.parse.quote(self.repository, safe="")
-        return f"https://api.github.com/repos/{owner}/{repository}"
+        return self._api_for(self.owner, self.repository)
+
+    @staticmethod
+    def _api_for(owner: str, repository: str) -> str:
+        owner_q = urllib.parse.quote(owner, safe="")
+        repository_q = urllib.parse.quote(repository, safe="")
+        return f"https://api.github.com/repos/{owner_q}/{repository_q}"
 
     def _request_json(self, url: str) -> object:
-        request = urllib.request.Request(
-            url,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "User-Agent": _USER_AGENT,
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": _USER_AGENT,
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        request = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 return json.loads(response.read().decode("utf-8"))
@@ -320,8 +398,15 @@ class GitHubSource:
             raise SourceError("GitHub commit response did not contain a SHA")
         return sha
 
-    def _load_tree(self) -> dict[PurePosixPath, str]:
-        data = self._request_json(f"{self._repo_api}/git/trees/{self.commit_sha}?recursive=1")
+    def _load_tree(
+        self,
+        repo_api: str,
+        repo: tuple[str, str],
+        commit_sha: str,
+        prefix: PurePosixPath,
+        depth: int,
+    ) -> None:
+        data = self._request_json(f"{repo_api}/git/trees/{commit_sha}?recursive=1")
         if not isinstance(data, dict) or data.get("truncated") is True:
             raise SourceError(
                 "GitHub recursive tree is unavailable or truncated; refusing incomplete catalog"
@@ -329,20 +414,48 @@ class GitHubSource:
         tree = data.get("tree")
         if not isinstance(tree, list):
             raise SourceError("GitHub tree response did not contain a tree list")
-        files: dict[PurePosixPath, str] = {}
+        blobs: dict[PurePosixPath, str] = {}
+        gitlinks: dict[str, str] = {}
         for entry in tree:
-            if not isinstance(entry, dict) or entry.get("type") != "blob":
+            if not isinstance(entry, dict):
                 continue
+            kind = entry.get("type")
             raw_path, sha = entry.get("path"), entry.get("sha")
+            if kind == "commit":
+                if not isinstance(raw_path, str) or not isinstance(sha, str):
+                    raise SourceError("GitHub tree contained an invalid submodule entry")
+                gitlinks[_safe_remote_path(raw_path).as_posix()] = sha
+                continue
+            if kind != "blob":
+                continue
             if not isinstance(raw_path, str) or not isinstance(sha, str):
                 raise SourceError("GitHub tree contained an invalid blob entry")
             if entry.get("mode") == "120000":
                 raise SourceError(f"GitHub tree contains an unsupported symlink: {raw_path}")
             path = _safe_remote_path(raw_path)
-            if path in files:
+            if path in blobs:
                 raise SourceError(f"GitHub tree contains duplicate file path: {path}")
-            files[path] = sha
-        return files
+            blobs[path] = sha
+        for path, sha in blobs.items():
+            full = prefix / path
+            if full in self._tree:
+                raise SourceError(f"GitHub tree contains duplicate file path: {full}")
+            self._tree[full] = (repo_api, sha)
+        if not gitlinks:
+            return
+        if depth >= _MAX_SUBMODULE_DEPTH:
+            raise SourceError(f"submodules nested deeper than {_MAX_SUBMODULE_DEPTH} levels")
+        gitmodules_sha = blobs.get(PurePosixPath(".gitmodules"))
+        if gitmodules_sha is None:
+            raise SourceError("GitHub tree has submodules but no .gitmodules")
+        gitmodules = self._read_blob(repo_api, gitmodules_sha, prefix / ".gitmodules")
+        urls = _parse_gitmodules(gitmodules.decode("utf-8"))
+        for path, sha in sorted(gitlinks.items()):
+            url = urls.get(path)
+            if url is None:
+                raise SourceError(f"submodule {prefix / path} is missing from .gitmodules")
+            sub_repo = _github_repo_from_url(url, repo)
+            self._load_tree(self._api_for(*sub_repo), sub_repo, sha, prefix / path, depth + 1)
 
     def list_files(self, roots: Iterable[PurePosixPath]) -> tuple[PurePosixPath, ...]:
         roots = tuple(roots)
@@ -358,18 +471,22 @@ class GitHubSource:
             raise SourceError(f"source path is unsafe: {path}")
         if path in self._blob_cache:
             return self._blob_cache[path]
-        sha = self._tree.get(path)
-        if sha is None:
+        entry = self._tree.get(path)
+        if entry is None:
             raise SourceError(f"GitHub source file does not exist: {path}")
-        data = self._request_json(f"{self._repo_api}/git/blobs/{sha}")
+        repo_api, sha = entry
+        decoded = self._read_blob(repo_api, sha, path)
+        self._blob_cache[path] = decoded
+        return decoded
+
+    def _read_blob(self, repo_api: str, sha: str, path: PurePosixPath) -> bytes:
+        data = self._request_json(f"{repo_api}/git/blobs/{sha}")
         if not isinstance(data, dict) or data.get("encoding") != "base64":
             raise SourceError(f"GitHub blob response for {path} was not base64 content")
         content = data.get("content")
         if not isinstance(content, str):
             raise SourceError(f"GitHub blob response for {path} did not contain content")
         try:
-            decoded = base64.b64decode(content.replace("\n", ""), validate=True)
+            return base64.b64decode(content.replace("\n", ""), validate=True)
         except ValueError as exc:
             raise SourceError(f"GitHub blob response for {path} was invalid base64") from exc
-        self._blob_cache[path] = decoded
-        return decoded
