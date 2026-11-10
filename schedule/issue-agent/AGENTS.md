@@ -44,7 +44,7 @@ tools/schedule/issue-agent/
 
 ## companion skillについて
 
-本ツールはスケジューラから機械的に呼ばれるだけの自動化スクリプトであり、対話的にフラグ・enum値の選択に迷うCLIではないため、[tool-companion-skills](../../../docs/repo-wide/tool-companion-skills.md)が対象とする「使い方スキール併設」の対象には該当しないと判断し、現時点では作らない。将来、手動トリガー用のサブコマンド等を追加して利用実態が変わった場合は再検討する。
+本ツールはスケジューラから機械的に呼ばれるだけの自動化スクリプトであり、対話的にフラグ・enum値の選択に迷うCLIではないため、[tool-companion-skills](../../../maintenance/docs/tool-companion-skills.md)が対象とする「使い方スキール併設」の対象には該当しないと判断し、現時点では作らない。将来、手動トリガー用のサブコマンド等を追加して利用実態が変わった場合は再検討する。
 
 ## 運用上の注意点
 

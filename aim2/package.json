@@ -1,6 +1,6 @@
 {
   "name": "aim2",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Multi-provider AI model CLI tool",
   "type": "module",
   "engines": {

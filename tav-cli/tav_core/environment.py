@@ -3,7 +3,7 @@
 Everything that reads the process environment or a config file lives here, so
 changing how the CLI discovers its API key, output directory, or logging toggles
 is a one-file edit. Resolution (highest precedence first; see README
-"設定とパス解決" and ``docs/repo-wide/tool-conventions.md``):
+"設定とパス解決" and ``maintenance/docs/tool-conventions.md``):
 
 1. Process environment variables (``TAVILY_*``), even when set to empty.
 2. Project config ``.tav.toml``, searched from the cwd up to the git root

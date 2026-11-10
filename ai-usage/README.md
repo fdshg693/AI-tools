@@ -22,7 +22,7 @@ Claude Code / Codex の「5時間ウィンドウ」「週間ウィンドウ」�
 ## インストール
 
 ```bash
-uv tool install --editable tools/internal/ai-usage
+uv tool install --editable tools/ai-usage
 ```
 
 `ai-usage` コマンドがPATH上でどこからでも使えるようになる。
@@ -39,7 +39,7 @@ Claude Codeにはレート制限をこちらから取得できるpull型APIが�
 {
   "statusLine": {
     "type": "command",
-    "command": "python C:/CodeRoot/AI/tools/internal/ai-usage/statusline_hook.py"
+    "command": "python C:/C/ai/tools/ai-usage/statusline_hook.py"
   }
 }
 ```
@@ -72,7 +72,7 @@ ai-usage show --cursor
 ## ファイル構成
 
 ```text
-tools/internal/ai-usage/
+tools/ai-usage/
 ├── README.md                          ← このファイル
 ├── pyproject.toml                      ← `ai-usage` コンソールコマンドのパッケージング
 ├── ai_usage_cli.py                      ← エントリポイント。argparse `show` サブコマンド

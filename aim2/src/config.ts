@@ -26,7 +26,7 @@ export class ConfigError extends Error {
 }
 
 /**
- * リポジトリ規約 (docs/repo-wide/tool-conventions.md) に準拠した必須キー欠落診断メッセージ。
+ * リポジトリ規約 (maintenance/docs/tool-conventions.md) に準拠した必須キー欠落診断メッセージ。
  */
 export function missingRequiredKeyMessage(key: string, envPath = DEFAULT_ENV_PATH): string {
   const envState = key in process.env ? '空で設定されている' : '未設定';

@@ -1,6 +1,6 @@
 """Layered settings for the Developer Knowledge CLI.
 
-Resolution (highest precedence first; see ``docs/repo-wide/tool-conventions.md``):
+Resolution (highest precedence first; see ``maintenance/docs/tool-conventions.md``):
 
 1. Process environment variables, even when set to empty.
 2. Project config ``.gdevdocs.toml``, searched from the cwd up to the git root

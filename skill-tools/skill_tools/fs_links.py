@@ -3,7 +3,7 @@
 ``Path.is_symlink()`` is False for a junction and ``os.walk(followlinks=False)``
 descends into one, so every symlink guard in skill-tools goes through
 ``is_link_like`` instead. A same-named helper lives in the umbrella repository's
-tools/internal/links/fs.py; skill-tools keeps its own copy because it is
+maintenance/scripts/links/fs.py; skill-tools keeps its own copy because it is
 distributed on its own.
 """
 

@@ -2,9 +2,9 @@
 
 - 関連スキル
   - **claude-plugins\my-tools\skills\skill-tools-cli\SKILL.md**
-  - **meta-plugins\skills\discovering-skills\SKILL.md**
+  - **maintenance\plugin\skills\discovering-skills\SKILL.md**
 
-`skill-tools` は、`ai-tools.yaml` に登録された Agent Skill の一覧・配置・検索を一つの CLI にまとめたツールです。`meta-plugins/` のような未登録領域は対象にしません。目的別の組み合わせは `repo-workflows.yaml` の read-only catalog で確認できます。スキルの取得元（ローカル clone または GitHub）と CLI 専用インデックスの場所は、実行時の CWD から推測せず、設定ファイルで明示します。
+`skill-tools` は、`ai-tools.yaml` に登録された Agent Skill の一覧・配置・検索を一つの CLI にまとめたツールです。`maintenance/plugin/` のような未登録領域は対象にしません。目的別の組み合わせは `repo-workflows.yaml` の read-only catalog で確認できます。スキルの取得元（ローカル clone または GitHub）と CLI 専用インデックスの場所は、実行時の CWD から推測せず、設定ファイルで明示します。
 
 同じ source（設定中の `source`）の `repo-tools.yaml` に登録された `tools/` 配下の first-class CLI ツールも、`list-tools` で列挙し `install-tools` でインストールコマンドを実行できます。`release` の値はここでは参照しません（タグ+GitHub Release の対象判定は別の関心事で、全エントリが列挙・インストール対象です）。
 

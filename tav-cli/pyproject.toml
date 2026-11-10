@@ -16,7 +16,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tav-cli"
-version = "3.2.8"
+version = "3.2.9"
 description = "Thin CLI wrappers around Tavily"
 requires-python = ">=3.11"
 dependencies = [

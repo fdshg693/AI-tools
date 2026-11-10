@@ -2,11 +2,13 @@
 
 `tools/` は1ツール1ディレクトリのまま置く。このファイルは役割で引く索引であり、使い方は書かない。リンク先の README（無いディレクトリは AGENTS.md）を読む。
 
-公開する CLI のインストールパス（`uv tool install --editable tools/<name>` など）と [`repo-tools.yaml`](../repo-tools.yaml) の `path` は、この平坦な配置が契約である。方針は [tools-directory-layout](../docs/repo-wide/tools-directory-layout.md)。
+公開する CLI のインストールパス（`uv tool install --editable tools/<name>` など）と [`repo-tools.yaml`](../repo-tools.yaml) の `path` は、この平坦な配置が契約である。方針は [tools-directory-layout](../maintenance/docs/tools-directory-layout.md)。
 
 ## リポジトリ内部
 
-- [internal](internal/AGENTS.md) — カタログ生成、スキル meta、pre-commit
+カタログ生成・スキル meta・pre-commit などリポジトリ保守用のスクリプトは [maintenance/scripts](../maintenance/scripts/AGENTS.md) にある（tools/ ではない）。
+
+- [ai-usage](ai-usage/README.md) — AI コーディングツールの使用量表示（個人用 CLI、`repo-tools.yaml` 未登録）
 - [infra](infra/AGENTS.md) — インフラ利用ツール。[ai-logs](infra/ai-logs/README.md)
 
 ## 配布する CLI
