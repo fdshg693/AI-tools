@@ -39,3 +39,11 @@ sandbox/orchestrator/data/
 .claude/hooks/
 .claude/tasks/
 .skill-tools/
+
+# Links created by `just links-sync` from .links.yaml (never committed). info/exclude lists them
+# with a trailing "/", which matches Windows junctions but not macOS/Linux symlinks.
+/_umbrella/
+/.claude/skills/committing
+/.claude/skills/changing-skills-and-tools
+/.claude/skills/meta
+/.claude/skills/writing-skill
