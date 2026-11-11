@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from skill_tools.config import (
     apply_cli_overrides,
     default_index_path,
+    global_state_dir,
     initialize_user_config,
     load_config,
     user_config_path,
@@ -85,6 +87,62 @@ def test_invalid_targets_are_rejected(tmp_path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(config_path=path)
+
+
+def test_global_destination_precedence(tmp_path: Path) -> None:
+    path = tmp_path / "skill-tools.yaml"
+    path.write_text(
+        "targets:\n  claude:\n    destination: .claude/skills\n"
+        "  antigravity:\n    destination: .agents/skills\n"
+        "    global_destination: .gemini/config/skills\n"
+        "skills:\n  example/SKILL.md:\n    destination: legacy\n"
+        "    destinations:\n      claude: custom-claude\n",
+        encoding="utf-8",
+    )
+    config = load_config(config_path=path)
+
+    # Per-skill overrides are project-only.
+    assert config.global_destination_for() == ".claude/skills"
+    assert config.global_destination_for("claude") == ".claude/skills"
+    assert config.global_destination_for("antigravity") == ".gemini/config/skills"
+    assert config.destination_for("example/SKILL.md", "antigravity") == ".agents/skills"
+
+    path.write_text("global_destination: .agents/skills\n", encoding="utf-8")
+    assert load_config(config_path=path).global_destination_for() == ".agents/skills"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "global_destination: ../outside\n",
+        "global_destination: C:/abs\n",
+        "targets:\n  a:\n    global_destination: .x\n",
+        "targets:\n  a:\n    destination: .x\n    global_destination: ../outside\n",
+        "targets:\n  a:\n    destination: .x\n    other: .y\n",
+    ],
+)
+def test_invalid_global_destinations_are_rejected(tmp_path: Path, text: str) -> None:
+    path = tmp_path / "skill-tools.yaml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(config_path=path)
+
+
+def test_global_state_dir_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SKILL_TOOLS_HOME", str(tmp_path / "st"))
+    assert global_state_dir() == (tmp_path / "st" / "global").resolve()
+    monkeypatch.delenv("SKILL_TOOLS_HOME")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    expected = (
+        tmp_path / "local" / "skill-tools" / "global"
+        if os.name == "nt"
+        else tmp_path / "state" / "skill-tools" / "global"
+    )
+    assert global_state_dir() == expected.resolve()
+    # Never the cache directory: clearing a cache must not orphan global installs.
+    assert not global_state_dir().is_relative_to((tmp_path / "cache").resolve())
 
 
 def test_default_cache_paths_are_platform_specific(monkeypatch: pytest.MonkeyPatch) -> None:

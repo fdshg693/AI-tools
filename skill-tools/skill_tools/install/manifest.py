@@ -42,7 +42,9 @@ def _safe_relative(value: object, label: str) -> PurePosixPath:
         or not path.parts
         or any(part in {".", ".."} for part in path.parts)
     ):
-        raise InstallError(f"managed manifest {label} path must stay inside the project: {value!r}")
+        raise InstallError(
+            f"managed manifest {label} path must stay inside the install root: {value!r}"
+        )
     if path.as_posix() != value:
         raise InstallError(f"managed manifest {label} path is not canonical: {value!r}")
     return path
@@ -224,9 +226,19 @@ def load_manifest(path: Path) -> dict[str, Any]:
     return validate_manifest(raw)
 
 
-def normalized_source(source: Mapping[str, str], project_root: Path) -> dict[str, str]:
+def normalized_source(
+    source: Mapping[str, str], project_root: Path, *, relativize: bool = True
+) -> dict[str, str]:
+    """Record a local source path relative to the project when it lies inside it.
+
+    ``relativize=False`` (the global scope) always keeps the absolute path: the
+    install root there is the home directory, not a project the source belongs to.
+    """
+
     normalized = dict(source)
-    if normalized.get("type") == "local" and normalized.get("path"):
+    if normalized.get("type") == "local" and normalized.get("path") and not relativize:
+        normalized["path"] = str(Path(normalized["path"]).expanduser().resolve())
+    elif normalized.get("type") == "local" and normalized.get("path"):
         source_path = Path(normalized["path"]).expanduser().resolve()
         try:
             normalized["path"] = source_path.relative_to(project_root.resolve()).as_posix()
@@ -245,6 +257,7 @@ def make_entry(
     project_root: Path,
     source_descriptor: Mapping[str, str],
     bundle: SkillBundle,
+    relativize_source: bool = True,
 ) -> dict[str, Any]:
     project = project_root.resolve()
     target = install_path.resolve()
@@ -263,7 +276,7 @@ def make_entry(
         "target": target_name,
         "destination": destination.replace("\\", "/"),
         "installPath": target.relative_to(project).as_posix(),
-        "source": normalized_source(source_descriptor, project),
+        "source": normalized_source(source_descriptor, project, relativize=relativize_source),
         "files": files,
     }
     return _validate_entry(entry)

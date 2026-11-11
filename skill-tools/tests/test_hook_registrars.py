@@ -11,6 +11,7 @@ from skill_tools.hooks.registrars import (
     entry_hash,
     install_dir_for,
     registration_file_for,
+    supports_global,
 )
 from skill_tools.models import InstallError
 
@@ -136,3 +137,71 @@ def test_unsupported_documents_are_rejected(raw: bytes) -> None:
     with pytest.raises(InstallError):
         document = RegistrationDocument("claude", ".claude/settings.json", raw)
         document.add("x", "Stop", None, {"type": "command", "command": "x"})
+
+
+# --- --global -----------------------------------------------------------------
+
+
+def test_global_locations_ignore_project_settings() -> None:
+    config = HooksConfig(
+        claude_settings_file="local",
+        destinations={"claude": "tools/hooks"},
+        global_destinations={"codex": ".codex/my-hooks"},
+    )
+    assert install_dir_for("claude", config, global_scope=True) == ".claude/hooks"
+    assert install_dir_for("codex", config, global_scope=True) == ".codex/my-hooks"
+    assert install_dir_for("kilo", config, global_scope=True) == ".config/kilo/plugin"
+    assert registration_file_for("claude", config, global_scope=True) == ".claude/settings.json"
+    assert registration_file_for("kilo", config, global_scope=True) is None
+    assert not supports_global("antigravity")
+    with pytest.raises(InstallError, match="--global"):
+        install_dir_for("antigravity", config, global_scope=True)
+
+
+def test_global_claude_entry_uses_absolute_paths(tmp_path) -> None:
+    home = tmp_path / "my home"
+    home.mkdir()
+    absolute = f"{home.resolve().as_posix()}/.claude/hooks/x.py"
+    entry = build_entry("claude", "python", ".claude/hooks/x.py", {"event": "Stop"}, home=home)
+    assert entry == {"type": "command", "command": "python", "args": [absolute]}
+    project = build_entry(
+        "claude", "uv-project", ".claude/hooks/x.py", {"event": "Stop"}, home=home
+    )
+    assert project["args"] == ["run", "--project", home.resolve().as_posix(), absolute]
+
+
+def test_global_codex_entry_quotes_for_both_shells(tmp_path) -> None:
+    home = tmp_path / "O'Neil home"
+    home.mkdir()
+    absolute = f"{home.resolve().as_posix()}/.codex/hooks/x.py"
+    entry = build_entry("codex", "python", ".codex/hooks/x.py", {"event": "Stop"}, home=home)
+    sh = "'" + absolute.replace("'", "'\\''") + "'"
+    ps = "'" + absolute.replace("'", "''") + "'"
+    assert entry == {
+        "type": "command",
+        "command": f"python3 {sh}",
+        "commandWindows": f'powershell -NoProfile -Command "python {ps}"',
+    }
+
+
+def test_global_cursor_entry_is_relative_to_dot_cursor(tmp_path) -> None:
+    entry = build_entry(
+        "cursor",
+        "python",
+        ".cursor/hooks/x.py",
+        {"event": "stop", "matcher": "Read"},
+        home=tmp_path,
+    )
+    assert entry == {"command": "python hooks/x.py", "matcher": "Read"}
+    outside = build_entry("cursor", "python", "my hooks/x.py", {"event": "stop"}, home=tmp_path)
+    assert outside == {"command": f'python "{tmp_path.resolve().as_posix()}/my hooks/x.py"'}
+
+
+def test_project_entries_keep_their_command_text() -> None:
+    # Widening the quoting rules must not change (and so re-hash) plain project entries.
+    entry = build_entry("cursor", "python", ".cursor/hooks/x.py", {"event": "stop"})
+    assert entry == {"command": "python .cursor/hooks/x.py"}
+    spaced = build_entry("antigravity", "python", "my hooks/x.py", {"event": "PreInvocation"})
+    assert spaced["command"] == 'python "my hooks/x.py"'
+    with pytest.raises(InstallError, match="double quote"):
+        build_entry("cursor", "python", 'a"b/x.py', {"event": "stop"})

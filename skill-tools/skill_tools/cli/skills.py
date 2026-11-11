@@ -22,8 +22,10 @@ from ..install.installer import (
 from ..install.manifest import verify_entry
 from ..models import InstallError
 from ..source import display_skill_path
+from ..install.scope import InstallScope, ensure_project_root_allowed
 from .arguments import (
     _add_runtime_arguments,
+    _add_scope_arguments,
     _entry_matches_source,
     _load_runtime_config,
     _source_description,
@@ -44,6 +46,7 @@ def _add_install_command(commands) -> None:
         "install-skills", help="install skills selected by source path, unique name, or `self`"
     )
     _add_runtime_arguments(parser)
+    _add_scope_arguments(parser, global_option=True)
     parser.add_argument(
         "skills",
         nargs="+",
@@ -70,10 +73,12 @@ def _add_managed_commands(commands) -> None:
     installed = commands.add_parser(
         "installed-skills", help="list skills recorded in this project's managed manifest"
     )
+    _add_scope_arguments(installed, global_option=True)
     installed.add_argument("--json", action="store_true", help="write managed entries as JSON")
 
     update = commands.add_parser("update-skills", help="update skills managed in this project")
     _add_runtime_arguments(update)
+    _add_scope_arguments(update, global_option=True)
     update.add_argument("skills", nargs="*", help="canonical skill IDs or unique bundle names")
     update.add_argument(
         "--dry-run", action="store_true", help="show update targets without copying"
@@ -83,6 +88,7 @@ def _add_managed_commands(commands) -> None:
     remove = commands.add_parser(
         "remove-skills", help="remove skills recorded in this project's manifest"
     )
+    _add_scope_arguments(remove, global_option=True)
     remove.add_argument("skills", nargs="*", help="canonical skill IDs or bundle names")
     remove.add_argument("--dry-run", action="store_true", help="show directories without removing")
     remove.add_argument(
@@ -103,10 +109,12 @@ def _command_list(args: argparse.Namespace, cwd: Path) -> int:
     return 0
 
 
-def _command_install(args: argparse.Namespace, cwd: Path) -> int:
-    with _project_install_lock(cwd):
-        recover_transaction(cwd)
-    config = _load_runtime_config(args, cwd)
+def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
+    ensure_project_root_allowed(scope, "install-skills")
+    root, state_dir = scope.root, scope.state_dir
+    with _project_install_lock(root, state_dir=state_dir):
+        recover_transaction(root, state_dir=state_dir)
+    config = _load_runtime_config(args, cwd, scope=scope)
     source = create_source(config)
     selectors = [config.self_skill if token == SELF_SELECTOR else token for token in args.skills]
     selected = tuple(
@@ -116,21 +124,30 @@ def _command_install(args: argparse.Namespace, cwd: Path) -> int:
         )
     )
     targets = tuple(args.target.split(",")) if args.target is not None else None
-    plan = build_plan(cwd, selected, config, args.overwrite, targets=targets)
+    plan = build_plan(
+        root,
+        selected,
+        config,
+        args.overwrite,
+        targets=targets,
+        state_dir=state_dir,
+        global_scope=scope.is_global,
+    )
     for item in plan:
         action = "would install" if args.dry_run else "install"
         path = display_skill_path(item.bundle.canonical_id, source.descriptor)
         if item.target_name is None:
-            print(f"{action}\t{path}\t{item.target}")
+            shown = scope.display(item.target) if scope.is_global else item.target
+            print(f"{action}\t{path}\t{shown}")
         else:
-            relative_target = item.target.relative_to(cwd).as_posix()
+            relative_target = scope.display(item.target)
             print(
                 f"{action}\t{path}\t{item.bundle.canonical_id}"
                 f"\t{item.target_name}\t{relative_target}"
             )
     if args.dry_run:
         return 0
-    execute_install(source, plan, cwd, overwrite=args.overwrite)
+    execute_install(source, plan, root, overwrite=args.overwrite, state_dir=state_dir)
     return 0
 
 
@@ -152,10 +169,14 @@ def _select_managed_entries(entries: Sequence[dict], selectors: Sequence[str]) -
     return tuple(selected)
 
 
-def _command_installed(args: argparse.Namespace, cwd: Path) -> int:
-    with _project_install_lock(cwd):
-        recover_transaction(cwd)
-        entries = load_project_manifest(cwd)["entries"]
+def _managed_entries(scope: InstallScope) -> list[dict]:
+    with _project_install_lock(scope.root, state_dir=scope.state_dir):
+        recover_transaction(scope.root, state_dir=scope.state_dir)
+        return load_project_manifest(scope.root, state_dir=scope.state_dir)["entries"]
+
+
+def _command_installed(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
+    entries = _managed_entries(scope)
     if args.json:
         print(json.dumps(entries, ensure_ascii=False, indent=2))
     elif not entries:
@@ -176,35 +197,33 @@ def _command_installed(args: argparse.Namespace, cwd: Path) -> int:
     return 0
 
 
-def _command_remove(args: argparse.Namespace, cwd: Path) -> int:
-    with _project_install_lock(cwd):
-        recover_transaction(cwd)
-        entries = load_project_manifest(cwd)["entries"]
+def _command_remove(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
+    root = scope.root
+    entries = _managed_entries(scope)
     selected = _select_managed_entries(entries, args.skills)
     if not selected:
         print("(no managed skills)")
         return 0
     for entry in selected:
-        path = verify_entry(cwd, entry, force=args.force)
+        path = verify_entry(root, entry, force=args.force)
         action = "would remove" if args.dry_run else "remove"
         suffix = " (force: directory contents may be deleted)" if args.force else ""
-        print(f"{action}\t{entry['canonicalId']}\t{path.relative_to(cwd).as_posix()}{suffix}")
+        print(f"{action}\t{entry['canonicalId']}\t{scope.display(path)}{suffix}")
     if not args.dry_run:
-        execute_remove(cwd, selected, force=args.force)
+        execute_remove(root, selected, force=args.force, state_dir=scope.state_dir)
     return 0
 
 
-def _command_update(args: argparse.Namespace, cwd: Path) -> int:
-    with _project_install_lock(cwd):
-        recover_transaction(cwd)
-        entries = load_project_manifest(cwd)["entries"]
-        selected = _select_managed_entries(entries, args.skills)
+def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
+    ensure_project_root_allowed(scope, "update-skills")
+    root = scope.root
+    selected = _select_managed_entries(_managed_entries(scope), args.skills)
     if not selected:
         print("(no managed skills)")
         return 0
-    config = _load_runtime_config(args, cwd)
+    config = _load_runtime_config(args, cwd, scope=scope)
     source = create_source(config)
-    matching = tuple(entry for entry in selected if _entry_matches_source(entry, source, cwd))
+    matching = tuple(entry for entry in selected if _entry_matches_source(entry, source, root))
     for entry in selected:
         if entry not in matching:
             if args.skills:
@@ -229,7 +248,7 @@ def _command_update(args: argparse.Namespace, cwd: Path) -> int:
                 file=sys.stderr,
             )
             continue
-        target = verify_entry(cwd, entry, force=args.force)
+        target = verify_entry(root, entry, force=args.force)
         plan = InstallPlan(
             bundle=record.bundle,
             target=target,
@@ -239,12 +258,12 @@ def _command_update(args: argparse.Namespace, cwd: Path) -> int:
         plans.append(plan)
         action = "would update" if args.dry_run else "update"
         suffix = " (force: directory contents may be replaced)" if args.force else ""
-        print(f"{action}\t{entry['canonicalId']}\t{target.relative_to(cwd).as_posix()}{suffix}")
+        print(f"{action}\t{entry['canonicalId']}\t{scope.display(target)}{suffix}")
     if plans and not args.dry_run:
         execute_install(
             source,
             tuple(plans),
-            cwd,
+            root,
             overwrite=True,
             managed_entries=tuple(
                 entry
@@ -252,5 +271,6 @@ def _command_update(args: argparse.Namespace, cwd: Path) -> int:
                 if entry["canonicalId"] in {p.bundle.canonical_id for p in plans}
             ),
             force_managed=args.force,
+            state_dir=scope.state_dir,
         )
     return 0

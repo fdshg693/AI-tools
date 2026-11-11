@@ -1,5 +1,9 @@
 """Install, update, and remove catalog hooks in a project, recorded in the manifest.
 
+With ``global_scope`` the root is the home directory: files go to the
+user-wide hook directories, the user-wide registration files are edited, and
+command lines use absolute paths (see ``registrars``).
+
 One call to ``apply_hook_changes`` plans every file write/delete (hook files,
 seed configs, agent registration files) against the current disk state and
 then commits them together with the manifest through the shared project lock
@@ -20,9 +24,11 @@ from ..config import HooksConfig
 from .registrars import (
     RegistrationDocument,
     build_entry,
+    command_path,
     entry_hash,
     install_dir_for,
     registration_file_for,
+    supports_global,
 )
 from .catalog import AGENTS
 from ..install.installer import (
@@ -74,11 +80,45 @@ def parse_agents(value: str | None, config: HooksConfig) -> tuple[str, ...]:
     return agents
 
 
-def ensure_installable(hook: HookRecord, source, project: Path) -> None:
-    """``distributable: false`` hooks may only be installed into their own source repository."""
+def global_agents(agents: Sequence[str], *, explicit: bool) -> tuple[tuple[str, ...], list[str]]:
+    """Drop agents without a user-wide hook location for ``--global``.
+
+    An agent named with ``--agent`` is an error; one from ``hooks.default_agents``
+    is skipped with a warning.
+    """
+
+    unsupported = [agent for agent in agents if not supports_global(agent)]
+    if unsupported and explicit:
+        raise ConfigError(
+            f"--global does not support hooks for {', '.join(unsupported)} "
+            "(no known user-wide hook location)"
+        )
+    warnings = (
+        [f"--global does not support hooks for {', '.join(unsupported)}; skipping those agents"]
+        if unsupported
+        else []
+    )
+    kept = tuple(agent for agent in agents if supports_global(agent))
+    if not kept:
+        raise ConfigError("no selected agent supports --global hooks")
+    return kept, warnings
+
+
+def ensure_installable(
+    hook: HookRecord, source, project: Path, *, global_scope: bool = False
+) -> None:
+    """``distributable: false`` hooks may only be installed into their own source repository.
+
+    They are always refused with ``global_scope``: the home directory is never
+    the hook's own repository.
+    """
 
     if hook.distributable:
         return
+    if global_scope:
+        raise CatalogError(
+            f"hook {hook.id} is not distributable; it cannot be installed with --global"
+        )
     if isinstance(source, LocalSource) and source.root == project.resolve():
         return
     raise CatalogError(
@@ -94,6 +134,8 @@ def select_install_targets(
     config: HooksConfig,
     source,
     project: Path,
+    *,
+    global_scope: bool = False,
 ) -> tuple[tuple[HookTarget, ...], list[str]]:
     by_id = {hook.id: hook for hook in hooks}
     targets: list[HookTarget] = []
@@ -102,7 +144,7 @@ def select_install_targets(
         hook = by_id.get(hook_id)
         if hook is None:
             raise CatalogError(f"no hook in the catalog matches {hook_id!r}")
-        ensure_installable(hook, source, project)
+        ensure_installable(hook, source, project, global_scope=global_scope)
         supported = [agent for agent in agents if hook.agent(agent) is not None]
         if not supported:
             raise CatalogError(
@@ -121,7 +163,7 @@ def select_install_targets(
                     f"install it with `skill-tools install-tools {tool}`"
                 )
         targets.extend(
-            HookTarget(hook, spec, install_dir_for(agent, config))
+            HookTarget(hook, spec, install_dir_for(agent, config, global_scope=global_scope))
             for agent in supported
             if (spec := hook.agent(agent)) is not None
         )
@@ -148,8 +190,11 @@ def _sha256(content: bytes) -> str:
 
 
 class _Planner:
-    def __init__(self, project: Path, manifest: dict, config: HooksConfig) -> None:
+    def __init__(
+        self, project: Path, manifest: dict, config: HooksConfig, *, global_scope: bool = False
+    ) -> None:
         self.root = project.resolve()
+        self.home = self.root if global_scope else None
         self.manifest = manifest
         self.config = config
         self.changes: dict[str, bytes | None] = {}
@@ -248,23 +293,28 @@ class _Planner:
             self.changes[path] = source.read_file(item.source_path)
             self.result.actions.append(("seed", *label, path))
         registrations: list[dict[str, Any]] = []
-        relative = registration_file_for(spec.agent, self.config)
+        relative = registration_file_for(
+            spec.agent, self.config, global_scope=self.home is not None
+        )
         if relative is not None:
             document = self.document(spec.agent, relative)
             main_path = f"{target.install_dir}/{spec.main.as_posix()}"
+            needle = command_path(spec.agent, main_path, self.home)
             owned = {
                 registration["sha256"]
                 for entry in remaining
                 for registration in entry["registrations"]
                 if registration["file"].casefold() == relative.casefold()
             }
-            for command in document.foreign_commands(main_path, owned):
+            for command in document.foreign_commands(needle, owned):
                 self.result.warnings.append(
-                    f"{relative} already has an unmanaged hook running {main_path}; "
+                    f"{relative} already has an unmanaged hook running {needle}; "
                     f"it may run twice: {command.strip()}"
                 )
             for registration in spec.registrations:
-                entry = build_entry(spec.agent, spec.runner, main_path, registration)
+                entry = build_entry(
+                    spec.agent, spec.runner, main_path, registration, home=self.home
+                )
                 matcher = registration.get("matcher")
                 document.add(target.hook.id, registration["event"], matcher, entry)
                 registrations.append(
@@ -284,8 +334,20 @@ class _Planner:
             "files": files,
             "seedFiles": seeds,
             "registrations": registrations,
-            "source": normalized_source(source.descriptor, self.root),
+            "source": normalized_source(source.descriptor, self.root, relativize=self.home is None),
         }
+
+    def ensure_documents_unchanged(self) -> None:
+        """Stop when a registration file changed on disk since it was read."""
+
+        for document in self.documents.values():
+            path = self.root / document.relative
+            current = path.read_bytes() if path.is_file() else None
+            if current != document.raw:
+                raise InstallError(
+                    f"{path} changed while skill-tools was editing it (is the agent running?); "
+                    "nothing was changed. Close the agent and retry"
+                )
 
     def finish(self) -> list[tuple[str, bytes | None]]:
         for document in self.documents.values():
@@ -312,13 +374,23 @@ def apply_hook_changes(
     overwrite: bool = False,
     force: bool = False,
     dry_run: bool = False,
+    state_dir: Path | None = None,
+    global_scope: bool = False,
 ) -> HookChangeSet:
-    """Remove managed hook entries and/or install targets as one transaction."""
+    """Remove managed hook entries and/or install targets as one transaction.
+
+    ``state_dir`` holds the manifest, journal, and file backups; it defaults to
+    ``<project>/.skill-tools``. ``global_scope`` treats ``project`` as the home
+    directory (user-wide registration files, absolute command lines).
+    Registration files are re-read just before writing; if another program
+    (e.g. a running agent rewriting ``~/.claude/settings.json``) changed one
+    meanwhile, nothing is written.
+    """
 
     root = project.resolve()
-    with _project_install_lock(root):
-        recover_transaction(root)
-        manifest = load_project_manifest(root)
+    with _project_install_lock(root, state_dir=state_dir):
+        recover_transaction(root, state_dir=state_dir)
+        manifest = load_project_manifest(root, state_dir=state_dir)
         current = {(entry["hookId"], entry["agent"]): entry for entry in manifest["hooks"]}
         remove_keys = [(entry["hookId"], entry["agent"]) for entry in remove]
         for key, expected in zip(remove_keys, remove, strict=True):
@@ -330,7 +402,7 @@ def apply_hook_changes(
                     f"hook {target.hook.id} is already installed for {target.spec.agent}; "
                     "use `skill-tools hooks update`"
                 )
-        planner = _Planner(root, manifest, hooks_config or HooksConfig())
+        planner = _Planner(root, manifest, hooks_config or HooksConfig(), global_scope=global_scope)
         for entry in remove:
             planner.remove(entry, force=force)
         kept = [
@@ -342,7 +414,10 @@ def apply_hook_changes(
         added = [planner.install(source, target, overwrite=overwrite) for target in install]
         changes = planner.finish()
         if not dry_run:
-            execute_file_transaction(root, changes, {**manifest, "hooks": [*kept, *added]})
+            planner.ensure_documents_unchanged()
+            execute_file_transaction(
+                root, changes, {**manifest, "hooks": [*kept, *added]}, state_dir=state_dir
+            )
     # An update is remove + install of the same key; report it as one line per hook/agent.
     for new in added:
         key = (new["hookId"], new["agent"])
