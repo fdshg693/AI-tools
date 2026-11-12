@@ -28,7 +28,12 @@ from ..install.manifest import (
 from ..install.store import Referrer, Store, entry_relative_path, install_links
 from ..models import ConfigError, InstallError, SkillBundle
 from ..source import display_skill_path
-from ..install.scope import InstallScope, ensure_project_root_allowed
+from ..install.scope import (
+    InstallScope,
+    ensure_not_store_state,
+    ensure_outside_store,
+    ensure_project_root_allowed,
+)
 from .arguments import (
     _add_runtime_arguments,
     _add_scope_arguments,
@@ -128,6 +133,7 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
             "place, so linking it to the store gains nothing)"
         )
     config = _load_runtime_config(args, cwd, scope=scope)
+    ensure_outside_store(scope, config.store.path)
     source = create_source(config)
     selectors = [config.self_skill if token == SELF_SELECTOR else token for token in args.skills]
     selected = tuple(
@@ -160,7 +166,6 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
             )
     store = Store.from_config(config)
     if mode == "link":
-        store.ensure_outside(root, "project root")
         for item in plan:
             store.ensure_outside(item.target.parent, "skill destination")
     if args.dry_run:
@@ -242,6 +247,7 @@ def _command_installed(args: argparse.Namespace, cwd: Path, scope: InstallScope)
 
 def _command_remove(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
     root = scope.root
+    ensure_not_store_state(scope)
     entries = _managed_entries(scope)
     selected = _select_managed_entries(entries, args.skills)
     if not selected:
@@ -274,6 +280,7 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
         print("(no managed skills)")
         return 0
     config = _load_runtime_config(args, cwd, scope=scope)
+    ensure_outside_store(scope, config.store.path)
     source = create_source(config)
     matching = tuple(entry for entry in selected if _entry_matches_source(entry, source, root))
     for entry in selected:

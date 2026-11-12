@@ -428,3 +428,19 @@ def test_update_refreshes_once_for_links_in_several_targets(env) -> None:
         guide = project / root / "alpha" / "references" / "guide.md"
         assert guide.read_text(encoding="utf-8") == "both\n"
     assert env["store"].referrer_count(links[0].store_path) == 2
+
+
+def test_commands_refuse_a_project_root_inside_the_store(env) -> None:
+    project = env["project"]
+    _link(env, project, "alpha")
+    inside = _skill(project)  # a CWD reached through the link resolves into the store
+    config = str(env["config_file"])
+
+    assert main(["install-skills", "--config", config, "beta"], cwd=inside) == 2
+    assert main(["hooks", "install", "--config", config, "--agent", "claude", "x"], cwd=inside) == 2
+    assert not (inside / ".skill-tools").exists()
+    assert not (inside / ".claude").exists()
+
+    # The store root itself is not a project either (removal would skip its referrers).
+    assert main(["remove-skills", "alpha"], cwd=env["store"].root) == 2
+    assert len(env["store"].list_entries()) == 1

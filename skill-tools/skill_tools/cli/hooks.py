@@ -25,7 +25,7 @@ from ..install.installer import (
     recover_transaction,
 )
 from ..models import InstallError
-from ..install.scope import InstallScope, ensure_project_root_allowed
+from ..install.scope import InstallScope, ensure_outside_store, ensure_project_root_allowed
 from .arguments import (
     _add_runtime_arguments,
     _add_scope_arguments,
@@ -148,6 +148,7 @@ def _command_hooks_install(args: argparse.Namespace, cwd: Path, scope: InstallSc
     with _project_install_lock(scope.root, state_dir=scope.state_dir):
         recover_transaction(scope.root, state_dir=scope.state_dir)
     config = _load_runtime_config(args, cwd, scope=scope)
+    ensure_outside_store(scope, config.store.path)
     agents = parse_agents(args.agent, config.hooks)
     scope_warnings: list[str] = []
     if scope.is_global:
@@ -222,6 +223,7 @@ def _command_hooks_update(args: argparse.Namespace, cwd: Path, scope: InstallSco
         print("(no managed hooks)")
         return 0
     config = _load_runtime_config(args, cwd, scope=scope)
+    ensure_outside_store(scope, config.store.path)
     source = create_source(config)
     warnings_: list[str] = []
     matching: list[dict] = []
