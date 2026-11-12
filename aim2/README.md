@@ -44,6 +44,7 @@ cp tools/aim2/.env.example tools/aim2/.env
 ## モデル設定（models.json）
 
 利用可能なモデル略記（エイリアス）とデフォルトモデルは `tools/aim2/models.json` で管理される。
+`models.json` はローカル設定で git 管理しない。初回は `cp tools/aim2/models.json.example tools/aim2/models.json` で作る。
 各モデル定義には `provider` の明示が必須。
 
 ```json
@@ -228,6 +229,6 @@ aim2 --version
   - `errors.ts` — AimError 共通エラー正規化
   - `pricing.ts` — モデル単価取得・計算（`--cost`）
   - `providers/` — 動的プロバイダローダーおよび各プロバイダアダプタ
-- `models.json` / `models.json.example` — モデルエイリアス定義
+- `models.json`（gitignore）/ `models.json.example` — モデルエイリアス定義
 - `.env.example` — 環境変数設定例
 - `tests/` — 単体・結合テスト

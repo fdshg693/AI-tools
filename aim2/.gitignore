@@ -4,3 +4,4 @@ dist/
 logs/
 fb/
 *.tsbuildinfo
+models.json

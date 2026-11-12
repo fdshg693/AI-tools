@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -135,12 +136,23 @@ def command_path(agent: str, main_path: str, home: Path | None = None) -> str:
     return (PurePosixPath(home.resolve().as_posix()) / main_path).as_posix()
 
 
+def _python_command(platform: str | None = None) -> str:
+    """The interpreter name for ``runner: python`` on the installing machine.
+
+    Registration files are machine-local (gitignored), so the choice is made at
+    install time. Windows has ``python`` (``python3`` may be the Store stub);
+    macOS/Linux hook processes often have only ``python3`` on PATH.
+    """
+
+    return "python" if (platform or sys.platform) == "win32" else "python3"
+
+
 def _runner_words(runner: str, project: str) -> list[str]:
     if runner == "uv-script":
         return ["uv", "run", "--script"]
     if runner == "uv-project":
         return ["uv", "run", "--project", project]
-    return ["python"]
+    return [_python_command()]
 
 
 def _command_fields(agent: str, runner: str, main_path: str) -> dict[str, Any]:

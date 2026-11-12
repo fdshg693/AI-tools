@@ -147,7 +147,7 @@ hooks:
 - **`~/.claude/settings.json` は実行中の Claude Code 自身も書き換えます。** skill-tools は登録ファイルを書く直前に読み直し、読んでから内容が変わっていれば何も書かずに終了コード `4` で止まります。Claude Code を閉じてから実行し、ファイル全体が整形し直されるので先に `--dry-run` で確認してください。
 - プロジェクトと `--global` の両方に同じフックを入れると二重に発火します。二重発火の警告は1つの登録ファイルの中しか見ないので、この組み合わせは検出しません。どちらか一方に入れてください。
 
-カタログの `runner` が `python` なら `python <file>`（Codex の POSIX 側は `python3`）、`uv-script`（PEP 723）なら `uv run --script <file>`、`uv-project` なら `uv run --project <project root> <file>` で起動します。
+カタログの `runner` が `python` なら `python <file>`（Windows）または `python3 <file>`（それ以外）、`uv-script`（PEP 723）なら `uv run --script <file>`、`uv-project` なら `uv run --project <project root> <file>` で起動します。Python の起動名は `hooks install`／`hooks update` を実行した OS で決まり、登録ファイルに OS 別の欄を持つ Codex だけは常に POSIX 側 `python3`・`commandWindows` 側 `python` の両方を書きます。別の OS へ移ったら、その端末で `hooks update` すると古い登録（manifest の hash で特定）が消えて新しい起動名で登録し直されます。
 
 設定例は [skill-tools.yaml.example](skill-tools.yaml.example) を参照してください。
 

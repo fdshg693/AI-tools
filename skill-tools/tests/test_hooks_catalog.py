@@ -144,3 +144,14 @@ def test_repository_catalog_satisfies_the_contract() -> None:
         "kilo",
     }
     assert any(not hook.distributable for hook in hooks)
+
+
+def test_codex_registration_accepts_async(hook_catalog: dict) -> None:
+    catalog = copy.deepcopy(hook_catalog)
+    agents = catalog["hooks"][0]["agents"]
+    agents["codex"] = copy.deepcopy(agents["claude"])
+    agents["codex"]["registrations"] = [{"event": "Stop", "async": True}]
+    for item in agents["codex"]["files"]:
+        item["path"] = item["path"].replace("/claude/", "/codex/")
+    hooks = parse_hook_catalog(catalog, PurePosixPath("hooks/generated/catalog.json"))
+    assert hooks[0].agent("codex").registrations == ({"event": "Stop", "async": True},)

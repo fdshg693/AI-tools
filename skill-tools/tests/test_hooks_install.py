@@ -8,6 +8,7 @@ import pytest
 
 from skill_tools.install import installer
 from skill_tools.cli import main
+from skill_tools.hooks.registrars import _python_command
 from skill_tools.models import InstallError
 
 AGENT_SPECS = {
@@ -95,7 +96,7 @@ def test_install_places_registers_and_remove_restores_user_files(env, capsys) ->
             "hooks": [
                 {
                     "type": "command",
-                    "command": "python",
+                    "command": _python_command(),
                     "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/nested_rules.py"],
                 }
             ]
@@ -277,7 +278,7 @@ def test_update_applies_catalog_changes_and_refuses_drift(env, capsys) -> None:
             "hooks": [
                 {
                     "type": "command",
-                    "command": "python",
+                    "command": _python_command(),
                     "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/nested_rules.py"],
                     "timeout": 3,
                 }
@@ -434,7 +435,7 @@ def test_global_hook_lifecycle_keeps_state_outside_home(env, isolated_home, caps
     codex = _json(home / ".codex" / "hooks.json")["hooks"]["PreToolUse"][0]["hooks"][0]
     assert f"'{home_posix}/.codex/hooks/nested_rules.py'" in codex["command"]
     cursor = _json(home / ".cursor" / "hooks.json")["hooks"]["postToolUse"][0]
-    assert cursor["command"] == "python hooks/nested_rules.py"
+    assert cursor["command"] == f"{_python_command()} hooks/nested_rules.py"
 
     manifest = json.loads((state / "manifest.json").read_text(encoding="utf-8"))
     assert {entry["agent"] for entry in manifest["hooks"]} == {"claude", "codex", "cursor", "kilo"}

@@ -5,6 +5,7 @@ import json
 import pytest
 
 from skill_tools.config import HooksConfig
+from skill_tools.hooks import registrars
 from skill_tools.hooks.registrars import (
     RegistrationDocument,
     build_entry,
@@ -14,6 +15,8 @@ from skill_tools.hooks.registrars import (
     supports_global,
 )
 from skill_tools.models import InstallError
+
+PY = registrars._python_command()
 
 
 def test_default_locations_and_claude_settings_file_switch() -> None:
@@ -28,9 +31,36 @@ def test_default_locations_and_claude_settings_file_switch() -> None:
 
 
 @pytest.mark.parametrize(
+    ("platform", "expected"),
+    [("win32", "python"), ("darwin", "python3"), ("linux", "python3")],
+)
+def test_python_command_follows_installing_os(platform: str, expected: str) -> None:
+    assert registrars._python_command(platform) == expected
+
+
+@pytest.mark.parametrize("python", ["python", "python3"])
+def test_python_runner_uses_os_interpreter_for_non_codex_agents(
+    monkeypatch: pytest.MonkeyPatch, python: str
+) -> None:
+    monkeypatch.setattr(registrars, "_python_command", lambda: python)
+
+    claude = build_entry("claude", "python", ".claude/hooks/x.py", {"event": "Stop"})
+    cursor = build_entry("cursor", "python", ".cursor/hooks/x.py", {"event": "stop"})
+    antigravity = build_entry("antigravity", "python", ".agents/hooks/x.py", {"event": "Stop"})
+    codex = build_entry("codex", "python", ".codex/hooks/x.py", {"event": "Stop"})
+
+    assert claude["command"] == python
+    assert cursor["command"] == f"{python} .cursor/hooks/x.py"
+    assert antigravity["command"] == f"{python} .agents/hooks/x.py"
+    # Codex keeps its own per-shell split regardless of the installing OS.
+    assert codex["command"].startswith("python3 ")
+    assert '-Command "python ' in codex["commandWindows"]
+
+
+@pytest.mark.parametrize(
     ("runner", "command", "args"),
     [
-        ("python", "python", ["${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py"]),
+        ("python", registrars._python_command(), ["${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py"]),
         ("uv-script", "uv", ["run", "--script", "${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py"]),
         (
             "uv-project",
@@ -75,7 +105,10 @@ def test_cursor_keeps_matcher_in_entry_and_adds_version() -> None:
     )
     document.add("x", "postToolUse", "Read", entry)
 
-    assert entry == {"command": "python .cursor/hooks/x.py", "matcher": "Read"}
+    assert entry == {
+        "command": f"{registrars._python_command()} .cursor/hooks/x.py",
+        "matcher": "Read",
+    }
     assert json.loads(document.content()) == {"version": 1, "hooks": {"postToolUse": [entry]}}
     assert document.remove("x", "postToolUse", "Read", entry_hash(entry))
     assert document.content() is None
@@ -127,7 +160,7 @@ def test_edited_entry_is_not_removed() -> None:
 
     assert not document.remove("x", "Stop", None, entry_hash(ours))
     assert document.foreign_commands(".claude/hooks/x.py", set()) == [
-        "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py "
+        f"{registrars._python_command()} ${{CLAUDE_PROJECT_DIR}}/.claude/hooks/x.py "
     ]
     assert document.foreign_commands(".claude/hooks/x.py", {entry_hash(edited)}) == []
 
@@ -163,7 +196,7 @@ def test_global_claude_entry_uses_absolute_paths(tmp_path) -> None:
     home.mkdir()
     absolute = f"{home.resolve().as_posix()}/.claude/hooks/x.py"
     entry = build_entry("claude", "python", ".claude/hooks/x.py", {"event": "Stop"}, home=home)
-    assert entry == {"type": "command", "command": "python", "args": [absolute]}
+    assert entry == {"type": "command", "command": PY, "args": [absolute]}
     project = build_entry(
         "claude", "uv-project", ".claude/hooks/x.py", {"event": "Stop"}, home=home
     )
@@ -192,16 +225,22 @@ def test_global_cursor_entry_is_relative_to_dot_cursor(tmp_path) -> None:
         {"event": "stop", "matcher": "Read"},
         home=tmp_path,
     )
-    assert entry == {"command": "python hooks/x.py", "matcher": "Read"}
+    assert entry == {"command": f"{PY} hooks/x.py", "matcher": "Read"}
     outside = build_entry("cursor", "python", "my hooks/x.py", {"event": "stop"}, home=tmp_path)
-    assert outside == {"command": f'python "{tmp_path.resolve().as_posix()}/my hooks/x.py"'}
+    assert outside == {"command": f'{PY} "{tmp_path.resolve().as_posix()}/my hooks/x.py"'}
 
 
 def test_project_entries_keep_their_command_text() -> None:
     # Widening the quoting rules must not change (and so re-hash) plain project entries.
     entry = build_entry("cursor", "python", ".cursor/hooks/x.py", {"event": "stop"})
-    assert entry == {"command": "python .cursor/hooks/x.py"}
+    assert entry == {"command": f"{PY} .cursor/hooks/x.py"}
     spaced = build_entry("antigravity", "python", "my hooks/x.py", {"event": "PreInvocation"})
-    assert spaced["command"] == 'python "my hooks/x.py"'
+    assert spaced["command"] == f'{PY} "my hooks/x.py"'
     with pytest.raises(InstallError, match="double quote"):
         build_entry("cursor", "python", 'a"b/x.py', {"event": "stop"})
+
+
+def test_codex_entry_passes_async_through() -> None:
+    entry = build_entry("codex", "python", ".codex/hooks/x.py", {"event": "Stop", "async": True})
+
+    assert entry["async"] is True
