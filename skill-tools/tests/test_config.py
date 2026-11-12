@@ -384,6 +384,17 @@ def test_hooks_section_sets_default_agents_destinations_and_settings_file(tmp_pa
     assert hooks.default_agents == ("claude", "codex")
     assert hooks.claude_settings_file == "local"
     assert hooks.destinations == {"codex": "tools/codex-hooks"}
+    assert hooks.install == {}
+
+
+def test_hooks_install_lists_desired_hook_ids_per_agent(tmp_path: Path) -> None:
+    path = tmp_path / "explicit.yaml"
+    path.write_text(
+        "hooks:\n  install:\n    claude: [a, b, a]\n    codex:\n",
+        encoding="utf-8",
+    )
+
+    assert load_config(config_path=path).hooks.install == {"claude": ("a", "b"), "codex": ()}
 
 
 @pytest.mark.parametrize(
@@ -392,6 +403,9 @@ def test_hooks_section_sets_default_agents_destinations_and_settings_file(tmp_pa
         "hooks:\n  default_agents: [cline]\n",
         "hooks:\n  default_agents: claude\n",
         "hooks:\n  extra: 1\n",
+        "hooks:\n  install: [a]\n",
+        "hooks:\n  install:\n    cline: [a]\n",
+        "hooks:\n  install:\n    claude: a\n",
         "hooks:\n  agents:\n    cline: {}\n",
         "hooks:\n  agents:\n    codex:\n      settings_file: local\n",
         "hooks:\n  agents:\n    claude:\n      settings_file: user\n",

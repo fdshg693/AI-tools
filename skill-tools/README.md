@@ -122,6 +122,9 @@ hooks:
     codex:
       destination: .codex/hooks
       global_destination: .codex/hooks # --global の配置先（ホーム相対）
+  install: # `hooks sync` が揃える、エージェントごとの入れるフック id
+    claude: [nested_agents_md, agent_sessions]
+    codex: [nested_agents_md]
 ```
 
 | agent       | 既定の配置先     | 登録ファイル                                                   | 登録するコマンド                                                                    |
@@ -245,6 +248,7 @@ skill-tools hooks install --global --agent claude,codex nested_agents_md --dry-r
 skill-tools hooks installed --global
 skill-tools hooks update --dry-run
 skill-tools hooks remove nested_agents_md --agent codex
+skill-tools hooks sync --dry-run
 skill-tools self-update --dry-run
 skill-tools self-update
 skill-tools build-index --source local --repo C:\src\ai
@@ -287,6 +291,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 - 登録ファイルの編集は skill-tools が追加したエントリだけが対象です。追加エントリの正規化 JSON の SHA-256 を manifest に記録し、remove/update はその hash と一致するエントリだけを消します。Claude/Codex は同じ event・matcher のグループがあればその `hooks[]` 末尾に追記し、無ければグループを新設します。削除で空になったグループ・event キー・ファイルは消します。利用者自身のエントリの順序・内容と未知キーは保持しますが、**ファイル全体をインデント2の JSON で書き直すため整形差分が出ます**。コメント付き（JSONC）など JSON として読めない登録ファイルは編集せずエラーで止まります。
 - `hooks installed [--json]` は manifest の `hooks` 記録を `hook_id<TAB>agent<TAB>install_dir<TAB>registered_in<TAB>source` で一覧します（source・network 不要）。
 - `hooks update [<hook-id>...] [--agent a,b]` は同じ source identity の記録だけを、旧エントリの削除と新エントリの追加を1トランザクションにして更新します（配置先は記録どおり、登録ファイルは現在の設定に従う）。変更の無いものは `unchanged` と表示します。source 切替の拒否・カタログから消えたフックの保持はスキルの `update-skills` と同じです。`hooks remove [<hook-id>...] [--agent a,b]` は source・config 不要で、記録されたファイルと登録エントリだけを消します。どちらも選択子なしなら全管理フックが対象です。
+- `hooks sync [--dry-run] [--overwrite] [--force]` は設定の `hooks.install.<agent>` を「入れたいフックの一覧」として、管理フックをそれに揃えます。列挙されていて未管理のものを `hooks install` と同じ手順で入れ、manifest にあって列挙から外れたもの（列挙に無いエージェントの分も含む）を `hooks remove` と同じ手順で消します。どちらも 1 トランザクションです。すでに管理下のフックは触らないので、中身の更新は `hooks update` で行います。`hooks.install` が無い・空のときは終了コード `2` です。`--overwrite` は新しく入れるフックに、`--force` は消すフックの drift に効きます。`--global` でも使え、そのときはユーザー全体の場所が無いエージェントを警告して飛ばします。リポジトリでは入れるフックの一覧を gitignore した設定ファイルに書き、コミットするのはサンプルだけにする、という使い方を想定しています。
 - `hooks update` / `hooks remove` は既定で drift（配置ファイルの変更・欠落、登録エントリの手編集・削除）があれば中止します。`--force` は変更されたフックファイルを置換・削除し、見つからない登録エントリは警告してスキップします。seed 設定は利用者が編集する前提なので hash 追跡せず、`remove` でも消しません。
 - <a id="self-update"></a>`self-update [--dry-run]` は skill-tools **自身**を更新します（スキル更新の `update-skills` とは別物）。インストール元は配布メタデータの `direct_url.json`（PEP 610）で判定します。
   - **editable install**（`dir_info.editable`）は何もせず、ローカル clone で `git pull` するよう案内して終了コード `0` で終わります。

@@ -74,6 +74,8 @@ class HooksConfig:
     claude_settings_file: str = "project"
     global_destinations: dict[str, str] = field(default_factory=dict)
     """Home-relative hook directories for ``--global`` (``hooks.agents.<a>.global_destination``)."""
+    install: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """Desired hook ids per agent (``hooks.install.<agent>``), applied by ``hooks sync``."""
 
 
 @dataclass(frozen=True)
@@ -466,7 +468,7 @@ def _parse_hooks(data: object, filename: str) -> HooksConfig:
         return HooksConfig()
     if not isinstance(data, dict):
         raise ConfigError(f"{filename}.hooks must be a mapping")
-    unknown = set(data) - {"default_agents", "agents"}
+    unknown = set(data) - {"default_agents", "agents", "install"}
     if unknown:
         raise ConfigError(f"{filename}.hooks contains unknown keys: {', '.join(sorted(unknown))}")
     raw_defaults = data.get("default_agents", [])
@@ -516,7 +518,23 @@ def _parse_hooks(data: object, filename: str) -> HooksConfig:
         destinations=destinations,
         claude_settings_file=settings_file,
         global_destinations=global_destinations,
+        install=_parse_hooks_install(data.get("install", {}), filename),
     )
+
+
+def _parse_hooks_install(data: object, filename: str) -> dict[str, tuple[str, ...]]:
+    if not isinstance(data, dict):
+        raise ConfigError(f"{filename}.hooks.install must be a mapping of agent to hook ids")
+    install: dict[str, tuple[str, ...]] = {}
+    for agent, ids in data.items():
+        if agent not in HOOK_AGENTS:
+            raise ConfigError(f"{filename}.hooks.install has an unknown agent: {agent!r}")
+        if ids is None:
+            ids = []
+        if not isinstance(ids, list) or not all(isinstance(item, str) and item for item in ids):
+            raise ConfigError(f"{filename}.hooks.install.{agent} must be a list of hook ids")
+        install[agent] = tuple(dict.fromkeys(ids))
+    return install
 
 
 def _parse_fb(data: object, path: Path | None) -> FbConfig:

@@ -1,0 +1,29 @@
+# Sample of the skill-tools config that installs the umbrella's agent hooks into this
+# submodule, so a Claude Code session opened here gets hooks too.
+#
+# Only this sample is committed. To use it:
+#   cp .claude/skill-tools.hooks.example.yaml .claude/skill-tools.hooks.yaml
+#   (edit hooks.install; `skill-tools hooks list --all` lists the hook ids)
+#   just sub-agent-hooks-install   # at the umbrella root
+# The recipe runs `skill-tools hooks sync` with the local copy from this directory (the project
+# is this submodule) and skips submodules without it. Removing an id from the list and re-running
+# removes that hook. The installed .claude/hooks/, .claude/settings.json and .skill-tools/ are
+# gitignored. Relative paths resolve against this file's directory: `../..` is the umbrella
+# (fdshg693/AI), where the hook catalog lives.
+source:
+  type: local
+  path: ../..
+
+hooks:
+  agents:
+    claude:
+      destination: .claude/hooks
+      settings_file: project # or local (.claude/settings.local.json)
+  # Recommended set (the same Claude Code hooks as the umbrella).
+  install:
+    claude:
+      - agent_sessions
+      - long_run_collector
+      - long_run_statement_collector
+      - stop_alert
+      - task_tracker_session

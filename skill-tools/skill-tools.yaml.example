@@ -75,6 +75,10 @@ hooks:
       # Home-relative directory for `hooks install --global` (default .codex/hooks).
       # Defaults: claude .claude/hooks, cursor .cursor/hooks, kilo .config/kilo/plugin.
       global_destination: .codex/hooks
+  # Hook ids per agent that `hooks sync` installs; managed hooks not listed are removed.
+  # install:
+  #   claude: [nested_agents_md, agent_sessions]
+  #   codex: [nested_agents_md]
 
 # Successful skill and hook installs are recorded in the project-local .skill-tools/manifest.json.
 # The CLI does not edit .gitignore or require the manifest to be committed.

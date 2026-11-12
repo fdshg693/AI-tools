@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.7
+  version: 1.2.8
 ---
 
 # skill-tools の使い方
@@ -197,6 +197,7 @@ skill-tools hooks install --agent claude nested_agents_md
 skill-tools hooks installed
 skill-tools hooks update --dry-run
 skill-tools hooks remove nested_agents_md --agent codex
+skill-tools hooks sync --dry-run
 skill-tools hooks install --global --agent claude,codex nested_agents_md --dry-run
 skill-tools hooks installed --global
 ```
@@ -204,6 +205,7 @@ skill-tools hooks installed --global
 - 対象はsourceの`repo-hooks.yaml`が指す`catalog.json`（agent-toolingのビルド生成物）。`repo-hooks.yaml`が無いsourceは「フック0件」でエラーにしない。`list`は`hook id<TAB>agents<TAB>summary`を出し副作用なし。`distributable: false`（このリポジトリ構造前提のフック）は`--all`を付けたときだけ出る
 - エージェントは`claude` / `codex` / `cursor` / `antigravity` / `kilo`。`--agent`省略時は設定の`hooks.default_agents`、それも無ければ終了コード`2`。配置先・Claudeの登録先（`settings_file: project|local`）は`skill-tools.yaml`の`hooks.agents.<agent>`で変える
 - `install`はファイル配置・seed設定（未存在時だけ）・登録ファイル（`.claude/settings.json` / `.codex/hooks.json` / `.cursor/hooks.json` / `.agents/hooks.json`。Kiloは無し）へのエントリ追加・manifest記録を1トランザクションで行う。**インストール＝有効化**で、無効化したいなら`remove`する
+- 入れるフックを設定ファイルで宣言するなら`hooks.install.<agent>: [hook-id, ...]`を書いて`hooks sync`。未管理の列挙フックを入れ、列挙から外れた管理フックを消す（既存の管理フックは触らないので、更新は`hooks update`）。`hooks.install`が空なら終了コード`2`
 - **登録ファイルで書き換えるのはskill-toolsが追加したエントリだけ。** 利用者自身のエントリは保持する。同じフックファイルを実行する管理外エントリがあると二重発火の警告が出る（自動削除しない）ので、どちらを残すかユーザーに確認する
 - `update` / `remove`は配置ファイルの変更・登録エントリの手編集をdriftとして中止する。`--force`の前に`--dry-run`で対象を確認する。seed設定は利用者が編集する前提なので追跡せず、`remove`でも消さない
 - 配置後にフックが発火しない場合は、AIツールのセッション再起動を案内する

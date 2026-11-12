@@ -30,6 +30,7 @@ from .hooks import (
     _command_hooks_installed,
     _command_hooks_list,
     _command_hooks_remove,
+    _command_hooks_sync,
     _command_hooks_update,
 )
 from .index_cmd import (
@@ -141,6 +142,7 @@ def run(
             "installed": _command_hooks_installed,
             "update": _command_hooks_update,
             "remove": _command_hooks_remove,
+            "sync": _command_hooks_sync,
         }.get(hooks_command)
         if handler is not None:
             return handler(args, working_directory, resolve_scope(args, working_directory))
