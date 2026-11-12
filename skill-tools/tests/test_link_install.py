@@ -338,3 +338,93 @@ def test_link_operations_need_journal_v4(env) -> None:
     path.write_text(json.dumps({**journal, "schemaVersion": 3}), encoding="utf-8")
     with pytest.raises(InstallError, match="invalid operation"):
         recover_transaction(project)
+
+
+def _update(env, project: Path, *args: str) -> int:
+    return main(["update-skills", "--config", str(env["config_file"]), *args], cwd=project)
+
+
+def _edit_source(env, text: str) -> None:
+    skill = env["source"].root / "plugins" / "one" / "skills" / "alpha" / "references"
+    (skill / "guide.md").write_text(text, encoding="utf-8")
+
+
+def test_update_refreshes_the_shared_store_entry_for_every_project(env, capsys) -> None:
+    other = (env["tmp"] / "other").resolve()
+    other.mkdir()
+    _link(env, env["project"], "alpha")
+    _link(env, other, "alpha")
+    _edit_source(env, "new guide\n")
+    capsys.readouterr()
+
+    assert _update(env, env["project"], "alpha", "--dry-run") == 0
+    out = capsys.readouterr().out
+    assert "would update\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha" in out
+    assert "2 link(s)" in out
+    guide = _skill(other) / "references" / "guide.md"
+    assert guide.read_text(encoding="utf-8") == "alpha guide\n"
+
+    assert _update(env, env["project"], "alpha") == 0
+    assert guide.read_text(encoding="utf-8") == "new guide\n"  # the other project follows
+    assert is_link_like(_skill(env["project"])) and is_link_like(_skill(other))
+    assert _entries(env["project"])[0]["mode"] == "link"  # update keeps the mode
+
+
+def test_update_refuses_store_drift_unless_forced(env) -> None:
+    (plan,) = _link(env, env["project"], "alpha")
+    (plan.link_target / "SKILL.md").write_text("edited in the store\n", encoding="utf-8")
+
+    assert _update(env, env["project"]) == 4
+    assert (plan.link_target / "SKILL.md").read_text(encoding="utf-8") == "edited in the store\n"
+    assert _update(env, env["project"], "--force") == 0
+    assert (plan.link_target / "SKILL.md").read_text(encoding="utf-8") != "edited in the store\n"
+
+
+def test_update_recreates_a_missing_store_entry_only_with_force(env) -> None:
+    project, store = env["project"], env["store"]
+    (plan,) = _link(env, project, "alpha")
+    moved = plan.link_target.with_name("gone")
+    plan.link_target.rename(moved)
+
+    assert _update(env, project) == 4
+    assert _update(env, project, "--force") == 0
+    assert (_skill(project) / "SKILL.md").is_file()
+    (store_entry,) = [item for item in store.list_entries() if item.path == plan.link_target]
+    assert [item.install_path for item in store_entry.referrers] == [".claude/skills/alpha"]
+
+
+def test_update_refuses_a_link_into_another_store(env) -> None:
+    project = env["project"]
+    _link(env, project, "alpha")
+    text = env["config_file"].read_text(encoding="utf-8")
+    new_store = (env["tmp"] / "moved-store").resolve()
+    env["config_file"].write_text(
+        text.replace(env["store"].root.as_posix(), new_store.as_posix()), encoding="utf-8"
+    )
+
+    assert _update(env, project) == 4
+    assert not new_store.exists()
+
+
+def test_update_refreshes_once_for_links_in_several_targets(env) -> None:
+    project = env["project"]
+    config_text = env["config_file"].read_text(encoding="utf-8")
+    env["config_file"].write_text(
+        config_text
+        + "targets:\n  claude:\n    destination: .claude/skills\n"
+        + "  agents:\n    destination: .agents/skills\n",
+        encoding="utf-8",
+    )
+    config = load_config(env["config_file"])
+    plan = build_plan(
+        project, (env["bundles"]["alpha"],), config, False, targets=("claude", "agents")
+    )
+    links = install_links(env["store"], env["source"], plan, project, overwrite=False)
+    assert links[0].store_path == links[1].store_path
+    _edit_source(env, "both\n")
+
+    assert _update(env, project) == 0
+    for root in (".claude/skills", ".agents/skills"):
+        guide = project / root / "alpha" / "references" / "guide.md"
+        assert guide.read_text(encoding="utf-8") == "both\n"
+    assert env["store"].referrer_count(links[0].store_path) == 2

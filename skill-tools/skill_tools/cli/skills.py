@@ -19,9 +19,14 @@ from ..install.installer import (
     load_project_manifest,
     recover_transaction,
 )
-from ..install.manifest import link_store_root, verify_entry, verify_managed_entry
-from ..install.store import Store, install_links
-from ..models import ConfigError, InstallError
+from ..install.manifest import (
+    link_store_root,
+    verify_entry,
+    verify_link_entry,
+    verify_managed_entry,
+)
+from ..install.store import Referrer, Store, entry_relative_path, install_links
+from ..models import ConfigError, InstallError, SkillBundle
 from ..source import display_skill_path
 from ..install.scope import InstallScope, ensure_project_root_allowed
 from .arguments import (
@@ -287,6 +292,11 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
 
     records = {record.canonical_id: record for record in discover_catalog(source)}
     plans: list[InstallPlan] = []
+    copied: list[dict] = []
+    store = Store.from_config(config)
+    link_bundles: dict[str, SkillBundle] = {}
+    link_referrers: list[Referrer] = []
+    shown_links: list[tuple[dict, Path]] = []
     for entry in matching:
         record = records.get(entry["canonicalId"])
         if record is None:
@@ -294,6 +304,22 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
                 f"warning: {entry['canonicalId']} is no longer in the catalog; keeping installed files",
                 file=sys.stderr,
             )
+            continue
+        if entry["mode"] == "link":
+            link = verify_link_entry(root, entry, store_root=store.root, force=args.force)
+            expected = entry_relative_path(source.descriptor, record.bundle)
+            if expected.casefold() != entry["store"].casefold():
+                raise InstallError(
+                    f"managed link {entry['installPath']} points at store entry {entry['store']}, "
+                    f"but the configured source maps it to {expected}; reinstall it with "
+                    "`install-skills --overwrite`"
+                )
+            # One refresh per store entry, however many links select it.
+            link_bundles.setdefault(entry["store"].casefold(), record.bundle)
+            link_referrers.append(
+                Referrer(root, entry["installPath"], entry["canonicalId"], entry["store"])
+            )
+            shown_links.append((entry, link))
             continue
         target = verify_entry(root, entry, force=args.force)
         plan = InstallPlan(
@@ -303,21 +329,41 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
             overwrite=True,
         )
         plans.append(plan)
+        copied.append(entry)
         action = "would update" if args.dry_run else "update"
         suffix = " (force: directory contents may be replaced)" if args.force else ""
-        print(f"{action}\t{entry['canonicalId']}\t{scope.display(target)}{suffix}")
+        print(f"{action}	{entry['canonicalId']}	{scope.display(target)}{suffix}")
+    if shown_links:
+        counts: dict[str, int] = {}
+        for store_entry in store.list_entries():
+            counts[store_entry.store_path.casefold()] = len(store_entry.referrers)
+        for entry, link in shown_links:
+            action = "would update" if args.dry_run else "update"
+            shared = counts.get(entry["store"].casefold(), 0)
+            suffix = " (force: store entry contents may be replaced)" if args.force else ""
+            print(
+                f"{action}	{entry['canonicalId']}	{scope.display(link)}"
+                f"	(shared store entry {entry['store']}: {shared} link(s)){suffix}"
+            )
     if plans and not args.dry_run:
         execute_install(
             source,
             tuple(plans),
             root,
             overwrite=True,
-            managed_entries=tuple(
-                entry
-                for entry in matching
-                if entry["canonicalId"] in {p.bundle.canonical_id for p in plans}
-            ),
+            managed_entries=tuple(copied),
             force_managed=args.force,
             state_dir=scope.state_dir,
+        )
+    if link_bundles and not args.dry_run:
+        # Refreshing the store entry updates every project that links to it; the
+        # project links stay as they are. The referrers are re-recorded so a store
+        # entry re-created under --force is not garbage collected.
+        store.ensure(
+            source,
+            tuple(link_bundles.values()),
+            referrers=link_referrers,
+            refresh=True,
+            force=args.force,
         )
     return 0

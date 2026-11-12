@@ -328,6 +328,14 @@ class Store:
                     target = root.joinpath(*PurePosixPath(relative[bundle.canonical_id]).parts)
                     entry = existing.get(relative[bundle.canonical_id].casefold())
                     if entry is not None:
+                        if refresh and force and not os.path.lexists(target):
+                            # Deleted by hand: --force re-creates it from the source.
+                            to_copy.append(
+                                InstallPlan(
+                                    bundle=bundle, target=target, target_name=None, overwrite=True
+                                )
+                            )
+                            continue
                         verify_entry(root, entry, force=force and refresh)
                         if not refresh:
                             continue
