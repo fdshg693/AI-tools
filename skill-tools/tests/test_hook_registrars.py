@@ -5,6 +5,7 @@ import json
 import pytest
 
 from skill_tools.config import HooksConfig
+from skill_tools.hooks import registrars
 from skill_tools.hooks.registrars import (
     RegistrationDocument,
     build_entry,
@@ -27,9 +28,36 @@ def test_default_locations_and_claude_settings_file_switch() -> None:
 
 
 @pytest.mark.parametrize(
+    ("platform", "expected"),
+    [("win32", "python"), ("darwin", "python3"), ("linux", "python3")],
+)
+def test_python_command_follows_installing_os(platform: str, expected: str) -> None:
+    assert registrars._python_command(platform) == expected
+
+
+@pytest.mark.parametrize("python", ["python", "python3"])
+def test_python_runner_uses_os_interpreter_for_non_codex_agents(
+    monkeypatch: pytest.MonkeyPatch, python: str
+) -> None:
+    monkeypatch.setattr(registrars, "_python_command", lambda: python)
+
+    claude = build_entry("claude", "python", ".claude/hooks/x.py", {"event": "Stop"})
+    cursor = build_entry("cursor", "python", ".cursor/hooks/x.py", {"event": "stop"})
+    antigravity = build_entry("antigravity", "python", ".agents/hooks/x.py", {"event": "Stop"})
+    codex = build_entry("codex", "python", ".codex/hooks/x.py", {"event": "Stop"})
+
+    assert claude["command"] == python
+    assert cursor["command"] == f"{python} .cursor/hooks/x.py"
+    assert antigravity["command"] == f"{python} .agents/hooks/x.py"
+    # Codex keeps its own per-shell split regardless of the installing OS.
+    assert codex["command"].startswith("python3 ")
+    assert '-Command "python ' in codex["commandWindows"]
+
+
+@pytest.mark.parametrize(
     ("runner", "command", "args"),
     [
-        ("python", "python", ["${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py"]),
+        ("python", registrars._python_command(), ["${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py"]),
         ("uv-script", "uv", ["run", "--script", "${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py"]),
         (
             "uv-project",
@@ -74,7 +102,10 @@ def test_cursor_keeps_matcher_in_entry_and_adds_version() -> None:
     )
     document.add("x", "postToolUse", "Read", entry)
 
-    assert entry == {"command": "python .cursor/hooks/x.py", "matcher": "Read"}
+    assert entry == {
+        "command": f"{registrars._python_command()} .cursor/hooks/x.py",
+        "matcher": "Read",
+    }
     assert json.loads(document.content()) == {"version": 1, "hooks": {"postToolUse": [entry]}}
     assert document.remove("x", "postToolUse", "Read", entry_hash(entry))
     assert document.content() is None
@@ -126,7 +157,7 @@ def test_edited_entry_is_not_removed() -> None:
 
     assert not document.remove("x", "Stop", None, entry_hash(ours))
     assert document.foreign_commands(".claude/hooks/x.py", set()) == [
-        "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py "
+        f"{registrars._python_command()} ${{CLAUDE_PROJECT_DIR}}/.claude/hooks/x.py "
     ]
     assert document.foreign_commands(".claude/hooks/x.py", {entry_hash(edited)}) == []
 
