@@ -42,17 +42,9 @@
 ## エージェント起動の実験
 
 - [my-agents](my-agents/AGENTS.md) — `repo-tools.yaml` に登録済み
-- [sandbox](sandbox/README.md)
-- [schedule/ai-schedule](schedule/ai-schedule/README.md)
-- [schedule/issue-agent](schedule/issue-agent/README.md)
 
 ## ラッパー
 
-`tools/wrappers/` へは移さない。
+AI コーディングツールの CLI ラッパー（`claude-wrapper` など）と、sandbox・schedule のようなエージェントの自動実行は、カスタマイズして使うワークフローとして [workflow/](../workflow/README.md) サブモジュールに置く。
 
-- [claude-wrapper](claude-wrapper/AGENTS.md)
-- [cline-wrapper](cline-wrapper/AGENTS.md)
-- [codex-wrapper](codex-wrapper/AGENTS.md)
-- [copilot-wrapper](copilot-wrapper/AGENTS.md)
-- [cursor-wrapper](cursor-wrapper/AGENTS.md)
 - [interactive-cli-wrapper](interactive-cli-wrapper/README.md) — `repo-tools.yaml` のキーは `icw`
