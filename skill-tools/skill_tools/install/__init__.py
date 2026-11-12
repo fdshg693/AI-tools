@@ -28,6 +28,10 @@ _EXPORTS = {
         "verify_entry",
         "write_manifest",
     ),
+    "scope": (
+        "InstallScope",
+        "resolve_scope",
+    ),
     "policy": (
         "GITIGNORE_PATH",
         "INCLUDE_PATH",
@@ -79,6 +83,8 @@ __all__ = [
     "resolve_install_path",
     "verify_entry",
     "write_manifest",
+    "InstallScope",
+    "resolve_scope",
     "GITIGNORE_PATH",
     "INCLUDE_PATH",
     "DEFAULT_EXCLUDED_DIRECTORIES",

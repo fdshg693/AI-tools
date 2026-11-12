@@ -36,8 +36,19 @@ targets:
   agents:
     destination: .agents/skills
 
+  # Only targets whose user-wide location differs from the project one need
+  # global_destination (used by `install-skills --global`, home-relative).
+  antigravity:
+    destination: .agents/skills
+    global_destination: .gemini/config/skills
+
 # Per-target skill overrides above take priority over the target's default destination.
 # The legacy `destination` is still used when `--target` is omitted.
+
+# Home-relative destination for `install-skills --global` without --target
+# (default .claude/skills). Per-skill `skills:` overrides are not used with --global.
+# Usually set in the global config file: --global never reads a project skill-tools.yaml.
+global_destination: .claude/skills
 
 # Optional hook install settings used by `skill-tools hooks install/update`.
 hooks:
@@ -48,6 +59,9 @@ hooks:
       settings_file: project # or local (.claude/settings.local.json)
     codex:
       destination: .codex/hooks
+      # Home-relative directory for `hooks install --global` (default .codex/hooks).
+      # Defaults: claude .claude/hooks, cursor .cursor/hooks, kilo .config/kilo/plugin.
+      global_destination: .codex/hooks
 
 # Successful skill and hook installs are recorded in the project-local .skill-tools/manifest.json.
 # The CLI does not edit .gitignore or require the manifest to be committed.

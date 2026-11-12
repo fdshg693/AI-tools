@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import apply_cli_overrides, load_config, source_identity
+from ..install.scope import InstallScope
 from ..source import GitHubSource
 
 
@@ -40,8 +41,38 @@ def _add_runtime_arguments(parser: argparse.ArgumentParser, *, index_path: bool 
         parser.add_argument("--index-path", type=Path, help="override the CLI index path")
 
 
-def _load_runtime_config(args: argparse.Namespace, cwd: Path):
-    config = load_config(config_path=getattr(args, "config", None), cwd=cwd)
+def _add_scope_arguments(parser: argparse.ArgumentParser, *, global_option: bool = False) -> None:
+    """Options that choose where install/manage commands place files and keep state."""
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--project-dir",
+        type=Path,
+        help=(
+            "project root to install into and manage (default: the current directory); "
+            "its skill-tools.yaml is used instead of the current directory's"
+        ),
+    )
+    if global_option:
+        group.add_argument(
+            "--global",
+            dest="global_scope",
+            action="store_true",
+            help=(
+                "install into and manage the user-wide location under the home directory "
+                "(e.g. ~/.claude/skills); no project skill-tools.yaml is read"
+            ),
+        )
+
+
+def _load_runtime_config(args: argparse.Namespace, cwd: Path, *, scope: InstallScope | None = None):
+    """Load config; ``scope`` (when given) decides where the project skill-tools.yaml is.
+
+    Relative ``--index-path`` values still resolve against the real ``cwd``.
+    """
+
+    config_dir = cwd if scope is None else scope.config_dir
+    config = load_config(config_path=getattr(args, "config", None), cwd=cwd, config_dir=config_dir)
     return apply_cli_overrides(
         config,
         source_type=getattr(args, "source", None),
@@ -73,7 +104,9 @@ def _index_matches_configured_source(index: Mapping[str, Any], config) -> bool:
     return all(descriptor.get(key) == value for key, value in identity.items())
 
 
-def _entry_matches_source(entry: Mapping[str, Any], source, cwd: Path) -> bool:
+def _entry_matches_source(entry: Mapping[str, Any], source, root: Path) -> bool:
+    """Compare a manifest entry's source; relative local paths are relative to ``root``."""
+
     recorded = entry["source"]
     current = dict(source.descriptor)
     if recorded.get("type") != current.get("type"):
@@ -93,7 +126,7 @@ def _entry_matches_source(entry: Mapping[str, Any], source, cwd: Path) -> bool:
         if key == "path":
             old_path = Path(old).expanduser()
             if not old_path.is_absolute():
-                old_path = cwd / old_path
+                old_path = root / old_path
             new_path = Path(new).expanduser()
             if old_path.resolve() != new_path.resolve():
                 return False

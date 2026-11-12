@@ -25,8 +25,11 @@ from .manifest import (
 from ..models import ConfigError, InstallError, SkillBundle
 from ..fs_links import is_link_like
 
-# v1 journals hold only directory swaps; v2 adds per-file operations ("kind": "file").
-JOURNAL_SCHEMA_VERSIONS = (1, 2)
+# v1 journals hold only directory swaps; v2 adds per-file operations ("kind": "file")
+# whose backups are project-relative; v3 keeps file backups relative to the state
+# directory, which may lie outside the project (``--global``).
+JOURNAL_SCHEMA_VERSIONS = (1, 2, 3)
+FILE_TRANSACTION_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -39,16 +42,36 @@ class InstallPlan:
     overwrite: bool = False
 
 
-def manifest_path(project: Path) -> Path:
+def _state_directory(project: Path, state_dir: Path | None) -> Path:
+    """The managed-state directory: ``state_dir`` or ``<project>/.skill-tools``."""
+
     root = project.resolve()
-    directory = root / MANIFEST_RELATIVE_PATH.parent
-    if is_link_like(directory) or not directory.resolve().is_relative_to(root):
+    directory = root / MANIFEST_RELATIVE_PATH.parent if state_dir is None else Path(state_dir)
+    if not directory.is_absolute():
+        raise InstallError(f"managed metadata directory must be absolute: {directory}")
+    if is_link_like(directory):
         raise InstallError(f"managed metadata directory is unsafe: {directory}")
-    return directory / "manifest.json"
+    # A state directory inside the project must not escape it through a link.
+    if directory.is_relative_to(root) and not directory.resolve().is_relative_to(root):
+        raise InstallError(f"managed metadata directory is unsafe: {directory}")
+    return directory
 
 
-def load_project_manifest(project: Path) -> dict:
-    path = manifest_path(project)
+def uses_project_state(project: Path, state_dir: Path | None) -> bool:
+    """True when the state lives in ``<project>/.skill-tools`` (any non-global scope)."""
+
+    if state_dir is None:
+        return True
+    root = project.resolve()
+    return Path(state_dir).resolve() == root / MANIFEST_RELATIVE_PATH.parent
+
+
+def manifest_path(project: Path, *, state_dir: Path | None = None) -> Path:
+    return _state_directory(project, state_dir) / "manifest.json"
+
+
+def load_project_manifest(project: Path, *, state_dir: Path | None = None) -> dict:
+    path = manifest_path(project, state_dir=state_dir)
     if is_link_like(path):
         raise InstallError(f"managed manifest must not be a symlink: {path}")
     return load_manifest(path)
@@ -63,8 +86,20 @@ def _safe_project_path(project: Path, relative: str) -> Path:
     return path
 
 
-def _journal_path(project: Path) -> Path:
-    return manifest_path(project).with_name("transaction.json")
+def _safe_state_path(state_directory: Path, relative: str) -> Path:
+    """A journal path relative to the managed-state directory (v3 file backups)."""
+
+    from .manifest import _safe_relative
+
+    base = state_directory.resolve()
+    path = base.joinpath(*_safe_relative(relative, "transaction").parts)
+    if not path.resolve(strict=False).is_relative_to(base):
+        raise InstallError(f"transaction backup resolves outside the state directory: {relative}")
+    return path
+
+
+def _journal_path(project: Path, *, state_dir: Path | None = None) -> Path:
+    return manifest_path(project, state_dir=state_dir).with_name("transaction.json")
 
 
 def _write_journal(path: Path, journal: dict) -> None:
@@ -102,12 +137,26 @@ def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _recover_file_operation(project: Path, operation: dict) -> None:
+def _file_backup_path(project: Path, state_directory: Path, journal: dict, value: str) -> Path:
+    """v2 file backups are project-relative; v3 ones are state-directory-relative."""
+
+    if journal.get("schemaVersion", 1) >= FILE_TRANSACTION_SCHEMA_VERSION:
+        return _safe_state_path(state_directory, value)
+    return _safe_project_path(project, value)
+
+
+def _recover_file_operation(
+    project: Path, state_directory: Path, journal: dict, operation: dict
+) -> None:
     """Undo one file-level operation: restore its backup or delete a file it created."""
 
     target = _safe_project_path(project, operation.get("target"))
     backup_value = operation.get("backup")
-    backup = _safe_project_path(project, backup_value) if isinstance(backup_value, str) else None
+    backup = (
+        _file_backup_path(project, state_directory, journal, backup_value)
+        if isinstance(backup_value, str)
+        else None
+    )
     if backup is not None and backup.is_file():
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(backup, target)
@@ -122,10 +171,10 @@ def _recover_file_operation(project: Path, operation: dict) -> None:
         raise InstallError(f"interrupted transaction backup is missing; refusing cleanup: {target}")
 
 
-def recover_transaction(project: Path) -> None:
+def recover_transaction(project: Path, *, state_dir: Path | None = None) -> None:
     """Roll back an interrupted transaction or finish cleanup after commit."""
 
-    journal_path = _journal_path(project)
+    journal_path = _journal_path(project, state_dir=state_dir)
     if is_link_like(journal_path):
         raise InstallError(f"managed transaction journal must not be a symlink: {journal_path}")
     if not journal_path.exists():
@@ -153,17 +202,22 @@ def recover_transaction(project: Path) -> None:
         }:
             raise InstallError("managed transaction journal contains an invalid operation")
 
+    state_directory = _state_directory(project, state_dir)
     if journal["phase"] == "committed":
         for operation in journal["operations"]:
             backup = operation.get("backup")
             if isinstance(backup, str):
-                _remove_path(_safe_project_path(project, backup))
+                _remove_path(
+                    _file_backup_path(project, state_directory, journal, backup)
+                    if operation.get("kind") == "file"
+                    else _safe_project_path(project, backup)
+                )
         journal_path.unlink(missing_ok=True)
         return
 
     for operation in reversed(journal["operations"]):
         if operation.get("kind") == "file":
-            _recover_file_operation(project, operation)
+            _recover_file_operation(project, state_directory, journal, operation)
             continue
         target = _safe_project_path(project, operation.get("target"))
         incoming = _safe_project_path(project, operation.get("incoming"))
@@ -189,7 +243,7 @@ def recover_transaction(project: Path) -> None:
             )
         _remove_directory(incoming)
 
-    manifest_file = manifest_path(project)
+    manifest_file = manifest_path(project, state_dir=state_dir)
     previous = journal["manifestBefore"]
     if previous is None:
         manifest_file.unlink(missing_ok=True)
@@ -208,12 +262,25 @@ def _safe_destination_parts(destination: str) -> tuple[str, ...]:
 
 
 def resolve_install_target(
-    cwd: Path, bundle: SkillBundle, config: SkillToolsConfig, target_name: str | None = None
+    cwd: Path,
+    bundle: SkillBundle,
+    config: SkillToolsConfig,
+    target_name: str | None = None,
+    *,
+    global_scope: bool = False,
 ) -> Path:
-    """Compute the final `<destination>/<skill-name>` directory within cwd."""
+    """Compute the final `<destination>/<skill-name>` directory within cwd.
+
+    ``global_scope`` uses the home-relative ``global_destination`` resolution
+    and ignores per-skill (project-only) destination overrides.
+    """
 
     project = cwd.resolve()
-    destination = config.destination_for(bundle.canonical_id, target_name)
+    destination = (
+        config.global_destination_for(target_name)
+        if global_scope
+        else config.destination_for(bundle.canonical_id, target_name)
+    )
     destination_root = (project / Path(*_safe_destination_parts(destination))).resolve()
     if not destination_root.is_relative_to(project):
         raise ConfigError(f"destination resolves outside the project: {destination!r}")
@@ -229,6 +296,9 @@ def build_plan(
     config: SkillToolsConfig,
     overwrite: bool,
     targets: tuple[str, ...] | None = None,
+    *,
+    state_dir: Path | None = None,
+    global_scope: bool = False,
 ) -> tuple[InstallPlan, ...]:
     """Validate destination mapping before changing any filesystem state."""
 
@@ -242,7 +312,9 @@ def build_plan(
     plan = tuple(
         InstallPlan(
             bundle=bundle,
-            target=resolve_install_target(cwd, bundle, config, target_name),
+            target=resolve_install_target(
+                cwd, bundle, config, target_name, global_scope=global_scope
+            ),
             target_name=target_name,
             overwrite=overwrite,
         )
@@ -250,11 +322,21 @@ def build_plan(
         for target_name in (selected_targets if selected_targets is not None else (None,))
     )
     targets_seen: set[str] = set()
-    metadata_path = (cwd.resolve() / ".skill-tools").as_posix().casefold()
+    # Both the scope's state directory and `<root>/.skill-tools` (another scope's
+    # state when the root is shared, e.g. home) are off limits.
+    metadata_paths = {
+        _state_directory(cwd, state_dir).resolve().as_posix().casefold(),
+        (cwd.resolve() / MANIFEST_RELATIVE_PATH.parent).as_posix().casefold(),
+    }
     for item in plan:
         target_key = item.target.as_posix().casefold()
-        if target_key == metadata_path or target_key.startswith(metadata_path + "/"):
-            raise InstallError(f"skill destination overlaps managed metadata: {item.target}")
+        for metadata_path in metadata_paths:
+            if (
+                target_key == metadata_path
+                or target_key.startswith(metadata_path + "/")
+                or metadata_path.startswith(target_key + "/")
+            ):
+                raise InstallError(f"skill destination overlaps managed metadata: {item.target}")
         if target_key in targets_seen:
             raise InstallError(
                 f"selected skills would both replace {item.target}; select one skill name per destination"
@@ -285,10 +367,17 @@ def build_plan(
 
 
 @contextmanager
-def _project_install_lock(cwd: Path) -> Iterator[None]:
-    """Serialize installs targeting the same resolved project across processes."""
+def _project_install_lock(cwd: Path, *, state_dir: Path | None = None) -> Iterator[None]:
+    """Serialize installs targeting the same resolved project across processes.
 
-    project_key = str(cwd.resolve()).casefold().encode("utf-8")
+    Project scopes keep the historical key (the resolved root) so older and
+    newer skill-tools versions still exclude each other. A state directory
+    outside ``<root>/.skill-tools`` (the global scope) is keyed by itself, so a
+    project rooted at home and the global scope do not share a lock by accident.
+    """
+
+    key_path = cwd if uses_project_state(cwd, state_dir) else Path(state_dir)
+    project_key = str(key_path.resolve()).casefold().encode("utf-8")
     lock_root = Path(tempfile.gettempdir()) / "skill-tools-locks"
     lock_root.mkdir(parents=True, exist_ok=True)
     lock_path = lock_root / f"{hashlib.sha256(project_key).hexdigest()}.lock"
@@ -382,7 +471,11 @@ def _atomic_write_bytes(path: Path, content: bytes) -> None:
 
 
 def execute_file_transaction(
-    project: Path, changes: Sequence[tuple[str, bytes | None]], manifest: dict
+    project: Path,
+    changes: Sequence[tuple[str, bytes | None]],
+    manifest: dict,
+    *,
+    state_dir: Path | None = None,
 ) -> None:
     """Apply file writes/deletes and a manifest update as one recoverable transaction.
 
@@ -394,9 +487,9 @@ def execute_file_transaction(
     """
 
     root = project.resolve()
-    manifest_file = manifest_path(root)
+    manifest_file = manifest_path(root, state_dir=state_dir)
     validated = validate_manifest(manifest)
-    backups = manifest_file.parent / "backups"
+    state_directory = manifest_file.parent
     operations: list[dict] = []
     for relative, content in changes:
         target = _safe_project_path(root, relative)
@@ -412,17 +505,15 @@ def execute_file_transaction(
             {
                 "kind": "file",
                 "target": relative,
-                "backup": (backups / uuid.uuid4().hex).relative_to(root).as_posix()
-                if had_target
-                else None,
+                "backup": f"backups/{uuid.uuid4().hex}" if had_target else None,
                 "hadTarget": had_target,
                 "newHash": hashlib.sha256(content).hexdigest() if content is not None else None,
                 "applied": False,
             }
         )
-    journal_file = _journal_path(root)
+    journal_file = _journal_path(root, state_dir=state_dir)
     journal = {
-        "schemaVersion": 2,
+        "schemaVersion": FILE_TRANSACTION_SCHEMA_VERSION,
         "phase": "applying",
         "manifestBefore": manifest_file.read_text(encoding="utf-8")
         if manifest_file.exists()
@@ -434,7 +525,7 @@ def execute_file_transaction(
         for (_, content), operation in zip(changes, operations, strict=True):
             target = _safe_project_path(root, operation["target"])
             if operation["backup"] is not None:
-                backup = _safe_project_path(root, operation["backup"])
+                backup = _safe_state_path(state_directory, operation["backup"])
                 backup.parent.mkdir(parents=True, exist_ok=True)
                 if content is None:
                     os.replace(target, backup)
@@ -451,11 +542,11 @@ def execute_file_transaction(
         _write_journal(journal_file, journal)
         for operation in operations:
             if operation["backup"] is not None:
-                _remove_path(_safe_project_path(root, operation["backup"]))
+                _remove_path(_safe_state_path(state_directory, operation["backup"]))
         journal_file.unlink(missing_ok=True)
     except Exception as exc:
         try:
-            recover_transaction(root)
+            recover_transaction(root, state_dir=state_dir)
         except Exception as recovery_exc:
             raise InstallError(f"{exc}; transaction recovery stopped: {recovery_exc}") from exc
         if isinstance(exc, InstallError):
@@ -473,6 +564,7 @@ def execute_install(
     overwrite: bool | None = None,
     managed_entries: tuple[dict, ...] = (),
     force_managed: bool = False,
+    state_dir: Path | None = None,
 ) -> None:
     """Stage every bundle, then replace targets with rollback on a later failure."""
 
@@ -480,10 +572,10 @@ def execute_install(
         allow_overwrite = (
             overwrite if overwrite is not None else all(item.overwrite for item in plan)
         )
-        with _project_install_lock(cwd):
-            recover_transaction(cwd)
+        with _project_install_lock(cwd, state_dir=state_dir):
+            recover_transaction(cwd, state_dir=state_dir)
             if managed_entries:
-                current = load_project_manifest(cwd)["entries"]
+                current = load_project_manifest(cwd, state_dir=state_dir)["entries"]
                 by_path = {entry["installPath"].casefold(): entry for entry in current}
                 for expected in managed_entries:
                     entry = by_path.get(expected["installPath"].casefold())
@@ -494,21 +586,27 @@ def execute_install(
                     verify_entry(cwd, entry, force=force_managed)
             for item in plan:
                 _validate_plan_target(item, cwd, allow_overwrite)
-            _execute_install_locked(source, plan, cwd, allow_overwrite)
+            _execute_install_locked(source, plan, cwd, allow_overwrite, state_dir=state_dir)
     except InstallError:
         raise
     except OSError as exc:
         raise InstallError(f"could not create or update skill directories: {exc}") from exc
 
 
-def execute_remove(project: Path, entries: tuple[dict, ...], *, force: bool = False) -> None:
+def execute_remove(
+    project: Path,
+    entries: tuple[dict, ...],
+    *,
+    force: bool = False,
+    state_dir: Path | None = None,
+) -> None:
     """Remove only verified manifest entries, recording a recoverable transaction."""
 
     root = project.resolve()
     try:
-        with _project_install_lock(root):
-            recover_transaction(root)
-            manifest = load_project_manifest(root)
+        with _project_install_lock(root, state_dir=state_dir):
+            recover_transaction(root, state_dir=state_dir)
+            manifest = load_project_manifest(root, state_dir=state_dir)
             selected_paths = {entry["installPath"].casefold() for entry in entries}
             current = [
                 entry
@@ -536,9 +634,9 @@ def execute_remove(project: Path, entries: tuple[dict, ...], *, force: bool = Fa
                         "newFiles": {},
                     }
                 )
-            path = manifest_path(root)
+            path = manifest_path(root, state_dir=state_dir)
             before = path.read_text(encoding="utf-8") if path.exists() else None
-            journal_file = _journal_path(root)
+            journal_file = _journal_path(root, state_dir=state_dir)
             journal = {
                 "schemaVersion": 1,
                 "phase": "applying",
@@ -568,7 +666,7 @@ def execute_remove(project: Path, entries: tuple[dict, ...], *, force: bool = Fa
                 journal_file.unlink(missing_ok=True)
             except Exception as exc:
                 try:
-                    recover_transaction(root)
+                    recover_transaction(root, state_dir=state_dir)
                 except Exception as recovery_exc:
                     raise InstallError(
                         f"{exc}; transaction recovery stopped: {recovery_exc}"
@@ -585,15 +683,20 @@ def execute_remove(project: Path, entries: tuple[dict, ...], *, force: bool = Fa
 
 
 def _execute_install_locked(
-    source, plan: tuple[InstallPlan, ...], cwd: Path, overwrite: bool
+    source,
+    plan: tuple[InstallPlan, ...],
+    cwd: Path,
+    overwrite: bool,
+    *,
+    state_dir: Path | None = None,
 ) -> None:
     root = cwd.resolve()
-    manifest_file = manifest_path(root)
-    manifest = load_project_manifest(root)
+    manifest_file = manifest_path(root, state_dir=state_dir)
+    manifest = load_project_manifest(root, state_dir=state_dir)
     previous_manifest = (
         manifest_file.read_text(encoding="utf-8") if manifest_file.exists() else None
     )
-    journal_file = _journal_path(root)
+    journal_file = _journal_path(root, state_dir=state_dir)
     operations: list[dict] = []
     for item in plan:
         item.target.parent.mkdir(parents=True, exist_ok=True)
@@ -654,6 +757,7 @@ def _execute_install_locked(
                 project_root=root,
                 source_descriptor=source.descriptor,
                 bundle=item.bundle,
+                relativize_source=uses_project_state(root, state_dir),
             )
             entries = [
                 old
@@ -672,7 +776,7 @@ def _execute_install_locked(
         journal_file.unlink(missing_ok=True)
     except Exception as exc:
         try:
-            recover_transaction(root)
+            recover_transaction(root, state_dir=state_dir)
         except Exception as recovery_exc:
             raise InstallError(f"{exc}; transaction recovery stopped: {recovery_exc}") from exc
         if isinstance(exc, InstallError):

@@ -59,6 +59,8 @@ class HooksConfig:
     default_agents: tuple[str, ...] = ()
     destinations: dict[str, str] = field(default_factory=dict)
     claude_settings_file: str = "project"
+    global_destinations: dict[str, str] = field(default_factory=dict)
+    """Home-relative hook directories for ``--global`` (``hooks.agents.<a>.global_destination``)."""
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,8 @@ class SkillToolsConfig:
     index: IndexConfig
     destinations: dict[str, str]
     targets: dict[str, str] = field(default_factory=dict)
+    target_global_destinations: dict[str, str] = field(default_factory=dict)
+    global_destination: str = DEFAULT_DESTINATION
     target_destinations: dict[str, dict[str, str]] = field(default_factory=dict)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     fb: FbConfig = field(default_factory=_default_fb_config)
@@ -84,6 +88,21 @@ class SkillToolsConfig:
             self.targets.get(target, self.destinations.get(canonical_id, DEFAULT_DESTINATION)),
         )
 
+    def global_destination_for(self, target: str | None = None) -> str:
+        """Home-relative skill destination for ``--global``.
+
+        Per-skill ``skills.<id>.destination(s)`` overrides are project-only and
+        ignored here. Precedence: the target's ``global_destination``, the
+        target's ``destination``, then the top-level ``global_destination``.
+        """
+
+        if target is not None:
+            if target in self.target_global_destinations:
+                return self.target_global_destinations[target]
+            if target in self.targets:
+                return self.targets[target]
+        return self.global_destination
+
 
 def _cache_home() -> Path:
     override = os.environ.get("SKILL_TOOLS_HOME")
@@ -97,6 +116,27 @@ def _cache_home() -> Path:
     if xdg_cache:
         return Path(xdg_cache).expanduser().resolve() / "skill-tools"
     return Path.home() / ".cache" / "skill-tools"
+
+
+def global_state_dir() -> Path:
+    """Manifest, journal, and backups for ``--global`` installs.
+
+    Kept out of ``~/.skill-tools`` (the state of a project rooted at home) and
+    out of the cache directory (clearing a cache must not orphan globally
+    installed skills).
+    """
+
+    override = os.environ.get("SKILL_TOOLS_HOME")
+    if override:
+        return Path(override).expanduser().resolve() / "global"
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data).expanduser().resolve() / "skill-tools" / "global"
+    xdg_state = os.environ.get("XDG_STATE_HOME")
+    if xdg_state:
+        return Path(xdg_state).expanduser().resolve() / "skill-tools" / "global"
+    return Path.home().resolve() / ".local" / "state" / "skill-tools" / "global"
 
 
 def default_index_path() -> Path:
@@ -307,12 +347,15 @@ def _parse_source(data: object, base_dir: Path) -> SourceConfig:
     return SourceConfig(type="github", **values)
 
 
-def _parse_targets(data: object, filename: str) -> dict[str, str]:
+def _parse_targets(data: object, filename: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Return ``(destinations, global_destinations)`` keyed by target name."""
+
     if data is None:
-        return {}
+        return {}, {}
     if not isinstance(data, dict):
         raise ConfigError(f"{filename}.targets must be a mapping")
     targets: dict[str, str] = {}
+    global_targets: dict[str, str] = {}
     for name, setting in data.items():
         if (
             not isinstance(name, str)
@@ -321,10 +364,19 @@ def _parse_targets(data: object, filename: str) -> dict[str, str]:
             or any(not (char.isalnum() or char in "_-") for char in name)
         ):
             raise ConfigError(f"{filename}.targets keys must be valid target names: {name!r}")
-        if not isinstance(setting, dict) or set(setting) != {"destination"}:
-            raise ConfigError(f"{filename}.targets[{name!r}] must contain only a destination")
+        if (
+            not isinstance(setting, dict)
+            or "destination" not in setting
+            or set(setting) - {"destination", "global_destination"}
+        ):
+            raise ConfigError(
+                f"{filename}.targets[{name!r}] must contain a destination "
+                "and optionally a global_destination"
+            )
         targets[name] = _safe_destination(setting["destination"])
-    return targets
+        if "global_destination" in setting:
+            global_targets[name] = _safe_destination(setting["global_destination"])
+    return targets, global_targets
 
 
 def _parse_destinations(
@@ -393,11 +445,14 @@ def _parse_hooks(data: object, filename: str) -> HooksConfig:
     if not isinstance(agents, dict):
         raise ConfigError(f"{filename}.hooks.agents must be a mapping")
     destinations: dict[str, str] = {}
+    global_destinations: dict[str, str] = {}
     settings_file = "project"
     for agent, setting in agents.items():
         if agent not in HOOK_AGENTS:
             raise ConfigError(f"{filename}.hooks.agents has an unknown agent: {agent!r}")
-        allowed = {"destination", "settings_file"} if agent == "claude" else {"destination"}
+        allowed = {"destination", "global_destination"}
+        if agent == "claude":
+            allowed.add("settings_file")
         if not isinstance(setting, dict) or set(setting) - allowed:
             raise ConfigError(
                 f"{filename}.hooks.agents.{agent} may only contain: {', '.join(sorted(allowed))}"
@@ -407,6 +462,13 @@ def _parse_hooks(data: object, filename: str) -> HooksConfig:
             if Path(destination).parts[0].casefold() == ".skill-tools":
                 raise ConfigError(f"{filename}.hooks.agents.{agent}.destination overlaps metadata")
             destinations[agent] = destination.replace("\\", "/")
+        if "global_destination" in setting:
+            destination = _safe_destination(setting["global_destination"])
+            if Path(destination).parts[0].casefold() == ".skill-tools":
+                raise ConfigError(
+                    f"{filename}.hooks.agents.{agent}.global_destination overlaps metadata"
+                )
+            global_destinations[agent] = destination.replace("\\", "/")
         if "settings_file" in setting:
             if setting["settings_file"] not in CLAUDE_SETTINGS_FILES:
                 raise ConfigError(
@@ -418,6 +480,7 @@ def _parse_hooks(data: object, filename: str) -> HooksConfig:
         default_agents=tuple(dict.fromkeys(raw_defaults)),
         destinations=destinations,
         claude_settings_file=settings_file,
+        global_destinations=global_destinations,
     )
 
 
@@ -441,7 +504,16 @@ def _parse_fb(data: object, path: Path | None) -> FbConfig:
 
 
 def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
-    allowed = {"source", "index", "fb", "skills", "targets", "hooks", "self_skill"}
+    allowed = {
+        "source",
+        "index",
+        "fb",
+        "skills",
+        "targets",
+        "global_destination",
+        "hooks",
+        "self_skill",
+    }
     unknown = set(data) - allowed
     if unknown:
         raise ConfigError(f"configuration contains unknown keys: {', '.join(sorted(unknown))}")
@@ -477,7 +549,10 @@ def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
     destinations, target_destinations = _parse_destinations(
         data.get("skills"), path.name if path else "skill-tools.yaml"
     )
-    targets = _parse_targets(data.get("targets"), path.name if path else "skill-tools.yaml")
+    targets, target_global_destinations = _parse_targets(
+        data.get("targets"), path.name if path else "skill-tools.yaml"
+    )
+    global_destination = _safe_destination(data.get("global_destination", DEFAULT_DESTINATION))
     unknown_targets = {
         target for per_target in target_destinations.values() for target in per_target
     } - set(targets)
@@ -490,6 +565,8 @@ def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
         index=IndexConfig(index_path),
         destinations=destinations,
         targets=targets,
+        target_global_destinations=target_global_destinations,
+        global_destination=global_destination,
         target_destinations=target_destinations,
         hooks=_parse_hooks(data.get("hooks"), path.name if path else "skill-tools.yaml"),
         fb=_parse_fb(data.get("fb"), path),
@@ -498,10 +575,22 @@ def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
     )
 
 
-def load_config(config_path: Path | None = None, cwd: Path | None = None) -> SkillToolsConfig:
-    """Resolve embedded, global, and CWD-specific configuration layers."""
+_USE_CWD: Any = object()
 
-    working_directory = (cwd or Path.cwd()).resolve()
+
+def load_config(
+    config_path: Path | None = None,
+    cwd: Path | None = None,
+    *,
+    config_dir: Path | None = _USE_CWD,
+) -> SkillToolsConfig:
+    """Resolve embedded, global, and project-specific configuration layers.
+
+    ``config_dir`` is where the project ``skill-tools.yaml`` is looked up. It
+    defaults to ``cwd``; ``None`` skips the project layer entirely.
+    """
+
+    search_dir = (cwd or Path.cwd()) if config_dir is _USE_CWD else config_dir
     embedded = _embedded_default_data()
 
     # An explicit path is an escape hatch for CI and migration. Preserve its
@@ -521,9 +610,9 @@ def load_config(config_path: Path | None = None, cwd: Path | None = None) -> Ski
         return _parse_config(data, selected)
 
     global_path = user_config_path()
-    cwd_path = working_directory / "skill-tools.yaml"
+    cwd_path = None if search_dir is None else Path(search_dir).resolve() / "skill-tools.yaml"
     global_exists = global_path.is_file()
-    cwd_exists = cwd_path.is_file()
+    cwd_exists = cwd_path is not None and cwd_path.is_file()
 
     data = embedded
     if global_exists:
@@ -531,6 +620,7 @@ def load_config(config_path: Path | None = None, cwd: Path | None = None) -> Ski
             data, _normalize_paths(_load_yaml(global_path), global_path.parent)
         )
     if cwd_exists:
+        assert cwd_path is not None
         data = _merge_config_data(data, _normalize_paths(_load_yaml(cwd_path), cwd_path.parent))
 
     selected = cwd_path if cwd_exists else global_path if global_exists else None

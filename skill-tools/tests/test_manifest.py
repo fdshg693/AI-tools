@@ -199,7 +199,7 @@ def test_v1_manifest_is_read_as_v2_and_written_back_as_v2(tmp_path: Path) -> Non
         ),
         (
             {"schemaVersion": 2, "entries": [], "hooks": [_hook_entry(installDir="../x")]},
-            "inside the project",
+            "inside the install root",
         ),
         (
             {"schemaVersion": 2, "entries": [], "hooks": [_hook_entry(registrations=[{}])]},
