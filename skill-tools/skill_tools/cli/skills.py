@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from ..catalog import discover_catalog, select_records
-from ..config import create_source
+from ..config import INSTALL_MODES, create_source
 from ..install.installer import (
     InstallPlan,
     _project_install_lock,
@@ -78,6 +78,15 @@ def _add_install_command(commands) -> None:
         "--target",
         help="install to configured target name(s), comma-separated",
     )
+    parser.add_argument(
+        "--mode",
+        choices=INSTALL_MODES,
+        default=None,
+        help=(
+            "copy the skill into the project, or link it to one shared copy in the skill "
+            "store (default: install_mode from the config, else copy)"
+        ),
+    )
 
 
 def _add_managed_commands(commands) -> None:
@@ -125,14 +134,8 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
     root, state_dir = scope.root, scope.state_dir
     with _project_install_lock(root, state_dir=state_dir):
         recover_transaction(root, state_dir=state_dir)
-    # `--mode` and the `install_mode` setting arrive with the CLI step; copy until then.
-    mode = getattr(args, "mode", None) or "copy"
-    if mode == "link" and scope.is_global:
-        raise ConfigError(
-            "--mode link cannot be used with --global (the user-wide location is a single "
-            "place, so linking it to the store gains nothing)"
-        )
     config = _load_runtime_config(args, cwd, scope=scope)
+    mode = _resolve_install_mode(args.mode, config.install_mode, scope)
     ensure_outside_store(scope, config.store.path)
     source = create_source(config)
     selectors = [config.self_skill if token == SELF_SELECTOR else token for token in args.skills]
@@ -152,19 +155,24 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
         state_dir=state_dir,
         global_scope=scope.is_global,
     )
+    store = Store.from_config(config)
     for item in plan:
         action = "would install" if args.dry_run else "install"
         path = display_skill_path(item.bundle.canonical_id, source.descriptor)
+        # Copies keep the historical columns; a link adds the store copy it points at.
+        suffix = ""
+        if mode == "link":
+            store_path = entry_relative_path(source.descriptor, item.bundle)
+            suffix = f"\t(link -> {store.root.joinpath(*store_path.split('/'))})"
         if item.target_name is None:
             shown = scope.display(item.target) if scope.is_global else item.target
-            print(f"{action}\t{path}\t{shown}")
+            print(f"{action}\t{path}\t{shown}{suffix}")
         else:
             relative_target = scope.display(item.target)
             print(
                 f"{action}\t{path}\t{item.bundle.canonical_id}"
-                f"\t{item.target_name}\t{relative_target}"
+                f"\t{item.target_name}\t{relative_target}{suffix}"
             )
-    store = Store.from_config(config)
     if mode == "link":
         for item in plan:
             store.ensure_outside(item.target.parent, "skill destination")
@@ -185,6 +193,25 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
     if unlinked:
         _forget_referrers(store, root, unlinked)
     return 0
+
+
+def _resolve_install_mode(requested: str | None, configured: str, scope: InstallScope) -> str:
+    """`--mode` wins over `install_mode`; --global always copies.
+
+    An explicit `--mode link --global` is refused. A configured `install_mode:
+    link` falls back to copy there with a note, so a global config that prefers
+    links still allows `install-skills --global`.
+    """
+
+    if scope.is_global and (requested or configured) == "link":
+        if requested == "link":
+            raise ConfigError(
+                "--mode link cannot be used with --global (the user-wide location is a single "
+                "place, so linking it to the store gains nothing)"
+            )
+        print("note: install_mode link does not apply to --global; copying", file=sys.stderr)
+        return "copy"
+    return requested or configured
 
 
 def _forget_referrers(store: Store, root: Path, install_paths: Sequence[str]) -> None:
@@ -230,7 +257,7 @@ def _command_installed(args: argparse.Namespace, cwd: Path, scope: InstallScope)
     elif not entries:
         print("(no managed skills)")
     else:
-        print("canonical_id\ttarget\tinstall_path\tsource")
+        print("canonical_id\ttarget\tinstall_path\tsource\tmode")
         for entry in entries:
             source = entry["source"]
             source_label = (
@@ -240,7 +267,7 @@ def _command_installed(args: argparse.Namespace, cwd: Path, scope: InstallScope)
             )
             print(
                 f"{entry['canonicalId']}\t{entry['target'] or '(default)'}\t"
-                f"{entry['installPath']}\t{source_label}"
+                f"{entry['installPath']}\t{source_label}\t{entry['mode']}"
             )
     return 0
 
@@ -339,7 +366,7 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
         copied.append(entry)
         action = "would update" if args.dry_run else "update"
         suffix = " (force: directory contents may be replaced)" if args.force else ""
-        print(f"{action}	{entry['canonicalId']}	{scope.display(target)}{suffix}")
+        print(f"{action}\t{entry['canonicalId']}\t{scope.display(target)}{suffix}")
     if shown_links:
         counts: dict[str, int] = {}
         for store_entry in store.list_entries():
@@ -349,8 +376,8 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
             shared = counts.get(entry["store"].casefold(), 0)
             suffix = " (force: store entry contents may be replaced)" if args.force else ""
             print(
-                f"{action}	{entry['canonicalId']}	{scope.display(link)}"
-                f"	(shared store entry {entry['store']}: {shared} link(s)){suffix}"
+                f"{action}\t{entry['canonicalId']}\t{scope.display(link)}"
+                f"\t(shared: store entry {entry['store']} has {shared} link(s)){suffix}"
             )
     if plans and not args.dry_run:
         execute_install(

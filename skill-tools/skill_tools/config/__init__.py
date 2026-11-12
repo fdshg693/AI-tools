@@ -21,6 +21,8 @@ DEFAULT_GITHUB_REPOSITORY = "ai"
 DEFAULT_GITHUB_REF = "main"
 DEFAULT_DESTINATION = ".claude/skills"
 DEFAULT_SELF_SKILL = "tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md"
+INSTALL_MODES = ("copy", "link")
+DEFAULT_INSTALL_MODE = "copy"
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,8 @@ class SkillToolsConfig:
     hooks: HooksConfig = field(default_factory=HooksConfig)
     fb: FbConfig = field(default_factory=_default_fb_config)
     store: StoreConfig = field(default_factory=_default_store_config)
+    install_mode: str = DEFAULT_INSTALL_MODE
+    """`install-skills` placement when `--mode` is omitted: copy or link."""
     self_skill: str = DEFAULT_SELF_SKILL
     config_path: Path | None = None
     global_config_path: Path | None = None
@@ -201,6 +205,8 @@ def _embedded_default_data() -> dict[str, Any]:
         },
         "index": {"path": str(default_index_path())},
         "fb": {"path": str(default_fb_path())},
+        "install_mode": DEFAULT_INSTALL_MODE,
+        "store": {"path": str(store_dir())},
         "self_skill": DEFAULT_SELF_SKILL,
         "skills": {},
     }
@@ -551,12 +557,19 @@ def _parse_store(data: object, path: Path | None) -> StoreConfig:
     return StoreConfig(store_path.resolve())
 
 
+def _parse_install_mode(value: object) -> str:
+    if value not in INSTALL_MODES:
+        raise ConfigError(f"install_mode must be one of {', '.join(INSTALL_MODES)}: {value!r}")
+    return str(value)
+
+
 def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
     allowed = {
         "source",
         "index",
         "fb",
         "store",
+        "install_mode",
         "skills",
         "targets",
         "global_destination",
@@ -620,6 +633,7 @@ def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
         hooks=_parse_hooks(data.get("hooks"), path.name if path else "skill-tools.yaml"),
         fb=_parse_fb(data.get("fb"), path),
         store=_parse_store(data.get("store"), path),
+        install_mode=_parse_install_mode(data.get("install_mode", DEFAULT_INSTALL_MODE)),
         self_skill=_parse_self_skill(data.get("self_skill", DEFAULT_SELF_SKILL)),
         config_path=path,
     )

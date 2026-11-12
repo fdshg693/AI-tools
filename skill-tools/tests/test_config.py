@@ -302,7 +302,21 @@ def test_initialize_user_config_writes_explicit_defaults(
     assert "ref: main" in text
     assert "path:" in text
     assert "fb:" in text
+    assert "install_mode: copy" in text
+    assert "store:" in text
     assert initialize_user_config() == (path, False)
+
+
+def test_install_mode_defaults_to_copy_and_rejects_unknown_values(tmp_path: Path) -> None:
+    path = tmp_path / "skill-tools.yaml"
+    path.write_text("install_mode: link\n", encoding="utf-8")
+    assert load_config(config_path=path).install_mode == "link"
+    path.write_text("index:\n  path: x.json\n", encoding="utf-8")
+    assert load_config(config_path=path).install_mode == "copy"
+    for value in ("symlink", "1", "[]"):
+        path.write_text(f"install_mode: {value}\n", encoding="utf-8")
+        with pytest.raises(ConfigError, match="install_mode"):
+            load_config(config_path=path)
 
 
 def test_fb_path_is_resolved_relative_to_the_config_file(tmp_path: Path) -> None:

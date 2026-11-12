@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.6
+  version: 1.2.7
 ---
 
 # skill-tools の使い方
@@ -138,6 +138,24 @@ skill-tools installed-skills --global
 - `remove-skills`はmanifest entryだけを対象にし、source・catalog・networkを必要としない。未管理directoryは検索・削除しない
 - `update-skills` / `remove-skills`はhash drift・欠落・追加file・symlinkがあれば既定で中止する。`--force`は対象managed directory内の変更を置換・削除し得るため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
 - install-skills/update-skills/remove-skillsはjournalで中断を記録する。process termination時は次回managed操作でrollbackを試みるが、複数pathの完全な原子性や電断・storage障害時の復旧は保証しない
+
+### `--mode link` / `store` — 共有ストアへのリンクで配る
+
+```powershell
+skill-tools install-skills --mode link alpha --dry-run
+skill-tools install-skills --mode link alpha
+skill-tools store list
+skill-tools store update --dry-run
+skill-tools store gc --dry-run
+```
+
+- **使い分け:** 既定は`copy`。**同じスキルを多くのプロジェクトに入れ、常に最新にそろえたい**（でも`--global`で全プロジェクトに出したくはない）ときだけ`--mode link`を選ぶ。スキルはストア（既定`%LOCALAPPDATA%\skill-tools\store`等、設定`store.path`）に1つだけコピーされ、プロジェクトにはそこを指すJunction（Windows）／symlinkが置かれる。プロジェクト固有に手を入れたいスキル・リンクを読まないエージェント向けのスキルは`copy`のまま
+- 省略時の方式は設定`install_mode`（既定`copy`）。`--global`は常にコピーで、`--mode link --global`は終了コード`2`
+- **リンクのentryへの`update-skills`は、ストアを更新するので同じスキルにリンクした他のすべてのプロジェクトにも効く。** 出力の`(shared: store entry ... has N link(s))`で影響範囲が分かるので、Nが2以上なら`--dry-run`の結果をユーザーに見せてから実行する。プロジェクトを経由せずに更新するなら`store update`
+- **リンクしたスキルのファイルを編集しない。** ストアのコピーが変わり全プロジェクトに効き、次の更新はdriftで止まる。編集が必要なら`install-skills --mode copy --overwrite <skill>`でコピーに戻してから
+- `remove-skills`はリンクだけを消し、ストアのentryは残る。参照されなくなったentryは`store gc`で消す（先に`--dry-run`）
+- リンクにした配置先は`.gitignore`に入れるようユーザーに勧める（Git for WindowsはJunctionの中身を通常ファイルとしてコミットしてしまう）
+- スキルがエージェントの一覧に出ない（Antigravityなどはリンクを読まない報告がある）ときは`--mode copy --overwrite`に戻す。Windowsでストアの更新が終了コード`4`で止まり「file in the store open」と出たら、スキルを開いているエディタやエージェントを閉じて再実行する
 
 ## `list-tools` / `install-tools` — repo-tools.yaml のCLIツール
 

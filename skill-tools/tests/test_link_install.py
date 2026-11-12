@@ -8,6 +8,7 @@ both.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -444,3 +445,138 @@ def test_commands_refuse_a_project_root_inside_the_store(env) -> None:
     # The store root itself is not a project either (removal would skip its referrers).
     assert main(["remove-skills", "alpha"], cwd=env["store"].root) == 2
     assert len(env["store"].list_entries()) == 1
+
+
+# --- CLI: --mode, installed-skills, store subcommands --------------------------
+
+
+def _cli(env, project: Path, *argv: str) -> int:
+    command, *rest = argv
+    if command == "store":
+        sub, *rest = rest
+        return main(["store", sub, "--config", str(env["config_file"]), *rest], cwd=project)
+    if command in {"installed-skills", "remove-skills"}:  # no --config: manifest only
+        return main([command, *rest], cwd=project)
+    return main([command, "--config", str(env["config_file"]), *rest], cwd=project)
+
+
+def test_install_mode_link_from_the_flag_and_the_config(env, capsys) -> None:
+    project = env["project"]
+    assert _cli(env, project, "install-skills", "--mode", "link", "--dry-run", "alpha") == 0
+    out = capsys.readouterr().out
+    assert "would install\tplugins/" not in out or "(link -> " in out
+    assert f"(link -> {env['store'].root}" in out
+    assert not os.path.lexists(_skill(project))
+
+    assert _cli(env, project, "install-skills", "--mode", "link", "alpha") == 0
+    assert is_link_like(_skill(project))
+
+    # install_mode: link in the config applies when --mode is omitted.
+    with env["config_file"].open("a", encoding="utf-8") as stream:
+        stream.write("install_mode: link\n")
+    assert _cli(env, project, "install-skills", "beta") == 0
+    assert is_link_like(_skill(project, "beta"))
+    # --mode copy still wins over the config.
+    assert _cli(env, project, "install-skills", "--mode", "copy", "--overwrite", "beta") == 0
+    assert not is_link_like(_skill(project, "beta"))
+
+
+def test_mode_link_with_global_is_refused_but_the_config_falls_back(
+    env, isolated_home, capsys
+) -> None:
+    project = env["project"]
+    assert _cli(env, project, "install-skills", "--global", "--mode", "link", "alpha") == 2
+    assert "--global" in capsys.readouterr().err
+    with env["config_file"].open("a", encoding="utf-8") as stream:
+        stream.write("install_mode: link\n")
+    assert _cli(env, project, "install-skills", "--global", "--dry-run", "alpha") == 0
+    captured = capsys.readouterr()
+    assert "copying" in captured.err
+    assert "(link -> " not in captured.out
+
+
+def test_installed_skills_shows_the_mode(env, capsys) -> None:
+    project = env["project"]
+    _link(env, project, "alpha")
+    execute_install(
+        env["source"], build_plan(project, (env["bundles"]["beta"],), env["config"], False), project
+    )
+    capsys.readouterr()
+    assert _cli(env, project, "installed-skills") == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].endswith("\tsource\tmode")
+    modes = {line.split("\t")[2]: line.split("\t")[-1] for line in lines[1:]}
+    assert modes == {".claude/skills/alpha": "link", ".claude/skills/beta": "copy"}
+
+    assert _cli(env, project, "installed-skills", "--json") == 0
+    entries = {item["bundleName"]: item for item in json.loads(capsys.readouterr().out)}
+    assert entries["alpha"]["mode"] == "link" and entries["alpha"]["store"]
+    assert entries["beta"]["mode"] == "copy" and "store" not in entries["beta"]
+
+
+def test_store_list_update_and_gc(env, capsys) -> None:
+    project, store = env["project"], env["store"]
+    assert _cli(env, project, "store", "list") == 0
+    assert capsys.readouterr().out.strip() == "(no store entries)"
+
+    (plan,) = _link(env, project, "alpha")
+    assert _cli(env, project, "store", "list") == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "store_path\tcanonical_id\tlinks\tsource"
+    assert lines[1].split("\t")[:3] == [plan.store_path, "plugins/one/skills/alpha/SKILL.md", "1"]
+    assert _cli(env, project, "store", "list", "--json") == 0
+    (item,) = json.loads(capsys.readouterr().out)
+    assert item["referrers"] == [
+        {"projectRoot": str(project), "installPath": ".claude/skills/alpha"}
+    ]
+
+    _edit_source(env, "from the store\n")
+    guide = _skill(project) / "references" / "guide.md"
+    assert _cli(env, project, "store", "update", "--dry-run") == 0
+    assert "would update\t" + plan.store_path in capsys.readouterr().out
+    assert guide.read_text(encoding="utf-8") == "alpha guide\n"
+    assert _cli(env, project, "store", "update", "alpha") == 0
+    assert guide.read_text(encoding="utf-8") == "from the store\n"
+
+    # Drift in the store stops the update unless forced.
+    (plan.link_target / "SKILL.md").write_text("edited\n", encoding="utf-8")
+    assert _cli(env, project, "store", "update") == 4
+    assert _cli(env, project, "store", "update", "--force") == 0
+    assert (plan.link_target / "SKILL.md").read_text(encoding="utf-8") != "edited\n"
+
+    # gc keeps linked entries, then removes the one whose link is gone.
+    capsys.readouterr()
+    assert _cli(env, project, "store", "gc") == 0
+    assert capsys.readouterr().out.strip() == "(nothing to collect)"
+    # A record whose project path is no longer a link to the entry is stale. (A
+    # fresh record with no path at all survives the one-hour grace period.)
+    remove_link(_skill(project))
+    _skill(project).mkdir()
+    assert _cli(env, project, "store", "gc", "--dry-run") == 0
+    out = capsys.readouterr().out
+    assert "would forget\t" in out and "would remove\t" + plan.store_path in out
+    assert plan.link_target.is_dir()
+    assert _cli(env, project, "store", "gc") == 0
+    assert not plan.link_target.exists()
+    assert store.list_entries() == ()
+
+
+def test_store_update_refuses_a_selected_entry_from_another_source(
+    env, tmp_path, make_repo, capsys
+) -> None:
+    _link(env, env["project"], "alpha")
+    other = make_repo(tmp_path / "other-source")
+    text = env["config_file"].read_text(encoding="utf-8")
+    env["config_file"].write_text(
+        text.replace(env["source"].root.as_posix(), other.as_posix()), encoding="utf-8"
+    )
+    assert _cli(env, env["project"], "store", "update", "alpha") == 4
+    assert _cli(env, env["project"], "store", "update") == 0
+    assert "another source" in capsys.readouterr().err
+
+
+def test_config_show_prints_install_mode_and_store_path(env, capsys) -> None:
+    assert main(["config", "show", "--config", str(env["config_file"])], cwd=env["project"]) == 0
+    out = capsys.readouterr().out
+    assert "install_mode: copy" in out
+    assert f"store.path: {env['store'].root}" in out
