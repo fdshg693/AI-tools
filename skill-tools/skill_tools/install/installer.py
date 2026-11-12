@@ -569,24 +569,54 @@ def execute_install(
     """Stage every bundle, then replace targets with rollback on a later failure."""
 
     try:
+        with _project_install_lock(cwd, state_dir=state_dir):
+            execute_install_locked(
+                source,
+                plan,
+                cwd,
+                overwrite=overwrite,
+                managed_entries=managed_entries,
+                force_managed=force_managed,
+                state_dir=state_dir,
+            )
+    except InstallError:
+        raise
+    except OSError as exc:
+        raise InstallError(f"could not create or update skill directories: {exc}") from exc
+
+
+def execute_install_locked(
+    source,
+    plan: tuple[InstallPlan, ...],
+    cwd: Path,
+    *,
+    overwrite: bool | None = None,
+    managed_entries: tuple[dict, ...] = (),
+    force_managed: bool = False,
+    state_dir: Path | None = None,
+) -> None:
+    """``execute_install`` for a caller that already holds ``_project_install_lock``.
+
+    The lock is not re-entrant, so a caller that must do more work in the same
+    critical section (the link store records referrers) uses this instead.
+    """
+
+    try:
         allow_overwrite = (
             overwrite if overwrite is not None else all(item.overwrite for item in plan)
         )
-        with _project_install_lock(cwd, state_dir=state_dir):
-            recover_transaction(cwd, state_dir=state_dir)
-            if managed_entries:
-                current = load_project_manifest(cwd, state_dir=state_dir)["entries"]
-                by_path = {entry["installPath"].casefold(): entry for entry in current}
-                for expected in managed_entries:
-                    entry = by_path.get(expected["installPath"].casefold())
-                    if entry != expected:
-                        raise InstallError(
-                            "managed manifest changed before update; refusing changes"
-                        )
-                    verify_entry(cwd, entry, force=force_managed)
-            for item in plan:
-                _validate_plan_target(item, cwd, allow_overwrite)
-            _execute_install_locked(source, plan, cwd, allow_overwrite, state_dir=state_dir)
+        recover_transaction(cwd, state_dir=state_dir)
+        if managed_entries:
+            current = load_project_manifest(cwd, state_dir=state_dir)["entries"]
+            by_path = {entry["installPath"].casefold(): entry for entry in current}
+            for expected in managed_entries:
+                entry = by_path.get(expected["installPath"].casefold())
+                if entry != expected:
+                    raise InstallError("managed manifest changed before update; refusing changes")
+                verify_entry(cwd, entry, force=force_managed)
+        for item in plan:
+            _validate_plan_target(item, cwd, allow_overwrite)
+        _execute_install_locked(source, plan, cwd, allow_overwrite, state_dir=state_dir)
     except InstallError:
         raise
     except OSError as exc:
@@ -605,77 +635,93 @@ def execute_remove(
     root = project.resolve()
     try:
         with _project_install_lock(root, state_dir=state_dir):
-            recover_transaction(root, state_dir=state_dir)
-            manifest = load_project_manifest(root, state_dir=state_dir)
-            selected_paths = {entry["installPath"].casefold() for entry in entries}
-            current = [
+            execute_remove_locked(root, entries, force=force, state_dir=state_dir)
+    except InstallError:
+        raise
+    except OSError as exc:
+        raise InstallError(f"could not remove managed skill directory: {exc}") from exc
+
+
+def execute_remove_locked(
+    project: Path,
+    entries: tuple[dict, ...],
+    *,
+    force: bool = False,
+    state_dir: Path | None = None,
+) -> None:
+    """``execute_remove`` for a caller that already holds ``_project_install_lock``."""
+
+    root = project.resolve()
+    try:
+        recover_transaction(root, state_dir=state_dir)
+        manifest = load_project_manifest(root, state_dir=state_dir)
+        selected_paths = {entry["installPath"].casefold() for entry in entries}
+        current = [
+            entry
+            for entry in manifest["entries"]
+            if entry["installPath"].casefold() in selected_paths
+        ]
+        if len(current) != len(selected_paths):
+            raise InstallError("managed manifest changed before remove; refusing changes")
+        operations: list[dict] = []
+        for entry in current:
+            target = verify_entry(root, entry, force=force)
+            operations.append(
+                {
+                    "target": target.relative_to(root).as_posix(),
+                    "incoming": (target.parent / f".{target.name}.unused-{uuid.uuid4().hex}")
+                    .relative_to(root)
+                    .as_posix(),
+                    "backup": (
+                        target.parent / f".{target.name}.skill-tools-backup-{uuid.uuid4().hex}"
+                    )
+                    .relative_to(root)
+                    .as_posix(),
+                    "hadTarget": True,
+                    "replaced": False,
+                    "newFiles": {},
+                }
+            )
+        path = manifest_path(root, state_dir=state_dir)
+        before = path.read_text(encoding="utf-8") if path.exists() else None
+        journal_file = _journal_path(root, state_dir=state_dir)
+        journal = {
+            "schemaVersion": 1,
+            "phase": "applying",
+            "manifestBefore": before,
+            "operations": operations,
+        }
+        _write_journal(journal_file, journal)
+        try:
+            for entry, operation in zip(current, operations, strict=True):
+                target = _safe_project_path(root, operation["target"])
+                backup = _safe_project_path(root, operation["backup"])
+                # Re-check after the lock and immediately before moving the directory.
+                verify_entry(root, entry, force=force)
+                target.rename(backup)
+                operation["replaced"] = True
+                _write_journal(journal_file, journal)
+            retained = [
                 entry
                 for entry in manifest["entries"]
-                if entry["installPath"].casefold() in selected_paths
+                if entry["installPath"].casefold() not in selected_paths
             ]
-            if len(current) != len(selected_paths):
-                raise InstallError("managed manifest changed before remove; refusing changes")
-            operations: list[dict] = []
-            for entry in current:
-                target = verify_entry(root, entry, force=force)
-                operations.append(
-                    {
-                        "target": target.relative_to(root).as_posix(),
-                        "incoming": (target.parent / f".{target.name}.unused-{uuid.uuid4().hex}")
-                        .relative_to(root)
-                        .as_posix(),
-                        "backup": (
-                            target.parent / f".{target.name}.skill-tools-backup-{uuid.uuid4().hex}"
-                        )
-                        .relative_to(root)
-                        .as_posix(),
-                        "hadTarget": True,
-                        "replaced": False,
-                        "newFiles": {},
-                    }
-                )
-            path = manifest_path(root, state_dir=state_dir)
-            before = path.read_text(encoding="utf-8") if path.exists() else None
-            journal_file = _journal_path(root, state_dir=state_dir)
-            journal = {
-                "schemaVersion": 1,
-                "phase": "applying",
-                "manifestBefore": before,
-                "operations": operations,
-            }
+            write_manifest(path, validate_manifest({**manifest, "entries": retained}))
+            journal["phase"] = "committed"
             _write_journal(journal_file, journal)
+            for operation in operations:
+                _remove_directory(_safe_project_path(root, operation["backup"]))
+            journal_file.unlink(missing_ok=True)
+        except Exception as exc:
             try:
-                for entry, operation in zip(current, operations, strict=True):
-                    target = _safe_project_path(root, operation["target"])
-                    backup = _safe_project_path(root, operation["backup"])
-                    # Re-check after the lock and immediately before moving the directory.
-                    verify_entry(root, entry, force=force)
-                    target.rename(backup)
-                    operation["replaced"] = True
-                    _write_journal(journal_file, journal)
-                retained = [
-                    entry
-                    for entry in manifest["entries"]
-                    if entry["installPath"].casefold() not in selected_paths
-                ]
-                write_manifest(path, validate_manifest({**manifest, "entries": retained}))
-                journal["phase"] = "committed"
-                _write_journal(journal_file, journal)
-                for operation in operations:
-                    _remove_directory(_safe_project_path(root, operation["backup"]))
-                journal_file.unlink(missing_ok=True)
-            except Exception as exc:
-                try:
-                    recover_transaction(root, state_dir=state_dir)
-                except Exception as recovery_exc:
-                    raise InstallError(
-                        f"{exc}; transaction recovery stopped: {recovery_exc}"
-                    ) from exc
-                if isinstance(exc, InstallError):
-                    raise
-                if isinstance(exc, OSError):
-                    raise InstallError(f"could not remove managed skill directory: {exc}") from exc
+                recover_transaction(root, state_dir=state_dir)
+            except Exception as recovery_exc:
+                raise InstallError(f"{exc}; transaction recovery stopped: {recovery_exc}") from exc
+            if isinstance(exc, InstallError):
                 raise
+            if isinstance(exc, OSError):
+                raise InstallError(f"could not remove managed skill directory: {exc}") from exc
+            raise
     except InstallError:
         raise
     except OSError as exc:
