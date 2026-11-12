@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.5
+  version: 1.2.6
 ---
 
 # skill-tools の使い方
@@ -100,6 +100,8 @@ skill-tools install-skills skills/plugins/coding/skills/testing/SKILL.md --dry-r
 skill-tools install-skills alpha --overwrite
 skill-tools install-skills --target claude,agents alpha --dry-run
 skill-tools install-skills self
+skill-tools install-skills --project-dir C:\src\other-project alpha
+skill-tools install-skills --global alpha --dry-run
 ```
 
 - **`self`は予約語。** 設定の`self_skill`（既定は`tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md`、つまりこのスキル自身）のcanonical IDへ展開され、以後は通常のinstallと同じ配置・manifest・`--dry-run` / `--overwrite` / `--target`を使う。カタログ上に`self`という名前のスキルがあっても`self`が優先されるので、そのスキルを入れたいときはcanonical IDを渡す。`self other-name`は両方を入れる
@@ -108,7 +110,10 @@ skill-tools install-skills self
 - 旧名（`list` / `install` / `installed` / `update` / `remove`）は廃止済みで、未知のコマンドとしてエラーになる。コマンドは`list-skills` / `install-skills` / `installed-skills` / `update-skills` / `remove-skills`を使う
 
 - 選択子は **source path / リポジトリ相対の canonical ID（`skills/plugins/.../SKILL.md`） / 一意なskill名** のいずれか。名前が一意でないときは canonical ID か source path を使う
-- 配置先はCWD基準。既定は`.claude/skills/<skill-name>/`。`.agents/skills/`等へ変えるなら`skill-tools.yaml`の`skills:`に canonical ID ごとの`destination`を書く
+- 配置先はプロジェクトのルート基準（既定はCWD）。既定は`.claude/skills/<skill-name>/`。`.agents/skills/`等へ変えるなら`skill-tools.yaml`の`skills:`に canonical ID ごとの`destination`を書く
+- **配置先の切り替え（スコープ）:** 別のプロジェクトへ入れるなら`--project-dir <path>`（CWDではなくそのプロジェクトの`skill-tools.yaml`を重ねる）。**全プロジェクト共通で使いたいスキルは`--global`**（ホーム配下、既定は`~/.claude/skills/`。どこから実行してもプロジェクトの`skill-tools.yaml`は読まない）。2つは同時に付けられない。`installed-skills` / `update-skills` / `remove-skills`にも入れたときと同じスコープを付ける（グローバルの manifest は`SKILL_TOOLS_HOME/global`か`%LOCALAPPDATA%\skill-tools\global`等の別領域にある）
+- `--global`の配置先は`targets.<name>.global_destination` → `targets.<name>.destination` → トップレベル`global_destination` → `.claude/skills`の順で決まる。Antigravity（`~/.gemini/config/skills`）のようにプロジェクトとユーザーで相対パスが違うtargetだけ`global_destination`を書く。`skills.<id>.destination(s)`はプロジェクト専用で`--global`では使わない
+- **ホーム（またはその親）をプロジェクトのルートにした`install-skills` / `update-skills`は終了コード`2`で止まる。** ユーザーには`--global`を案内する。以前ホームで入れたものは、ホームで`remove-skills`してから`--global`で入れ直す（`installed-skills` / `remove-skills`はホームでも動く）
 - `--target name[,name...]`を指定すると、同じbundleを複数targetへ配置する。`targets.<name>.destination`がtargetの既定配置先で、`skills.<canonical-id>.destinations.<target>`がskill単位の上書き。target指定時の優先順位はskill target override → target既定 → legacy `skills.<id>.destination` → `.claude/skills`。`--target`未指定時はこれまでのdestination設定・既定値を維持する
 - **既存のskillディレクトリは`--overwrite`なしでは変更しない。** 上書きになる場合はまず`--dry-run`で配置先を確認し、ユーザーに上書き可否を確認してから`--overwrite`を付ける
 - `--dry-run`はコピーせず、target指定時には`would install<TAB>source path<TAB>canonical ID<TAB>target名<TAB>最終相対path`をtargetごとに表示する。target未指定時の既存出力は変わらない
@@ -125,6 +130,7 @@ skill-tools update-skills alpha --dry-run
 skill-tools update-skills alpha
 skill-tools remove-skills alpha --dry-run
 skill-tools remove-skills alpha
+skill-tools installed-skills --global
 ```
 
 - `installed-skills`はmanifestだけを読み、sourceやnetworkを参照しない
@@ -173,6 +179,8 @@ skill-tools hooks install --agent claude nested_agents_md
 skill-tools hooks installed
 skill-tools hooks update --dry-run
 skill-tools hooks remove nested_agents_md --agent codex
+skill-tools hooks install --global --agent claude,codex nested_agents_md --dry-run
+skill-tools hooks installed --global
 ```
 
 - 対象はsourceの`repo-hooks.yaml`が指す`catalog.json`（agent-toolingのビルド生成物）。`repo-hooks.yaml`が無いsourceは「フック0件」でエラーにしない。`list`は`hook id<TAB>agents<TAB>summary`を出し副作用なし。`distributable: false`（このリポジトリ構造前提のフック）は`--all`を付けたときだけ出る
@@ -181,6 +189,10 @@ skill-tools hooks remove nested_agents_md --agent codex
 - **登録ファイルで書き換えるのはskill-toolsが追加したエントリだけ。** 利用者自身のエントリは保持する。同じフックファイルを実行する管理外エントリがあると二重発火の警告が出る（自動削除しない）ので、どちらを残すかユーザーに確認する
 - `update` / `remove`は配置ファイルの変更・登録エントリの手編集をdriftとして中止する。`--force`の前に`--dry-run`で対象を確認する。seed設定は利用者が編集する前提なので追跡せず、`remove`でも消さない
 - 配置後にフックが発火しない場合は、AIツールのセッション再起動を案内する
+- **全プロジェクトで使うフックは`--global`。** 配置先は`~/.claude/hooks/`・`~/.codex/hooks/`・`~/.cursor/hooks/`・`~/.config/kilo/plugin/`、登録先は`~/.claude/settings.json`・`~/.codex/hooks.json`・`~/.cursor/hooks.json`で、コマンド行は絶対パスになる。`installed` / `update` / `remove`にも`--global`を付ける。Antigravityを`--agent`で指定したり`distributable: false`のフックを選んだりすると終了コード`2`
+- `--global`で`~/.claude/settings.json`を書き換えるときは、**Claude Codeを閉じてから実行するようユーザーに案内し、先に`--dry-run`を見せる**。実行中のClaude Codeが同じファイルを書くと、skill-toolsは変更を検知して何も書かずに止まる（終了コード`4`）
+- プロジェクトと`--global`の両方に同じフックを入れると二重に発火する（skill-toolsは検出しない）。どちらか一方にする
+- ホーム（またはその親）をプロジェクトのルートにした`hooks install` / `hooks update`は終了コード`2`で止まり、`--global`を案内する
 
 ## `build-index` / `search` — 自然文でのスキル検索
 

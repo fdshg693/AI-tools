@@ -391,3 +391,172 @@ def test_interrupted_file_transaction_is_rolled_back(tmp_path: Path) -> None:
     assert (project / "keep.json").read_text(encoding="utf-8") == "old"
     assert not (project / "created.py").exists()
     assert not (project / ".skill-tools" / "transaction.json").exists()
+
+
+# --- --global -----------------------------------------------------------------
+
+GLOBAL_AGENTS = "claude,codex,cursor,kilo"
+
+
+def _global(config: Path, cwd: Path, *argv: str) -> int:
+    command, *rest = argv
+    if command in {"install", "update"}:
+        rest = ["--config", str(config), *rest]
+    return main(["hooks", command, "--global", *rest], cwd=cwd)
+
+
+def test_global_hook_lifecycle_keeps_state_outside_home(env, isolated_home, capsys) -> None:
+    _, project, config = env
+    home, state = isolated_home["home"], isolated_home["state"]
+    settings = home / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps({"model": "opus"}), encoding="utf-8")
+
+    assert _global(config, project, "install", "--agent", GLOBAL_AGENTS, "nested_rules") == 0
+    out = capsys.readouterr().out
+    assert "install\tnested_rules\tclaude\t~/.claude/hooks/nested_rules.py" in out
+    assert "register\tnested_rules\tcodex\t~/.codex/hooks.json PreToolUse [^Bash$]" in out
+    for path in (
+        ".claude/hooks/nested_rules.py",
+        ".codex/hooks/nested_rules.py",
+        ".cursor/hooks/nested_rules.py",
+        ".config/kilo/plugin/nested_rules.ts",
+    ):
+        assert (home / path).is_file(), path
+    assert not (project / ".claude").exists()
+    assert not (home / ".skill-tools").exists()
+
+    home_posix = home.as_posix()
+    claude = _json(settings)
+    assert claude["model"] == "opus"
+    entry = claude["hooks"]["PreToolUse"][0]["hooks"][0]
+    assert entry["args"] == [f"{home_posix}/.claude/hooks/nested_rules.py"]
+    codex = _json(home / ".codex" / "hooks.json")["hooks"]["PreToolUse"][0]["hooks"][0]
+    assert f"'{home_posix}/.codex/hooks/nested_rules.py'" in codex["command"]
+    cursor = _json(home / ".cursor" / "hooks.json")["hooks"]["postToolUse"][0]
+    assert cursor["command"] == "python hooks/nested_rules.py"
+
+    manifest = json.loads((state / "manifest.json").read_text(encoding="utf-8"))
+    assert {entry["agent"] for entry in manifest["hooks"]} == {"claude", "codex", "cursor", "kilo"}
+    assert Path(manifest["hooks"][0]["source"]["path"]).is_absolute()
+
+    assert _global(config, project, "installed") == 0
+    assert "nested_rules\tclaude\t.claude/hooks" in capsys.readouterr().out
+    assert main(["hooks", "installed"], cwd=project) == 0
+    assert "(no managed hooks)" in capsys.readouterr().out
+
+    # Restoring the edited file backs it up in the state directory, never under home.
+    hook_file = home / ".claude" / "hooks" / "nested_rules.py"
+    hook_file.write_text("edited\n", encoding="utf-8")
+    assert _global(config, project, "update", "--force", "--agent", "claude") == 0
+    assert "unchanged\tnested_rules\tclaude\t~/.claude/hooks" in capsys.readouterr().out
+    assert hook_file.read_text(encoding="utf-8") != "edited\n"
+    assert not (state / "transaction.json").exists()
+    assert not (home / ".skill-tools").exists()
+
+    assert _global(config, project, "remove") == 0
+    capsys.readouterr()
+    assert _json(settings) == {"model": "opus"}
+    assert not (home / ".codex" / "hooks.json").exists()
+    assert not (home / ".config" / "kilo" / "plugin" / "nested_rules.ts").exists()
+    assert json.loads((state / "manifest.json").read_text(encoding="utf-8"))["hooks"] == []
+
+
+def test_global_refuses_antigravity_and_non_distributable_hooks(env, isolated_home, capsys) -> None:
+    _, project, config = env
+    home = isolated_home["home"]
+    assert _global(config, project, "install", "--agent", "claude,antigravity", "nested_rules") == 2
+    assert "antigravity" in capsys.readouterr().err
+    assert _global(config, project, "install", "--agent", "claude", "repo_only") == 2
+    assert "not distributable" in capsys.readouterr().err
+    assert not (home / ".claude").exists()
+
+    # From hooks.default_agents, an unsupported agent is only skipped.
+    config.write_text(
+        config.read_text(encoding="utf-8") + "hooks:\n  default_agents: [claude, antigravity]\n",
+        encoding="utf-8",
+    )
+    assert _global(config, project, "install", "--dry-run", "nested_rules") == 0
+    captured = capsys.readouterr()
+    assert "skipping those agents" in captured.err
+    assert "would install\tnested_rules\tclaude\t~/.claude/hooks/nested_rules.py" in captured.out
+    assert "antigravity" not in captured.out
+
+
+def test_hooks_install_refuses_a_project_rooted_at_home(env, isolated_home, capsys) -> None:
+    _, _, config = env
+    home = isolated_home["home"]
+    assert _run(home, config, "install", "--agent", "claude", "nested_rules") == 2
+    assert "hooks install --global" in capsys.readouterr().err
+    assert _run(home, config, "update") == 2
+    assert main(["hooks", "installed"], cwd=home) == 0
+    assert main(["hooks", "remove"], cwd=home) == 0
+    assert not (home / ".claude").exists()
+
+
+def test_registration_file_changed_meanwhile_stops_the_change(
+    env, isolated_home, monkeypatch, capsys
+) -> None:
+    _, project, config = env
+    settings = isolated_home["home"] / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text("{}", encoding="utf-8")
+    from skill_tools.hooks import install as hook_install
+
+    original = hook_install._Planner.finish
+
+    def finish_while_the_agent_writes(self):
+        changes = original(self)
+        settings.write_text('{"theme": "dark"}', encoding="utf-8")
+        return changes
+
+    monkeypatch.setattr(hook_install._Planner, "finish", finish_while_the_agent_writes)
+    assert _global(config, project, "install", "--agent", "claude", "nested_rules") == 4
+    assert "changed while skill-tools was editing it" in capsys.readouterr().err
+    assert settings.read_text(encoding="utf-8") == '{"theme": "dark"}'
+    assert not (isolated_home["home"] / ".claude" / "hooks").exists()
+
+
+def test_interrupted_global_file_transaction_restores_from_the_state_dir(
+    isolated_home,
+) -> None:
+    import hashlib
+
+    home, state = isolated_home["home"], isolated_home["state"]
+    (state / "backups").mkdir(parents=True)
+    (state / "backups" / "b1").write_text('{"old": true}', encoding="utf-8")
+    settings = home / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text('{"new": true}', encoding="utf-8")
+    (home / "created.py").write_text("created", encoding="utf-8")
+    journal = {
+        "schemaVersion": 3,
+        "phase": "applying",
+        "manifestBefore": None,
+        "operations": [
+            {
+                "kind": "file",
+                "target": ".claude/settings.json",
+                "backup": "backups/b1",
+                "hadTarget": True,
+                "newHash": None,
+                "applied": True,
+            },
+            {
+                "kind": "file",
+                "target": "created.py",
+                "backup": None,
+                "hadTarget": False,
+                "newHash": hashlib.sha256(b"created").hexdigest(),
+                "applied": True,
+            },
+        ],
+    }
+    (state / "transaction.json").write_text(json.dumps(journal), encoding="utf-8")
+
+    assert main(["hooks", "installed", "--global"], cwd=home.parent) == 0
+
+    assert settings.read_text(encoding="utf-8") == '{"old": true}'
+    assert not (home / "created.py").exists()
+    assert not (state / "transaction.json").exists()
+    assert not (state / "backups" / "b1").exists()

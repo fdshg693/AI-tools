@@ -1,7 +1,0 @@
-config/jobs.yaml
-config/jobs.yml
-
-__pycache__/
-*.pyc[od]
-*.egg-info/
-.pytest_cache/

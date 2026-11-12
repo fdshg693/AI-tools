@@ -147,7 +147,9 @@ def make_repository(root: Path) -> Path:
     beta.mkdir(parents=True)
     (beta / "SKILL.md").write_bytes(skill_document("beta"))
     (root / "meta-plugins" / "skills" / "private").mkdir(parents=True)
-    (root / "meta-plugins" / "skills" / "private" / "SKILL.md").write_bytes(skill_document("private"))
+    (root / "meta-plugins" / "skills" / "private" / "SKILL.md").write_bytes(
+        skill_document("private")
+    )
     return root
 
 
@@ -172,6 +174,30 @@ def make_unit_vector(first: float) -> list[float]:
 @pytest.fixture(autouse=True)
 def isolated_run_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILL_TOOLS_LOG_DIR", str(tmp_path / "run-logs"))
+
+
+@pytest.fixture
+def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """Point home, config, cache, and state locations at tmp directories.
+
+    ``SKILL_TOOLS_HOME`` is deliberately *outside* the fake home so code that
+    assumes the global state directory lives under the install root fails here
+    (the Windows default %LOCALAPPDATA% is inside home and would hide it).
+    """
+
+    home = tmp_path / "home"
+    state_home = tmp_path / "skill-tools-home"
+    home.mkdir()
+    for name in ("HOME", "USERPROFILE"):
+        monkeypatch.setenv(name, str(home))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg-state"))
+    monkeypatch.setenv("SKILL_TOOLS_HOME", str(state_home))
+    monkeypatch.delenv("SKILL_TOOLS_CONFIG", raising=False)
+    return {"home": home.resolve(), "state": (state_home / "global").resolve()}
 
 
 @pytest.fixture

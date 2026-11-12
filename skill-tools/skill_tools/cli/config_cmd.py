@@ -10,14 +10,19 @@ from pathlib import Path
 
 from ..config import FB_DIR_ENV, initialize_user_config, source_identity
 from ..index.build import read_index
+from ..install.scope import InstallScope
 from ..locations import package_dir, pyproject_path, readme_path
 from ..models import IndexError
 from .arguments import (
     _add_runtime_arguments,
+    _add_scope_arguments,
     _configured_source_description,
     _index_matches_configured_source,
     _load_runtime_config,
 )
+
+
+CONFIG_FILE_NAME = "skill-tools.yaml"
 
 
 def _add_config_command(commands) -> None:
@@ -27,20 +32,41 @@ def _add_config_command(commands) -> None:
         "show", help="show the selected config, source, and index path"
     )
     _add_runtime_arguments(show)
+    _add_scope_arguments(show, global_option=True)
     init = config_commands.add_parser(
         "init", help="create the global config file with explicit default values"
     )
     init.add_argument("--force", action="store_true", help="replace an existing global config")
 
 
-def _command_config_show(args: argparse.Namespace, cwd: Path) -> int:
-    config = _load_runtime_config(args, cwd)
+def _command_config_show(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
+    config = _load_runtime_config(args, cwd, scope=scope)
     identity = source_identity(config)
     print(f"config: {config.config_path if config.config_path else '(defaults)'}")
+    cwd_yaml = cwd / CONFIG_FILE_NAME
+    project_yaml = None if scope.config_dir is None else scope.config_dir / CONFIG_FILE_NAME
     if config.global_config_path is not None:
         state = "found" if config.global_config_exists else "missing; using embedded defaults"
         print(f"config.global: {config.global_config_path} ({state})")
-        print(f"config.cwd: {config.cwd_config_path}")
+        if scope.is_global:
+            print(f"config.cwd: {cwd_yaml} (not read: --global)")
+        elif scope.explicit:
+            print(f"config.cwd: {cwd_yaml} (not read: --project-dir)")
+        else:
+            print(f"config.cwd: {config.cwd_config_path}")
+        if project_yaml is not None:
+            found = "found" if project_yaml.is_file() else "missing"
+            print(f"config.project: {project_yaml} ({found})")
+    elif scope.explicit and project_yaml is not None:
+        # --config / SKILL_TOOLS_CONFIG is a single file; the project's yaml is not merged.
+        print(f"config.project: {project_yaml} (not read: explicit config file)")
+    print(f"scope: {scope.kind}")
+    print(f"scope.root: {scope.root}")
+    print(f"scope.state_dir: {scope.state_dir}")
+    if scope.is_global:
+        print(f"skills.global_destination: {config.global_destination}")
+        for name in config.targets:
+            print(f"targets.{name}.global_destination: {config.global_destination_for(name)}")
     print(f"source.type: {identity['type']}")
     if identity["type"] == "local":
         print(f"source.path: {identity['path']}")

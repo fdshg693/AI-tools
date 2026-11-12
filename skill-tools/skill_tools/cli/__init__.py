@@ -10,6 +10,7 @@ from collections.abc import Callable, Sequence
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
+from ..install.scope import resolve_scope
 from ..locations import project_root
 from ..models import (
     CatalogError,
@@ -113,14 +114,15 @@ def run(
     working_directory = (cwd or Path.cwd()).resolve()
     if args.command == "list-skills":
         return _command_list(args, working_directory)
-    if args.command == "install-skills":
-        return _command_install(args, working_directory)
-    if args.command == "installed-skills":
-        return _command_installed(args, working_directory)
-    if args.command == "update-skills":
-        return _command_update(args, working_directory)
-    if args.command == "remove-skills":
-        return _command_remove(args, working_directory)
+    scoped_skill_commands = {
+        "install-skills": _command_install,
+        "installed-skills": _command_installed,
+        "update-skills": _command_update,
+        "remove-skills": _command_remove,
+    }
+    if args.command in scoped_skill_commands:
+        scope = resolve_scope(args, working_directory)
+        return scoped_skill_commands[args.command](args, working_directory, scope)
     if args.command == "list-tools":
         return _command_list_tools(args, working_directory)
     if args.command == "install-tools":
@@ -128,15 +130,17 @@ def run(
     if args.command == "workflow":
         return _command_workflow(args, working_directory)
     if args.command == "hooks":
+        hooks_command = getattr(args, "hooks_command", None)
+        if hooks_command == "list":
+            return _command_hooks_list(args, working_directory)
         handler = {
-            "list": _command_hooks_list,
             "install": _command_hooks_install,
             "installed": _command_hooks_installed,
             "update": _command_hooks_update,
             "remove": _command_hooks_remove,
-        }.get(getattr(args, "hooks_command", None))
+        }.get(hooks_command)
         if handler is not None:
-            return handler(args, working_directory)
+            return handler(args, working_directory, resolve_scope(args, working_directory))
     if args.command == "search":
         return _command_search(args, working_directory, embedder)
     if args.command == "build-index":
@@ -144,7 +148,7 @@ def run(
     if args.command == "self-update":
         return _command_self_update(args, working_directory)
     if args.command == "config" and getattr(args, "config_command", None) == "show":
-        return _command_config_show(args, working_directory)
+        return _command_config_show(args, working_directory, resolve_scope(args, working_directory))
     if args.command == "config" and getattr(args, "config_command", None) == "init":
         return _command_config_init(args)
     raise SkillToolsError(f"unknown command: {args.command}")
