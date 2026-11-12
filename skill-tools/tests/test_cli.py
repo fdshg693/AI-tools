@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from skill_tools.cli import main
+from skill_tools.config import user_config_path
 from skill_tools.repo_tools import parse_repo_tools
 from skill_tools.source import GitHubSource, LocalSource, display_skill_path
 
@@ -490,9 +491,7 @@ def test_config_init_creates_global_config(
 
     captured = capsys.readouterr()
     assert "Created global config:" in captured.out
-    written = (tmp_path / "appdata" / "skill-tools" / "skill-tools.yaml").read_text(
-        encoding="utf-8"
-    )
+    written = user_config_path().read_text(encoding="utf-8")
     assert "owner: fdshg693" in written
     assert f"self_skill: {SELF_SKILL_DEFAULT}" in written
 
