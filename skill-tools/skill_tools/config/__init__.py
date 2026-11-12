@@ -42,8 +42,19 @@ class FbConfig:
     path: Path
 
 
+@dataclass(frozen=True)
+class StoreConfig:
+    """``store:`` settings: where link installs keep the shared skill copies."""
+
+    path: Path
+
+
 def _default_fb_config() -> FbConfig:
     return FbConfig(default_fb_path())
+
+
+def _default_store_config() -> StoreConfig:
+    return StoreConfig(store_dir())
 
 
 CLAUDE_SETTINGS_FILES = {
@@ -74,6 +85,7 @@ class SkillToolsConfig:
     target_destinations: dict[str, dict[str, str]] = field(default_factory=dict)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     fb: FbConfig = field(default_factory=_default_fb_config)
+    store: StoreConfig = field(default_factory=_default_store_config)
     self_skill: str = DEFAULT_SELF_SKILL
     config_path: Path | None = None
     global_config_path: Path | None = None
@@ -118,6 +130,22 @@ def _cache_home() -> Path:
     return Path.home() / ".cache" / "skill-tools"
 
 
+def _state_home() -> Path:
+    """skill-tools' state root: never the cache directory (clearing a cache must keep state)."""
+
+    override = os.environ.get("SKILL_TOOLS_HOME")
+    if override:
+        return Path(override).expanduser().resolve()
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data).expanduser().resolve() / "skill-tools"
+    xdg_state = os.environ.get("XDG_STATE_HOME")
+    if xdg_state:
+        return Path(xdg_state).expanduser().resolve() / "skill-tools"
+    return Path.home().resolve() / ".local" / "state" / "skill-tools"
+
+
 def global_state_dir() -> Path:
     """Manifest, journal, and backups for ``--global`` installs.
 
@@ -126,17 +154,17 @@ def global_state_dir() -> Path:
     installed skills).
     """
 
-    override = os.environ.get("SKILL_TOOLS_HOME")
-    if override:
-        return Path(override).expanduser().resolve() / "global"
-    if os.name == "nt":
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        if local_app_data:
-            return Path(local_app_data).expanduser().resolve() / "skill-tools" / "global"
-    xdg_state = os.environ.get("XDG_STATE_HOME")
-    if xdg_state:
-        return Path(xdg_state).expanduser().resolve() / "skill-tools" / "global"
-    return Path.home().resolve() / ".local" / "state" / "skill-tools" / "global"
+    return _state_home() / "global"
+
+
+def store_dir() -> Path:
+    """Default store that link installs point at (``store.path`` overrides it).
+
+    Beside ``global_state_dir()`` and out of the cache directory for the same
+    reason: clearing a cache must not break every project's links.
+    """
+
+    return _state_home() / "store"
 
 
 def default_index_path() -> Path:
@@ -305,14 +333,15 @@ def _normalize_paths(data: dict[str, Any], base_dir: Path) -> dict[str, Any]:
             if not index_path.is_absolute()
             else index_path.resolve()
         )
-    feedback = normalized.get("fb")
-    if isinstance(feedback, dict) and isinstance(feedback.get("path"), str) and feedback["path"]:
-        feedback_path = Path(feedback["path"]).expanduser()
-        feedback["path"] = str(
-            (base_dir / feedback_path).resolve()
-            if not feedback_path.is_absolute()
-            else feedback_path.resolve()
-        )
+    for key in ("fb", "store"):
+        section = normalized.get(key)
+        if isinstance(section, dict) and isinstance(section.get("path"), str) and section["path"]:
+            section_path = Path(section["path"]).expanduser()
+            section["path"] = str(
+                (base_dir / section_path).resolve()
+                if not section_path.is_absolute()
+                else section_path.resolve()
+            )
     return normalized
 
 
@@ -503,11 +532,31 @@ def _parse_fb(data: object, path: Path | None) -> FbConfig:
     return FbConfig(fb_path.resolve())
 
 
+def _parse_store(data: object, path: Path | None) -> StoreConfig:
+    if data is None:
+        return _default_store_config()
+    if not isinstance(data, dict):
+        raise ConfigError("store must be a mapping")
+    unknown = set(data) - {"path"}
+    if unknown:
+        raise ConfigError(f"store contains unknown keys: {', '.join(sorted(unknown))}")
+    raw_path = data.get("path")
+    if raw_path is None:
+        return _default_store_config()
+    if not isinstance(raw_path, str) or not raw_path:
+        raise ConfigError("store.path must be a non-empty string")
+    store_path = Path(raw_path).expanduser()
+    if not store_path.is_absolute():
+        store_path = (path.parent if path is not None else Path.cwd()) / store_path
+    return StoreConfig(store_path.resolve())
+
+
 def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
     allowed = {
         "source",
         "index",
         "fb",
+        "store",
         "skills",
         "targets",
         "global_destination",
@@ -570,6 +619,7 @@ def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
         target_destinations=target_destinations,
         hooks=_parse_hooks(data.get("hooks"), path.name if path else "skill-tools.yaml"),
         fb=_parse_fb(data.get("fb"), path),
+        store=_parse_store(data.get("store"), path),
         self_skill=_parse_self_skill(data.get("self_skill", DEFAULT_SELF_SKILL)),
         config_path=path,
     )

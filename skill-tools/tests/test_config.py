@@ -11,6 +11,7 @@ from skill_tools.config import (
     global_state_dir,
     initialize_user_config,
     load_config,
+    store_dir,
     user_config_path,
 )
 from skill_tools.models import ConfigError, SourceError
@@ -143,6 +144,79 @@ def test_global_state_dir_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert global_state_dir() == expected.resolve()
     # Never the cache directory: clearing a cache must not orphan global installs.
     assert not global_state_dir().is_relative_to((tmp_path / "cache").resolve())
+
+
+def test_store_dir_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SKILL_TOOLS_HOME", str(tmp_path / "st"))
+    assert store_dir() == (tmp_path / "st" / "store").resolve()
+    assert store_dir().parent == global_state_dir().parent
+    monkeypatch.delenv("SKILL_TOOLS_HOME")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    expected = (
+        tmp_path / "local" / "skill-tools" / "store"
+        if os.name == "nt"
+        else tmp_path / "state" / "skill-tools" / "store"
+    )
+    assert store_dir() == expected.resolve()
+    # Never the cache directory: clearing a cache must not break every project's links.
+    assert not store_dir().is_relative_to((tmp_path / "cache").resolve())
+
+
+def _isolate_config_layers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SKILL_TOOLS_HOME", str(tmp_path / "st"))
+    monkeypatch.delenv("SKILL_TOOLS_CONFIG", raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+
+
+def test_store_path_defaults_and_resolves_relative_to_the_config_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_config_layers(tmp_path, monkeypatch)
+    assert load_config(cwd=tmp_path / "work").store.path == (tmp_path / "st" / "store").resolve()
+
+    path = tmp_path / "conf" / "skill-tools.yaml"
+    path.parent.mkdir()
+    path.write_text("store:\n  path: shared/store\n", encoding="utf-8")
+    expected = (tmp_path / "conf" / "shared" / "store").resolve()
+    assert load_config(config_path=path).store.path == expected
+
+    absolute = tmp_path / "abs-store"
+    path.write_text(f"store:\n  path: {absolute.as_posix()}\n", encoding="utf-8")
+    assert load_config(config_path=path).store.path == absolute.resolve()
+
+
+def test_project_store_path_is_relative_to_its_own_layer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate_config_layers(tmp_path, monkeypatch)
+    global_path = user_config_path()
+    global_path.parent.mkdir(parents=True)
+    global_path.write_text("store:\n  path: global-store\n", encoding="utf-8")
+    assert (
+        load_config(cwd=tmp_path / "work").store.path
+        == (global_path.parent / "global-store").resolve()
+    )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "skill-tools.yaml").write_text("store:\n  path: .store\n", encoding="utf-8")
+    assert load_config(cwd=project).store.path == (project / ".store").resolve()
+
+
+def test_store_rejects_unknown_keys_and_invalid_paths(tmp_path: Path) -> None:
+    unknown = tmp_path / "unknown.yaml"
+    unknown.write_text("store:\n  other: value\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="store contains unknown keys"):
+        load_config(config_path=unknown)
+
+    for text in ("store:\n  path: ''\n", "store:\n  path: 1\n", "store: []\n"):
+        path = tmp_path / "invalid.yaml"
+        path.write_text(text, encoding="utf-8")
+        with pytest.raises(ConfigError, match="store"):
+            load_config(config_path=path)
 
 
 def test_default_cache_paths_are_platform_specific(monkeypatch: pytest.MonkeyPatch) -> None:
