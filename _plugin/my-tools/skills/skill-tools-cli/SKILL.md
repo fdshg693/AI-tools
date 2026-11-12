@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.8
+  version: 1.2.9
 ---
 
 # skill-tools の使い方
@@ -209,7 +209,7 @@ skill-tools hooks installed --global
 - **登録ファイルで書き換えるのはskill-toolsが追加したエントリだけ。** 利用者自身のエントリは保持する。同じフックファイルを実行する管理外エントリがあると二重発火の警告が出る（自動削除しない）ので、どちらを残すかユーザーに確認する
 - `update` / `remove`は配置ファイルの変更・登録エントリの手編集をdriftとして中止する。`--force`の前に`--dry-run`で対象を確認する。seed設定は利用者が編集する前提なので追跡せず、`remove`でも消さない
 - 配置後にフックが発火しない場合は、AIツールのセッション再起動を案内する
-- **全プロジェクトで使うフックは`--global`。** 配置先は`~/.claude/hooks/`・`~/.codex/hooks/`・`~/.cursor/hooks/`・`~/.config/kilo/plugin/`、登録先は`~/.claude/settings.json`・`~/.codex/hooks.json`・`~/.cursor/hooks.json`で、コマンド行は絶対パスになる。`installed` / `update` / `remove`にも`--global`を付ける。Antigravityを`--agent`で指定したり`distributable: false`のフックを選んだりすると終了コード`2`
+- **全プロジェクトで使うフックは`--global`。** 配置先は`~/.claude/hooks/`・`~/.codex/hooks/`・`~/.cursor/hooks/`・`~/.gemini/config/hooks/`・`~/.config/kilo/plugin/`、登録先は`~/.claude/settings.json`・`~/.codex/hooks.json`・`~/.cursor/hooks.json`・`~/.gemini/config/hooks.json`で、コマンド行は絶対パスになる（Cursor は `~/.cursor/` 相対）。`installed` / `update` / `remove`にも`--global`を付ける。`distributable: false`のフックを選ぶと終了コード`2`
 - `--global`で`~/.claude/settings.json`を書き換えるときは、**Claude Codeを閉じてから実行するようユーザーに案内し、先に`--dry-run`を見せる**。実行中のClaude Codeが同じファイルを書くと、skill-toolsは変更を検知して何も書かずに止まる（終了コード`4`）
 - プロジェクトと`--global`の両方に同じフックを入れると二重に発火する（skill-toolsは検出しない）。どちらか一方にする
 - ホーム（またはその親）をプロジェクトのルートにした`hooks install` / `hooks update`は終了コード`2`で止まり、`--global`を案内する

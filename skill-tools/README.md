@@ -137,16 +137,16 @@ hooks:
 
 `--global` では次の場所を使います。`settings_file: local` と `destination` はプロジェクト専用で無視し、配置先は `hooks.agents.<agent>.global_destination`（ホーム相対）で変えられます。
 
-| agent       | `--global` の配置先      | 登録ファイル              | 登録するコマンド                                                                                         |
-| ----------- | ------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| claude      | `~/.claude/hooks/`       | `~/.claude/settings.json` | `command` + `args`（配置したファイルの絶対パス。`uv-project` の `--project` もホームの絶対パス）         |
-| codex       | `~/.codex/hooks/`        | `~/.codex/hooks.json`     | 絶対パスを POSIX の `command` は `'...'`、PowerShell の `commandWindows` は `'...'`（`'` は `''`）で囲む |
-| cursor      | `~/.cursor/hooks/`       | `~/.cursor/hooks.json`    | `~/.cursor/` 相対（`hooks/<file>`）。配置先を `.cursor/` の外にしたときは絶対パス                        |
-| kilo        | `~/.config/kilo/plugin/` | なし                      | 配置だけで有効                                                                                           |
-| antigravity | 非対応（終了コード `2`） | —                         | ユーザー全体のフックの場所が確認できないため                                                             |
+| agent       | `--global` の配置先       | 登録ファイル                  | 登録するコマンド                                                                                         |
+| ----------- | ------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
+| claude      | `~/.claude/hooks/`        | `~/.claude/settings.json`     | `command` + `args`（配置したファイルの絶対パス。`uv-project` の `--project` もホームの絶対パス）         |
+| codex       | `~/.codex/hooks/`         | `~/.codex/hooks.json`         | 絶対パスを POSIX の `command` は `'...'`、PowerShell の `commandWindows` は `'...'`（`'` は `''`）で囲む |
+| cursor      | `~/.cursor/hooks/`        | `~/.cursor/hooks.json`        | `~/.cursor/` 相対（`hooks/<file>`）。配置先を `.cursor/` の外にしたときは絶対パス                        |
+| antigravity | `~/.gemini/config/hooks/` | `~/.gemini/config/hooks.json` | 絶対パスの `type` + `command`。キーはフック id のケバブケース。matcher があるイベントだけグループで包む  |
+| kilo        | `~/.config/kilo/plugin/`  | なし                          | 配置だけで有効                                                                                           |
 
 - 絶対パスはインストール時に1回だけ計算してエントリに書きます（パスは `/` 区切り）。Windows で入れた Codex のエントリは POSIX 側の `command` にも Windows のパスが入ります。ホームの場所が変わったら `hooks update --global` で入れ直します。
-- `--global` で `--agent antigravity` を指定すると終了コード `2`、`hooks.default_agents` 経由なら警告して飛ばします。`distributable: false` のフックは `--global` では常に終了コード `2` です。
+- `distributable: false` のフックは `--global` では常に終了コード `2` です。ユーザー全体の場所が無いエージェントを `--agent` で指定したときも終了コード `2`、`hooks.default_agents` 経由なら警告して飛ばします。
 - **`~/.claude/settings.json` は実行中の Claude Code 自身も書き換えます。** skill-tools は登録ファイルを書く直前に読み直し、読んでから内容が変わっていれば何も書かずに終了コード `4` で止まります。Claude Code を閉じてから実行し、ファイル全体が整形し直されるので先に `--dry-run` で確認してください。
 - プロジェクトと `--global` の両方に同じフックを入れると二重に発火します。二重発火の警告は1つの登録ファイルの中しか見ないので、この組み合わせは検出しません。どちらか一方に入れてください。
 

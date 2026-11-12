@@ -12,10 +12,11 @@ Each agent registers command hooks in its own JSON file with its own nesting:
 
 With ``--global`` the files go under the home directory and the user-wide
 registration files are edited instead (``~/.claude/settings.json``,
-``~/.codex/hooks.json``, ``~/.cursor/hooks.json``). Their command lines name
-the placed file by absolute path (Cursor: relative to ``~/.cursor/``), computed
-once at install time. Antigravity has no known user-wide hook file and is
-refused.
+``~/.codex/hooks.json``, ``~/.cursor/hooks.json``,
+``~/.gemini/config/hooks.json``). Their command lines name the placed file by
+absolute path (Cursor: relative to ``~/.cursor/``), computed once at install
+time. Antigravity's user-wide file is the one documented for the App, CLI, and
+IDE.
 
 skill-tools owns only the entries it inserted. They are identified by the
 SHA-256 of their canonical JSON, recorded in the manifest, so removal never
@@ -51,6 +52,7 @@ GLOBAL_INSTALL_DIRS = {
     "claude": ".claude/hooks",
     "codex": ".codex/hooks",
     "cursor": ".cursor/hooks",
+    "antigravity": ".gemini/config/hooks",
     "kilo": ".config/kilo/plugin",
 }
 """Home-relative hook directories for ``--global``; agents missing here are refused."""
@@ -58,6 +60,7 @@ _GLOBAL_REGISTRATION_FILES = {
     "claude": ".claude/settings.json",
     "codex": ".codex/hooks.json",
     "cursor": ".cursor/hooks.json",
+    "antigravity": ".gemini/config/hooks.json",
 }
 _CURSOR_HOME = ".cursor/"
 _GIT_ROOT = "$(git rev-parse --show-toplevel)"
@@ -192,6 +195,12 @@ def _global_command_fields(agent: str, runner: str, main_path: str, home: Path) 
         }
     if agent == "cursor":
         return {"command": " ".join([*_runner_words(runner, _quote(home_posix)), _quote(path)])}
+    if agent == "antigravity":
+        # Same single command string as the project entry; the path is absolute.
+        return {
+            "type": "command",
+            "command": " ".join([*_runner_words(runner, _quote(home_posix)), _quote(path)]),
+        }
     raise InstallError(f"{agent} hooks cannot be registered with --global")
 
 
