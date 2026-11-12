@@ -238,3 +238,9 @@ def test_project_entries_keep_their_command_text() -> None:
     assert spaced["command"] == f'{PY} "my hooks/x.py"'
     with pytest.raises(InstallError, match="double quote"):
         build_entry("cursor", "python", 'a"b/x.py', {"event": "stop"})
+
+
+def test_codex_entry_passes_async_through() -> None:
+    entry = build_entry("codex", "python", ".codex/hooks/x.py", {"event": "Stop", "async": True})
+
+    assert entry["async"] is True
