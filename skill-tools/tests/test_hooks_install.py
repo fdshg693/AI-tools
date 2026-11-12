@@ -106,7 +106,7 @@ def test_install_places_registers_and_remove_restores_user_files(env, capsys) ->
     assert "nested-rules" in _json(project / ".agents" / "hooks.json")
 
     manifest = _manifest(project)
-    assert manifest["schemaVersion"] == 2
+    assert manifest["schemaVersion"] == 3
     assert {(e["hookId"], e["agent"]) for e in manifest["hooks"]} == {
         ("nested_rules", agent) for agent in ALL_AGENTS.split(",")
     }
@@ -326,7 +326,7 @@ def test_skill_operations_keep_hook_records(env, capsys) -> None:
     assert main(["remove-skills", "alpha"], cwd=project) == 0
 
     manifest = _manifest(project)
-    assert manifest["schemaVersion"] == 2
+    assert manifest["schemaVersion"] == 3
     assert manifest["entries"] == []
     assert [entry["hookId"] for entry in manifest["hooks"]] == ["nested_rules"]
 
