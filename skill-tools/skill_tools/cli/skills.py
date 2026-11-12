@@ -19,8 +19,9 @@ from ..install.installer import (
     load_project_manifest,
     recover_transaction,
 )
-from ..install.manifest import verify_entry
-from ..models import InstallError
+from ..install.manifest import link_store_root, verify_entry, verify_managed_entry
+from ..install.store import Store, install_links
+from ..models import ConfigError, InstallError
 from ..source import display_skill_path
 from ..install.scope import InstallScope, ensure_project_root_allowed
 from .arguments import (
@@ -114,6 +115,13 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
     root, state_dir = scope.root, scope.state_dir
     with _project_install_lock(root, state_dir=state_dir):
         recover_transaction(root, state_dir=state_dir)
+    # `--mode` and the `install_mode` setting arrive with the CLI step; copy until then.
+    mode = getattr(args, "mode", None) or "copy"
+    if mode == "link" and scope.is_global:
+        raise ConfigError(
+            "--mode link cannot be used with --global (the user-wide location is a single "
+            "place, so linking it to the store gains nothing)"
+        )
     config = _load_runtime_config(args, cwd, scope=scope)
     source = create_source(config)
     selectors = [config.self_skill if token == SELF_SELECTOR else token for token in args.skills]
@@ -145,10 +153,40 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
                 f"{action}\t{path}\t{item.bundle.canonical_id}"
                 f"\t{item.target_name}\t{relative_target}"
             )
+    store = Store.from_config(config)
+    if mode == "link":
+        store.ensure_outside(root, "project root")
+        for item in plan:
+            store.ensure_outside(item.target.parent, "skill destination")
     if args.dry_run:
         return 0
+    previous = {entry["installPath"].casefold(): entry for entry in _managed_entries(scope)}
+    if mode == "link":
+        install_links(store, source, plan, root, overwrite=args.overwrite, state_dir=state_dir)
+        return 0
     execute_install(source, plan, root, overwrite=args.overwrite, state_dir=state_dir)
+    # Copies replaced links: their store entries lose these referrers.
+    unlinked = [
+        entry["installPath"]
+        for item in plan
+        if (entry := previous.get(item.target.relative_to(root).as_posix().casefold()))
+        and entry["mode"] == "link"
+    ]
+    if unlinked:
+        _forget_referrers(store, root, unlinked)
     return 0
+
+
+def _forget_referrers(store: Store, root: Path, install_paths: Sequence[str]) -> None:
+    """Best effort: a record left behind is dropped by `store gc` once no link exists."""
+
+    try:
+        store.remove_referrers(root, install_paths)
+    except (InstallError, OSError) as exc:
+        print(
+            f"warning: could not update the skill store's referrer records: {exc}",
+            file=sys.stderr,
+        )
 
 
 def _select_managed_entries(entries: Sequence[dict], selectors: Sequence[str]) -> tuple[dict, ...]:
@@ -204,13 +242,22 @@ def _command_remove(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
     if not selected:
         print("(no managed skills)")
         return 0
+    stores: dict[Path, list[str]] = {}
     for entry in selected:
-        path = verify_entry(root, entry, force=args.force)
+        path = verify_managed_entry(root, entry, force=args.force)
         action = "would remove" if args.dry_run else "remove"
-        suffix = " (force: directory contents may be deleted)" if args.force else ""
+        if entry["mode"] == "link":
+            suffix = " (link only; the shared store entry is kept)"
+            store_root = link_store_root(path, entry)
+            if store_root is not None:
+                stores.setdefault(store_root, []).append(entry["installPath"])
+        else:
+            suffix = " (force: directory contents may be deleted)" if args.force else ""
         print(f"{action}\t{entry['canonicalId']}\t{scope.display(path)}{suffix}")
     if not args.dry_run:
         execute_remove(root, selected, force=args.force, state_dir=scope.state_dir)
+        for store_root, paths in stores.items():
+            _forget_referrers(Store(store_root), root, paths)
     return 0
 
 

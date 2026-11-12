@@ -28,7 +28,7 @@ import re
 import time
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -38,12 +38,13 @@ from ..models import ConfigError, InstallError, SkillBundle
 from .installer import (
     InstallPlan,
     _project_install_lock,
+    execute_link_install,
     execute_install_locked,
     execute_remove_locked,
     load_project_manifest,
     recover_transaction,
 )
-from .manifest import MANIFEST_RELATIVE_PATH, _safe_relative, verify_entry
+from .manifest import MANIFEST_RELATIVE_PATH, _safe_relative, link_store_root, verify_entry
 
 REFERRERS_FILE = "referrers.json"
 REFERRERS_SCHEMA_VERSION = 1
@@ -409,6 +410,31 @@ class Store:
             for _ in entry.referrers
         )
 
+    def record_referrers(self, referrers: Iterable[Referrer]) -> None:
+        """Record referrers for entries that already exist (others are skipped).
+
+        Used to put back the records of links a failed project transaction left
+        in place; new entries get their first referrer through ``ensure``.
+        """
+
+        items = list(referrers)
+        if not items or not self.root.is_dir():
+            return
+        with self._lock():
+            recover_transaction(self.root, state_dir=self.state_dir)
+            existing = self._entries_by_path()
+            now = time.time()
+            stamped = [
+                replace(item, project_root=Path(os.path.normpath(item.project_root)), added_at=now)
+                for item in items
+                if item.store_path.casefold() in existing
+            ]
+            if not stamped:
+                return
+            replaced = {item.key() for item in stamped}
+            kept = [item for item in self._load_referrers() if item.key() not in replaced]
+            self._write_referrers([*kept, *stamped])
+
     def remove_referrers(self, project_root: Path, install_paths: Iterable[str]) -> None:
         """Forget the records for links a project removed (the entries stay until GC)."""
 
@@ -479,3 +505,85 @@ def _remove_empty_parents(root: Path, paths: Iterable[Path]) -> None:
             except OSError:
                 break
             current = current.parent
+
+
+def install_links(
+    store: Store,
+    source,
+    plan: Sequence[InstallPlan],
+    project_root: Path,
+    *,
+    overwrite: bool,
+    state_dir: Path | None = None,
+) -> tuple[InstallPlan, ...]:
+    """Link install: ensure the store entries, then place the links in the project.
+
+    Two transactions, never nested: the store (entries + referrer records) under
+    the store lock, then the links and the project manifest under the project
+    lock. If the project step fails, the referrer records it added are taken
+    back and the records of links it left in place are restored; a record that
+    survives anyway is harmless (``collect_garbage`` drops it once its grace
+    period is over and no link exists).
+    """
+
+    root = project_root.resolve()
+    store.ensure_outside(root, "project root")
+    for item in plan:
+        # The parent: an existing link at the target would resolve into the store.
+        store.ensure_outside(item.target.parent, "skill destination")
+    with _project_install_lock(root, state_dir=state_dir):
+        recover_transaction(root, state_dir=state_dir)
+        before = load_project_manifest(root, state_dir=state_dir)["entries"]
+    previous = {entry["installPath"].casefold(): entry for entry in before}
+
+    bundles: dict[str, SkillBundle] = {}
+    for item in plan:
+        bundles.setdefault(item.bundle.canonical_id, item.bundle)
+    relative = {
+        canonical_id: entry_relative_path(source.descriptor, bundle)
+        for canonical_id, bundle in bundles.items()
+    }
+    install_paths = [item.target.relative_to(root).as_posix() for item in plan]
+    referrers = [
+        Referrer(
+            project_root=root,
+            install_path=install_path,
+            canonical_id=item.bundle.canonical_id,
+            store_path=relative[item.bundle.canonical_id],
+        )
+        for item, install_path in zip(plan, install_paths, strict=True)
+    ]
+    entries = {
+        entry.canonical_id: entry
+        for entry in store.ensure(source, tuple(bundles.values()), referrers=referrers)
+    }
+    link_plan = tuple(
+        replace(
+            item,
+            mode="link",
+            store_path=entries[item.bundle.canonical_id].store_path,
+            link_target=entries[item.bundle.canonical_id].path,
+        )
+        for item in plan
+    )
+    try:
+        execute_link_install(
+            source.descriptor, link_plan, root, overwrite=overwrite, state_dir=state_dir
+        )
+    except Exception:
+        restored: list[Referrer] = []
+        for install_path in install_paths:
+            old = previous.get(install_path.casefold())
+            if old is None or old["mode"] != "link":
+                continue
+            link = root.joinpath(*PurePosixPath(install_path).parts)
+            old_root = link_store_root(link, old)
+            if old_root is not None and same_path(old_root, store.root):
+                restored.append(Referrer(root, install_path, old["canonicalId"], old["store"]))
+        try:
+            store.remove_referrers(root, install_paths)
+            store.record_referrers(restored)
+        except InstallError:
+            pass  # stale records are only kept until `store gc` checks them
+        raise
+    return link_plan
