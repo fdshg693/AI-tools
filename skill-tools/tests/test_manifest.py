@@ -10,6 +10,7 @@ from skill_tools.install.manifest import (
     empty_manifest,
     load_manifest,
     make_entry,
+    unmanaged_paths,
     verify_entry,
     write_manifest,
 )
@@ -58,7 +59,9 @@ def test_manifest_records_project_relative_files_and_source(tmp_path: Path) -> N
     assert entry["installPath"] == ".agents/skills/alpha"
 
 
-def test_verify_entry_rejects_modified_missing_and_extra_files(tmp_path: Path) -> None:
+def test_verify_entry_rejects_modified_and_missing_but_ignores_unmanaged_files(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "project"
     target = root / ".claude" / "skills" / "alpha"
     target.mkdir(parents=True)
@@ -87,9 +90,8 @@ def test_verify_entry_rejects_modified_missing_and_extra_files(tmp_path: Path) -
     verify_entry(root, entry)
 
     (target / "notes.txt").write_text("user file\n", encoding="utf-8")
-    with pytest.raises(InstallError, match="extra"):
-        verify_entry(root, entry)
-    verify_entry(root, entry, force=True)
+    verify_entry(root, entry)
+    assert unmanaged_paths(target, entry) == ["notes.txt"]
     (target / "notes.txt").unlink()
     (target / "SKILL.md").write_text("edited\n", encoding="utf-8")
     with pytest.raises(InstallError, match="modified"):
@@ -99,30 +101,71 @@ def test_verify_entry_rejects_modified_missing_and_extra_files(tmp_path: Path) -
         verify_entry(root, entry)
 
 
-def test_verify_entry_rejects_symlinks_even_with_force(tmp_path: Path) -> None:
-    root = tmp_path / "project"
-    target = root / ".claude" / "skills" / "alpha"
-    target.mkdir(parents=True)
-    managed_file = target / "SKILL.md"
-    managed_file.write_bytes(b"managed\n")
-    outside = tmp_path / "outside.txt"
-    outside.write_bytes(b"outside\n")
-    try:
-        (target / "linked.txt").symlink_to(outside)
-    except OSError as exc:
-        pytest.skip(f"symlinks are unavailable: {exc}")
-    entry = {
+def _symlink_entry(files: dict[str, bytes]) -> dict:
+    return {
         "canonicalId": "plugins/alpha/SKILL.md",
         "bundleName": "alpha",
         "target": None,
         "destination": ".claude/skills",
         "installPath": ".claude/skills/alpha",
         "source": {"type": "local", "path": "catalog"},
-        "files": {"SKILL.md": hashlib.sha256(b"managed\n").hexdigest()},
+        "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
     }
+
+
+def test_verify_entry_rejects_symlinked_managed_file_even_with_force(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    target = root / ".claude" / "skills" / "alpha"
+    target.mkdir(parents=True)
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"managed\n")
+    try:
+        (target / "SKILL.md").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
+
+    with pytest.raises(InstallError, match="symlink"):
+        verify_entry(root, _symlink_entry({"SKILL.md": b"managed\n"}), force=True)
+
+
+def test_verify_entry_rejects_symlinked_managed_parent_directory(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    target = root / ".claude" / "skills" / "alpha"
+    target.mkdir(parents=True)
+    (target / "SKILL.md").write_bytes(b"managed\n")
+    outside = tmp_path / "outside-scripts"
+    outside.mkdir()
+    (outside / "run.py").write_bytes(b"print()\n")
+    try:
+        (target / "scripts").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
+    entry = _symlink_entry({"SKILL.md": b"managed\n", "scripts/run.py": b"print()\n"})
 
     with pytest.raises(InstallError, match="symlink"):
         verify_entry(root, entry, force=True)
+
+
+def test_verify_entry_ignores_unmanaged_symlinks_without_descending(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    target = root / ".claude" / "skills" / "alpha"
+    (target / "scripts").mkdir(parents=True)
+    (target / "SKILL.md").write_bytes(b"managed\n")
+    (target / "scripts" / "run.py").write_bytes(b"print()\n")
+    venv_bin = target / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        (venv_bin / "python").symlink_to(tmp_path / "python-outside")
+        (target / "linked-dir").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
+    (target / "scripts" / "__pycache__").mkdir()
+    entry = _symlink_entry({"SKILL.md": b"managed\n", "scripts/run.py": b"print()\n"})
+
+    assert verify_entry(root, entry) == target.resolve()
+    assert unmanaged_paths(target, entry) == [".venv", "linked-dir", "scripts/__pycache__"]
 
 
 @pytest.mark.parametrize("install_path", ["../outside/alpha", "C:/outside/alpha", "/outside/alpha"])

@@ -299,34 +299,68 @@ def resolve_install_path(project_root: Path, entry: Mapping[str, Any]) -> Path:
 
 
 def verify_entry(project_root: Path, entry: Mapping[str, Any], *, force: bool = False) -> Path:
-    """Reject filesystem drift unless force explicitly accepts managed-directory changes."""
+    """Reject drift in the files the manifest records; ignore everything else.
+
+    Only manifest-recorded files (the bundle's Git-tracked files) are checked:
+    every path component from the install directory down must not be a symlink,
+    and unless ``force`` the file must exist as a regular file with the recorded
+    hash. Unmanaged files such as ``.venv/`` or ``__pycache__/`` are neither
+    scanned nor treated as drift; they disappear with the directory on
+    update/remove (see :func:`unmanaged_paths`).
+    """
 
     validated = _validate_entry(dict(entry))
     target = resolve_install_path(project_root, validated)
     if not target.is_dir():
         raise InstallError(f"managed installation is missing: {target}")
-    actual: set[str] = set()
-    for current, dirs, files in os.walk(target, followlinks=False):
-        current_path = Path(current)
-        for name in [*dirs, *files]:
-            child = current_path / name
-            if is_link_like(child):
-                raise InstallError(f"managed installation contains a symlink: {child}")
-        for name in files:
-            actual.add((current_path / name).relative_to(target).as_posix())
-    expected = set(validated["files"])
-    if not force and actual - expected:
-        raise InstallError(f"managed installation contains extra files: {target}")
-    if not force and expected - actual:
-        raise InstallError(f"managed installation has missing files: {target}")
-    if not force:
-        for relative, expected_hash in validated["files"].items():
-            digest = hashlib.sha256(
-                (target / Path(*PurePosixPath(relative).parts)).read_bytes()
-            ).hexdigest()
-            if digest != expected_hash:
-                raise InstallError(f"managed installation has modified files: {target / relative}")
+    for relative, expected_hash in validated["files"].items():
+        current = target
+        for part in PurePosixPath(relative).parts:
+            current = current / part
+            if is_link_like(current):
+                raise InstallError(f"managed installation contains a symlink: {current}")
+        if force:
+            continue
+        if not current.is_file():
+            raise InstallError(f"managed installation has missing files: {current}")
+        digest = hashlib.sha256(current.read_bytes()).hexdigest()
+        if digest != expected_hash:
+            raise InstallError(f"managed installation has modified files: {current}")
     return target
+
+
+def unmanaged_paths(target: Path, entry: Mapping[str, Any]) -> list[str]:
+    """Return install-relative paths not recorded in the manifest, shallowest first.
+
+    Only directories that contain managed files are listed; an unmanaged
+    directory is reported as a single path and never descended into, so large
+    trees such as ``.venv/`` cost one entry and symlinks inside them are not followed.
+    """
+
+    files = set(entry["files"])
+    managed_dirs = {
+        PurePosixPath(*PurePosixPath(relative).parts[:depth]).as_posix()
+        for relative in files
+        for depth in range(1, len(PurePosixPath(relative).parts))
+    }
+    found: list[str] = []
+    pending = [""]
+    while pending:
+        base = pending.pop(0)
+        directory = target / Path(*PurePosixPath(base).parts) if base else target
+        try:
+            names = sorted(child.name for child in os.scandir(directory))
+        except OSError:
+            continue
+        for name in names:
+            relative = f"{base}/{name}" if base else name
+            if relative in files:
+                continue
+            if relative in managed_dirs and not is_link_like(directory / name):
+                pending.append(relative)
+            else:
+                found.append(relative)
+    return found
 
 
 def write_manifest(path: Path, value: Mapping[str, Any]) -> None:

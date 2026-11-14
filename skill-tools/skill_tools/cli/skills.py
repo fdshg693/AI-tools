@@ -19,7 +19,7 @@ from ..install.installer import (
     load_project_manifest,
     recover_transaction,
 )
-from ..install.manifest import verify_entry
+from ..install.manifest import unmanaged_paths, verify_entry
 from ..models import InstallError
 from ..source import display_skill_path
 from ..install.scope import InstallScope, ensure_project_root_allowed
@@ -197,6 +197,24 @@ def _command_installed(args: argparse.Namespace, cwd: Path, scope: InstallScope)
     return 0
 
 
+_UNMANAGED_PREVIEW = 5
+
+
+def _print_unmanaged_notice(target: Path, entry: dict, verb: str) -> None:
+    """Announce files outside the manifest (e.g. .venv/) that go away with the directory."""
+
+    extra = unmanaged_paths(target, entry)
+    if not extra:
+        return
+    shown = ", ".join(extra[:_UNMANAGED_PREVIEW])
+    more = (
+        f", ... (+{len(extra) - _UNMANAGED_PREVIEW} more)"
+        if len(extra) > _UNMANAGED_PREVIEW
+        else ""
+    )
+    print(f"  note: unmanaged files will be {verb}: {shown}{more}")
+
+
 def _command_remove(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
     root = scope.root
     entries = _managed_entries(scope)
@@ -207,8 +225,9 @@ def _command_remove(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
     for entry in selected:
         path = verify_entry(root, entry, force=args.force)
         action = "would remove" if args.dry_run else "remove"
-        suffix = " (force: directory contents may be deleted)" if args.force else ""
+        suffix = " (force: modified managed files will be deleted)" if args.force else ""
         print(f"{action}\t{entry['canonicalId']}\t{scope.display(path)}{suffix}")
+        _print_unmanaged_notice(path, entry, "deleted")
     if not args.dry_run:
         execute_remove(root, selected, force=args.force, state_dir=scope.state_dir)
     return 0
@@ -257,8 +276,9 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
         )
         plans.append(plan)
         action = "would update" if args.dry_run else "update"
-        suffix = " (force: directory contents may be replaced)" if args.force else ""
+        suffix = " (force: modified managed files will be replaced)" if args.force else ""
         print(f"{action}\t{entry['canonicalId']}\t{scope.display(target)}{suffix}")
+        _print_unmanaged_notice(target, entry, "deleted with the old directory")
     if plans and not args.dry_run:
         execute_install(
             source,

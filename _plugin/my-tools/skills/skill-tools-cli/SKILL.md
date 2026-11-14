@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.6
+  version: 1.2.7
 ---
 
 # skill-tools の使い方
@@ -136,7 +136,7 @@ skill-tools installed-skills --global
 - `installed-skills`はmanifestだけを読み、sourceやnetworkを参照しない
 - `update-skills`はmanifestを起点に同じsource identityのentryだけを扱う。GitHubは記録されたrefを再解決し、別repo/refへの暗黙切替は拒否する。catalogから消えたskillは削除せず警告する
 - `remove-skills`はmanifest entryだけを対象にし、source・catalog・networkを必要としない。未管理directoryは検索・削除しない
-- `update-skills` / `remove-skills`はhash drift・欠落・追加file・symlinkがあれば既定で中止する。`--force`は対象managed directory内の変更を置換・削除し得るため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
+- `update-skills` / `remove-skills`はmanifest記録ファイル（Git管理由来）のhash drift・欠落・symlink化があれば既定で中止する。manifestに無いファイル（`.venv/`・`__pycache__/`・手で置いたファイル）は検査しないので、`.venv`等ができていても`--force`は不要。ただし差し替え・削除でディレクトリごと消える（出力の`note: unmanaged files will be ...`で予告）。手で置いたファイルを残したいなら先に退避する。`--force`は記録ファイルの変更・欠落を上書きするため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
 - install-skills/update-skills/remove-skillsはjournalで中断を記録する。process termination時は次回managed操作でrollbackを試みるが、複数pathの完全な原子性や電断・storage障害時の復旧は保証しない
 
 ## `list-tools` / `install-tools` — repo-tools.yaml のCLIツール
