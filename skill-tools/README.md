@@ -182,7 +182,7 @@ store:
 
 ### `repo-tools.yaml` の `description` locator
 
-source の `repo-tools.yaml` の各エントリは、`description` にそのツールの概要の取得元を `<repo相対path>[#<dotted key>]` の1文字列で書けます（例: `tools/aim/pyproject.toml#project.description`）。path は `repo-tools.yaml` からの相対で、`install` と同じ基準です。形式は拡張子で決まり、`.toml` / `.json` / `.yaml` / `.yml` は `#key` が必須でその値を、それ以外はプレーンテキストとして最初の見出し行（先頭の YAML frontmatter は読み飛ばす）を概要にします。`#key` はドット区切りでテーブルや配列を辿れます。locator 未指定のエントリは概要を空で表示し、ファイル・key・型が壊れているときは `list-tools` がエラーで止まります。
+source の `repo-tools.yaml` の各エントリは、`description` にそのツールの概要の取得元を `<repo相対path>[#<dotted key>]` の1文字列で書けます（例: `tools/llm/aim/pyproject.toml#project.description`）。path は `repo-tools.yaml` からの相対で、`install` と同じ基準です。形式は拡張子で決まり、`.toml` / `.json` / `.yaml` / `.yml` は `#key` が必須でその値を、それ以外はプレーンテキストとして最初の見出し行（先頭の YAML frontmatter は読み飛ばす）を概要にします。`#key` はドット区切りでテーブルや配列を辿れます。locator 未指定のエントリは概要を空で表示し、ファイル・key・型が壊れているときは `list-tools` がエラーで止まります。
 
 ### バンドルコピーの除外/包含ポリシー
 
@@ -208,7 +208,7 @@ GitHub source にも 1〜3 の判定を適用しますが、include による**�
 skill-tools config init
 skill-tools config show --config C:\src\ai\tools\skill-tools\skill-tools.yaml.example
 skill-tools --fb alpha --fb-text "検索結果の並びが期待と違った"
-skill-tools --fb tools/aim --fb-kind tool --fb-text "install の説明が足りない"
+skill-tools --fb tools/llm/aim --fb-kind tool --fb-text "install の説明が足りない"
 Get-Content feedback.txt | skill-tools --fb sample-flow --fb-kind workflow
 skill-tools list-skills --source local --repo C:\src\ai
 skill-tools workflow list

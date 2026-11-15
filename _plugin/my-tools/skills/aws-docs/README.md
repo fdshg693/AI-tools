@@ -1,6 +1,6 @@
 # aws-docs スキルについて
 
-`tools/awsdocs/`の`awsdocs` CLI(fastmcpで自作した、公式AWS Knowledge MCP Serverの
+`tools/web-research/awsdocs/`の`awsdocs` CLI(fastmcpで自作した、公式AWS Knowledge MCP Serverの
 ラッパー)を、Claudeが会話の中からすぐ使えるようにするためのスキル。このファイルは
 人間のメンテナ向けで、設計意図と前提条件を説明する。Claudeが実行時に読むのは
 [SKILL.md](SKILL.md)であり、こちらは参照しない。
@@ -10,7 +10,7 @@
 - `awsdocs`は`search`/`fetch`/`regions`/`availability`/`skill`/`tools`/`call`の7サブコマンドを
   持つが、「リージョン可用性なら`availability`」「目的に応じて`--topic`を1つ選ぶ」
   「searchのチャンクで答えられるなら`fetch`しない」といった**使い分けの判断フロー**は
-  `tools/awsdocs/README.md`には書かれておらず、それを固定化するためにスキル化した
+  `tools/web-research/awsdocs/README.md`には書かれておらず、それを固定化するためにスキル化した
 - Knowledge MCPの罠(トピック未指定だとBlogが上位に来る、無意味なクエリでもゼロ件に
   ならない、存在しないURLが黙ってガイドトップにリダイレクトされる)への対処や、
   `ms-learn`/`use-context`/`tav-cli`との使い分けも、CLI自体の仕様ではなく運用上の
@@ -19,29 +19,29 @@
 ## 前提条件(重要)
 
 - `awsdocs`コマンドは事前にインストール済みであること
-  (`uv tool install --editable tools/awsdocs`)。このスキルはインストール処理を
+  (`uv tool install --editable tools/web-research/awsdocs`)。このスキルはインストール処理を
   一切行わず、CLI本体も同梱しない
 - 認証は不要(AWS Knowledge MCP Serverは公開エンドポイント、AWSアカウント・APIキー不要)。
   未認証はソースIPごとにレート制限がある
 - 上記が満たされていない環境(未インストール)でこのスキルが呼ばれた場合、Claudeは
-  このスキルではエラーに対処せず、`tools/awsdocs/README.md`のセットアップ手順を
+  このスキルではエラーに対処せず、`tools/web-research/awsdocs/README.md`のセットアップ手順を
   ユーザーに案内する
 
 ## 情報源と保守
 
-- CLI本体の設計意図・実装メモ・ファイル構成の一次情報は`tools/awsdocs/README.md`、
-  サーバーの実測挙動は`tools/awsdocs/memo/01-knowledge-mcp-server.md`
-- サブコマンド・オプション・出力形式・終了コードの一次情報も`tools/awsdocs/`配下
+- CLI本体の設計意図・実装メモ・ファイル構成の一次情報は`tools/web-research/awsdocs/README.md`、
+  サーバーの実測挙動は`tools/web-research/awsdocs/memo/01-knowledge-mcp-server.md`
+- サブコマンド・オプション・出力形式・終了コードの一次情報も`tools/web-research/awsdocs/`配下
   (`awsdocs_cli.py`本体)だが、SKILL.mdはClaudeが実行時に外部ファイルへジャンプしなくて
   済むよう、意図的に自己完結する形で複製している
 - 判断フロー・クエリのコツ・罠・他スキルとの使い分けはこのスキル固有の運用方針であり、
-  `tools/awsdocs/README.md`には存在しない。「クエリのコツ・罠」には実測で確認したものだけを
+  `tools/web-research/awsdocs/README.md`には存在しない。「クエリのコツ・罠」には実測で確認したものだけを
   書き、推測は書かない
 
 二重化した内容のドリフトを防ぐため、CLI仕様を変更するときは次の順で確認する
-(`tools/awsdocs/AGENTS.md`にも同じ規約がある)。
+(`tools/web-research/awsdocs/AGENTS.md`にも同じ規約がある)。
 
-1. `tools/awsdocs/README.md`および`awsdocs_cli.py`を正本として、CLI本体と仕様を更新する
+1. `tools/web-research/awsdocs/README.md`および`awsdocs_cli.py`を正本として、CLI本体と仕様を更新する
 2. `SKILL.md`の「サブコマンド」「出力形式」「終了コード」を同じ変更内容に更新する
 3. オプション名・出力形式・終了条件を両ファイルで突き合わせる
 
@@ -66,4 +66,4 @@
   CLI側で終了コードに正規化できる
 - 公式プラグインはAWS API実行まで含む大きな束で、「ドキュメントを引くだけ」には重い
 
-比較の詳細は`tools/awsdocs/memo/03-alternatives-and-existing-assets.md`を参照。
+比較の詳細は`tools/web-research/awsdocs/memo/03-alternatives-and-existing-assets.md`を参照。

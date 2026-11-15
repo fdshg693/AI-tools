@@ -3,9 +3,9 @@ name: tav-cli
 description: Guides multi-step Tavily research with this project's `tav` command, including web-wide search, multiple URLs, site maps/crawls, and topic-based result accumulation. Use when a task needs more than one known URL or a reusable research workspace; use `tav-lit` to extract one already-known URL.
 
 # 前提条件: `tav`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/tav-cli`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/tav-cli`)であること。このスキルはインストール・
 # セットアップは一切行わない。CLI本体は同梱せず、Pythonスクリプトを直接叩く運用は廃止した
-# (実体は tools/tav-cli/ を参照)。
+# (実体は tools/web-research/tav-cli/ を参照)。
 # 実行前に TAVILY_API_KEY を環境変数、またはグローバル設定 ~/.config/tav/config.toml の api_key に設定していること
 # 出力先などはプロジェクト設定 .tav.toml(CWD〜git ルートで近いものが勝つ)・グローバル設定・環境変数で設定でき、TAVILY_OUTPUT_DIR(出力先ベース、未設定時は git ルート基準の temp/web)・TAVILY_WRITE_LOG(監査ログ出力トグル、未設定=true)・TAVILY_SHOW_LOG_PATH(監査ログ書き込み時の「Wrote full log to <path>」通知トグル、未設定=true。結果ファイルのパス通知は常に表示)も設定できる
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照(人間のメンテナ向け)
@@ -17,12 +17,12 @@ meta:
   requires_repo_tools: tav
   requires_env: TAVILY_API_KEY, TAVILY_OUTPUT_DIR, TAVILY_LOG_DIR, TAVILY_WRITE_LOG, TAVILY_SHOW_LOG_PATH
   dependencies: tavily-python
-  requires_install: uv tool install --editable tools/tav-cli
+  requires_install: uv tool install --editable tools/web-research/tav-cli
   requires_hooks: none
   requires_skills: none
   status: stable
   description: no description
-  version: 1.2.5
+  version: 1.2.6
 ---
 
 ## エントリポイント: `tav` コマンド
@@ -34,7 +34,7 @@ tav --help
 ```
 
 未インストール・エラーが出た場合はこのスキルでは対処しない。ユーザーに
-`tools/tav-cli/README.md` のセットアップ手順を案内する。
+`tools/web-research/tav-cli/README.md` のセットアップ手順を案内する。
 
 ## クエリ言語とドメインフィルタの実務ルール
 
@@ -84,7 +84,7 @@ tav --help
 
 - `tav` はインストール済みなら PowerShell でも bash でもそのまま `tav search "..."` で呼べる(PATH 上の console コマンドなので、シェルによるパス記法の差を受けない)。
 - 出力先は `--topic <name>` で指定する(トピック名のスラッグだけ。実際の保存先は `<TAVILY_OUTPUT_DIR>/<topic>/` に解決される)。`--topic` を省くと単一 `ResultEnvelope` を stdout に出す。シェルによるパス記法の差を受けないのが利点。
-- Python スクリプトを直接叩く運用(`python .../search_topic.py ...`)はこのスキルでは行わない。常にインストール済みの `tav` コマンド経由で呼ぶこと。未インストールの場合は対処せず、`tools/tav-cli/README.md` のセットアップ手順をユーザーに案内する。
+- Python スクリプトを直接叩く運用(`python .../search_topic.py ...`)はこのスキルでは行わない。常にインストール済みの `tav` コマンド経由で呼ぶこと。未インストールの場合は対処せず、`tools/web-research/tav-cli/README.md` のセットアップ手順をユーザーに案内する。
 
 ## `--detail` プリセット早見表
 

@@ -3,7 +3,7 @@ name: ms-learn
 description: Search and fetch official Microsoft/Azure documentation (and code samples) via a self-built fastmcp CLI wrapper around the official Microsoft Learn MCP server (https://learn.microsoft.com/api/mcp). Use when you need Microsoft/Azure/.NET/M365 docs, API references, or official code samples — semantic search, full-page fetch, or code-sample lookup by language.
 
 # 前提条件: `mslearn`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/mslearn`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/mslearn`)であること。このスキルはインストール・
 # セットアップは一切行わない。認証不要(Microsoft Learn MCP は公開エンドポイント)。
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照(人間のメンテナ向け)
 meta:
@@ -16,7 +16,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.2.3
+  version: 1.2.4
 ---
 
 ## エントリポイント: `mslearn` コマンド
@@ -26,7 +26,7 @@ mslearn --help
 ```
 
 未インストール・エラーが出た場合はこのスキルでは対処しない。ユーザーに
-`tools/mslearn/README.md` のセットアップ手順を案内する。
+`tools/web-research/mslearn/README.md` のセットアップ手順を案内する。
 
 ## 最初に見るべき判断フロー
 

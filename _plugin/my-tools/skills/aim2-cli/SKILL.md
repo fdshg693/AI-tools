@@ -1,19 +1,19 @@
 ---
 name: aim2-cli
 description: 複数プロバイダ（OpenAI, Anthropic, Google Gemini, OpenRouter, Ollama等）に直接対応したAIモデルCLIツール`aim2`の使い方を説明する。プロンプトをAIモデルに投げて応答を得たい、`--session-id`（互換`--thread-id`）でローカル会話継続したい、プロンプト内の`@path`でファイルやディレクトリの内容を取り込みたい、複数プロンプトを`--parallel`で一括並列実行したい、利用可能なモデル一覧を確認したい場合に使う。
-# 前提条件: `aim2`コマンドがPATH上にインストール済み（`cd tools/aim2 && pnpm add -g .`）であり、利用するプロバイダのAPIキーまたはOllamaが設定済みであること。このスキルはインストール・セットアップは一切行わない
+# 前提条件: `aim2`コマンドがPATH上にインストール済み（`cd tools/llm/aim2 && pnpm add -g .`）であり、利用するプロバイダのAPIキーまたはOllamaが設定済みであること。このスキルはインストール・セットアップは一切行わない
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照（人間のメンテナ向け）
 meta:
   tag: []
-  requires_repo_tools: tools/aim2
+  requires_repo_tools: tools/llm/aim2
   requires_env: none
   dependencies: none
-  requires_install: cd tools/aim2 && pnpm add -g .
+  requires_install: cd tools/llm/aim2 && pnpm add -g .
   requires_hooks: none
   requires_skills: none
   status: stable
   description: 複数プロバイダ対応 AI モデル単発呼び出し CLI ツールの使い方
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 # aim2 CLI の使い方
@@ -47,7 +47,7 @@ aim2 --parallel --format json --prompt "@a.py 要約して" --prompt "@b.py 要�
 ## 会話継続（`--session-id`）
 
 - `--session-id` を省略してプロンプト実行すると、時刻情報を含む固定長のローカル継続 ID が自動発行され、`session_id: ...` が標準エラーへ表示される
-- 同じ `session_id` を次回指定すると、`tools/aim2/logs/` から過去の成功ターンを再読込して user/assistant 履歴として送る
+- 同じ `session_id` を次回指定すると、`tools/llm/aim2/logs/` から過去の成功ターンを再読込して user/assistant 履歴として送る
 - `--thread-id` は `--session-id` の互換エイリアス。両方を同時に指定できない
 - `--parallel` と `--session-id`/`--thread-id` は併用できない。並列ジョブを1本の会話へ混在させないため、ジョブごとに別IDを使う
 - `session_id` は会話単位、`batch_id` は並列実行単位、`trace.trace_id` はモデル呼び出し単位の相関 ID である
@@ -57,14 +57,14 @@ aim2 --parallel --format json --prompt "@a.py 要約して" --prompt "@b.py 要�
 ## 前提条件
 
 - `aim2`コマンドが既にインストールされ、PATH上で実行可能であること
-- 利用対象のプロバイダに必要なAPIキー（`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`等）が環境変数または`tools/aim2/.env`で設定済みであること（Ollamaローカル実行の場合はAPIキー不要）
-- 未インストール・未設定の場合はこのスキルでは対処しない。エラーが出た場合はユーザーに`tools/aim2/README.md`のセットアップ手順を案内する
+- 利用対象のプロバイダに必要なAPIキー（`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`等）が環境変数または`tools/llm/aim2/.env`で設定済みであること（Ollamaローカル実行の場合はAPIキー不要）
+- 未インストール・未設定の場合はこのスキルでは対処しない。エラーが出た場合はユーザーに`tools/llm/aim2/README.md`のセットアップ手順を案内する
 
 モデルの入力・出力単価を見てから選びたいときは`aim2 --cost`（`--model`で略記。省略時はデフォルト。OpenRouter, Ollamaに対応）。
 
 ## ログ
 
-新規の成功ログは`tools/aim2/logs/<trace_tool>/<YYYY-MM-DD>/<session-id>.jsonl`（JSON Lines）へ1行追記される。`trace_tool`（デフォルト: `aim2-cli`）と日付で分け、さらにセッション単位でファイルを分離する。CLIのソースディレクトリ基準の絶対パスを使うため、実行時のカレントディレクトリには依存しない。
+新規の成功ログは`tools/llm/aim2/logs/<trace_tool>/<YYYY-MM-DD>/<session-id>.jsonl`（JSON Lines）へ1行追記される。`trace_tool`（デフォルト: `aim2-cli`）と日付で分け、さらにセッション単位でファイルを分離する。CLIのソースディレクトリ基準の絶対パスを使うため、実行時のカレントディレクトリには依存しない。
 
 - ログには `prompt` に加えて `response`、`session_id`、`batch_id`（`--parallel` のバッチ単位）、`trace.trace_id` が保存される
 - 継続時の履歴抽出は新規セッションファイルを優先し、日付・`trace_tool` を横断して再読込する

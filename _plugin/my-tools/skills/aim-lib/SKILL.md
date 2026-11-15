@@ -1,32 +1,32 @@
 ---
 name: aim-lib
-description: "`tools/aim` のグローバルインストール済み Python 実装をライブラリとして使い、OpenRouter 経由で AI モデルへ単発リクエストを送る方法を説明する。Python コードからプロンプトを送信したい、モデル略記を解決したい、応答本文を取り出したい場合に使う。CLI コマンドを実行する場合は `aim-cli` を使う。"
+description: "`tools/llm/aim` のグローバルインストール済み Python 実装をライブラリとして使い、OpenRouter 経由で AI モデルへ単発リクエストを送る方法を説明する。Python コードからプロンプトを送信したい、モデル略記を解決したい、応答本文を取り出したい場合に使う。CLI コマンドを実行する場合は `aim-cli` を使う。"
 meta:
   tag: []
-  requires_repo_tools: tools/aim
+  requires_repo_tools: tools/llm/aim
   requires_env: OPENROUTER_API_KEY
   dependencies: aim-cli, python>=3.11
-  requires_install: tools/aim (uv tool install --editable tools/aim)
+  requires_install: tools/llm/aim (uv tool install --editable tools/llm/aim)
   requires_hooks: none
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.9
+  version: 1.0.10
 ---
 
 # aim を Python ライブラリとして使う
 
-`tools/aim` は現在、独立した `aim` Python パッケージではなく、`aim_cli` モジュールとして配布されている。ライブラリ利用では `aim` コマンドや `aim_cli.main()` を呼ばず、`aim_cli` が提供する薄いラッパー（`create_client` / `call` / `call_async` / `get_model_cost` / `estimate_prompt_tokens` / `prompt_cost_usd` / `AimError`）を使う。**`openrouter` を直接 import しない** — `openrouter` への依存はパッケージの依存関係にも追加しない。理由は2つ。
+`tools/llm/aim` は現在、独立した `aim` Python パッケージではなく、`aim_cli` モジュールとして配布されている。ライブラリ利用では `aim` コマンドや `aim_cli.main()` を呼ばず、`aim_cli` が提供する薄いラッパー（`create_client` / `call` / `call_async` / `get_model_cost` / `estimate_prompt_tokens` / `prompt_cost_usd` / `AimError`）を使う。**`openrouter` を直接 import しない** — `openrouter` への依存はパッケージの依存関係にも追加しない。理由は2つ。
 
 - `aim_cli` 側だけが `openrouter` に依存する構成にすることで、利用側パッケージの依存を `aim-cli` 1つに絞れる
 - ログ記録（`logs/<trace.tool>/<日付>.jsonl` への追記）が `call`/`call_async` の内部で行われるため、将来 `aim_cli` にログ処理を追加・変更しても、利用側は変更なしにその恩恵を受けられる
 
 ## 前提条件
 
-- `tools/aim` がグローバル環境にインストール済みであること（README の前提どおり `uv tool install --editable tools/aim`）
+- `tools/llm/aim` がグローバル環境にインストール済みであること（README の前提どおり `uv tool install --editable tools/llm/aim`）
 - Python 3.11 以上を使うこと
-- `OPENROUTER_API_KEY` が環境変数、または `tools/aim/.env` に設定済みであること。環境変数が優先される
-- 未インストール・API キー未設定の場合、このスキルでインストールやキー発行を行わず、`tools/aim/README.md` のセットアップ手順を案内する
+- `OPENROUTER_API_KEY` が環境変数、または `tools/llm/aim/.env` に設定済みであること。環境変数が優先される
+- 未インストール・API キー未設定の場合、このスキルでインストールやキー発行を行わず、`tools/llm/aim/README.md` のセットアップ手順を案内する
 
 ## 基本パターン（同期）
 
@@ -51,7 +51,7 @@ def ask_aim(prompt: str, model: str = "mini-m3") -> str:
 print(ask_aim("フランスの首都は？"))
 ```
 
-モデル略記を OpenRouter の実 ID に変換するため、`MODELS[model]` を使う。`MODELS` は `tools/aim/models.json` から読み込まれる。略記の一覧をここに複製しない。利用可能な値は `aim --list-models` または `sorted(MODELS)` で確認する。`mini-m3` を通常の既定値とし、単純な下書きや定型変換だけなら `gpt-120b`、より高い精度・推論力が必要なら `glm-5.2` または `gpt-luna` に切り替える。
+モデル略記を OpenRouter の実 ID に変換するため、`MODELS[model]` を使う。`MODELS` は `tools/llm/aim/models.json` から読み込まれる。略記の一覧をここに複製しない。利用可能な値は `aim --list-models` または `sorted(MODELS)` で確認する。`mini-m3` を通常の既定値とし、単純な下書きや定型変換だけなら `gpt-120b`、より高い精度・推論力が必要なら `glm-5.2` または `gpt-luna` に切り替える。
 
 ## 非同期（並列実行）で使う
 

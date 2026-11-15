@@ -3,13 +3,13 @@ name: my-agents
 description: YAML定義のLangchainエージェントを実行・一覧表示・新規作成する `my-agents` CLIの使い方を説明する。カスタムエージェントにプロンプトを投げて答えさせたい、既存のエージェント設定YAMLを確認したい、使えるツールを確認した上で新しいエージェント設定YAMLを作りたい場合に使う。
 
 # 前提条件: リポジトリルートで`uv sync`済みであること（`uv run my-agents ...`で実行）。
-# グローバルCLIとして使う場合は`uv tool install --editable tools/my-agents`でも可。
-# いずれの場合も`tools/my-agents/.env`（`.env.example`をコピー）に`OPENAI_API_KEY`が
+# グローバルCLIとして使う場合は`uv tool install --editable tools/llm/my-agents`でも可。
+# いずれの場合も`tools/llm/my-agents/.env`（`.env.example`をコピー）に`OPENAI_API_KEY`が
 # 設定済みであること。このスキルはインストール・セットアップは一切行わない。
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照（人間のメンテナ向け）
 meta:
   tag: []
-  requires_repo_tools: tools/my-agents, tools/mslearn
+  requires_repo_tools: tools/llm/my-agents, tools/web-research/mslearn
   requires_env: OPENAI_API_KEY
   dependencies: none
   requires_install: uv sync
@@ -17,7 +17,7 @@ meta:
   requires_skills: ms-learn
   status: stable
   description: no description
-  version: 1.0.4
+  version: 1.0.5
 ---
 
 ## エントリポイント: `my-agents` コマンド
@@ -27,7 +27,7 @@ uv run my-agents --help
 ```
 
 未インストール・`OPENAI_API_KEY`未設定などのエラーが出た場合はこのスキルでは対処しない。
-ユーザーに `tools/my-agents/README.md` のセットアップ手順（`uv sync`、`.env` への
+ユーザーに `tools/llm/my-agents/README.md` のセットアップ手順（`uv sync`、`.env` への
 `OPENAI_API_KEY`設定）を案内する。
 
 ## 具体的な利用パターン（`patterns/`）
@@ -60,13 +60,13 @@ python "${CLAUDE_SKILL_DIR}/scripts/list_patterns.py"
 
 ## サブコマンド
 
-| コマンド                                                                                                                            | 用途                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `my-agents run <config.yaml\|エージェント名> [--prompt "..."]`                                                                      | エージェント設定YAML、またはエージェント名(agents/配下のYAMLの`name`と一致するもの)を指定してエージェントを実行する。既存パスとして存在すればそのままYAMLとして扱い、存在しなければ`agents/`配下を`name`一致で探す(name重複時は最初に見つかったものを使う)。`--prompt`省略時は標準入力からプロンプトを読む。応答テキストのみ標準出力に出す。実行ログ（入力・ツール呼び出し・最終回答）は `tools/my-agents/logs/` に時刻昇順ファイル名で書き、パスを stderr に出す。 |
-| `my-agents list-agents`                                                                                                             | `agents/`配下のエージェント設定YAML一覧を`name`/`model`/`tools`付きで表示する。                                                                                                                                                                                                                                                                                                                                                                                     |
-| `my-agents list-tools`                                                                                                              | 使用可能なツール(`TOOL_REGISTRY`)の一覧を`名前: 説明`形式で表示する。                                                                                                                                                                                                                                                                                                                                                                                               |
-| `my-agents new-agent <name> --system-prompt "..." [--model <id>] [--tool <name>]... [--base-url <url>] [--output <path>] [--force]` | 新しいエージェント設定YAMLを生成する。既定の出力先は`agents/<name>.yaml`。                                                                                                                                                                                                                                                                                                                                                                                          |
-| `my-agents help`                                                                                                                    | コマンド一覧・ヘルプを表示する(`--help`と同等)。                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| コマンド                                                                                                                            | 用途                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `my-agents run <config.yaml\|エージェント名> [--prompt "..."]`                                                                      | エージェント設定YAML、またはエージェント名(agents/配下のYAMLの`name`と一致するもの)を指定してエージェントを実行する。既存パスとして存在すればそのままYAMLとして扱い、存在しなければ`agents/`配下を`name`一致で探す(name重複時は最初に見つかったものを使う)。`--prompt`省略時は標準入力からプロンプトを読む。応答テキストのみ標準出力に出す。実行ログ（入力・ツール呼び出し・最終回答）は `tools/llm/my-agents/logs/` に時刻昇順ファイル名で書き、パスを stderr に出す。 |
+| `my-agents list-agents`                                                                                                             | `agents/`配下のエージェント設定YAML一覧を`name`/`model`/`tools`付きで表示する。                                                                                                                                                                                                                                                                                                                                                                                         |
+| `my-agents list-tools`                                                                                                              | 使用可能なツール(`TOOL_REGISTRY`)の一覧を`名前: 説明`形式で表示する。                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `my-agents new-agent <name> --system-prompt "..." [--model <id>] [--tool <name>]... [--base-url <url>] [--output <path>] [--force]` | 新しいエージェント設定YAMLを生成する。既定の出力先は`agents/<name>.yaml`。                                                                                                                                                                                                                                                                                                                                                                                              |
+| `my-agents help`                                                                                                                    | コマンド一覧・ヘルプを表示する(`--help`と同等)。                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## エージェント設定YAMLのフォーマット
 
