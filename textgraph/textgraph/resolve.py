@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Container, Iterable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
@@ -27,13 +27,14 @@ def resolve_link(raw: str, source_path: str, files: Collection[str]) -> Resolved
 
     file_set = set(files)
     source_dir = _parent(source_path)
+    dirs = _LazyDirs(file_set)
 
-    hit = _lookup_cascade(path_part, source_dir, file_set)
+    hit = _lookup_cascade(path_part, source_dir, file_set, dirs)
     if hit is not None:
         return ResolvedLink(resolved=hit, confidence=EXACT, anchor=anchor)
 
     if not PurePosixPath(path_part).suffix:
-        hit = _lookup_cascade(f"{path_part}.md", source_dir, file_set)
+        hit = _lookup_cascade(f"{path_part}.md", source_dir, file_set, dirs)
         if hit is not None:
             return ResolvedLink(resolved=hit, confidence=EXACT, anchor=anchor)
 
@@ -51,16 +52,47 @@ def resolve_link(raw: str, source_path: str, files: Collection[str]) -> Resolved
     return ResolvedLink(resolved=None, confidence=UNRESOLVED, anchor=anchor)
 
 
-def _lookup_cascade(path_part: str, source_dir: str, files: set[str]) -> str | None:
+class _LazyDirs:
+    """Directory set derived from file parents, built only when first needed."""
+
+    def __init__(self, files: Collection[str]) -> None:
+        self._files = files
+        self._dirs: frozenset[str] | None = None
+
+    def __contains__(self, candidate: object) -> bool:
+        if self._dirs is None:
+            self._dirs = directories_of(self._files)
+        return candidate in self._dirs
+
+
+def directories_of(files: Collection[str]) -> frozenset[str]:
+    """Every ancestor directory of ``files`` (POSIX, no trailing ``/``).
+
+    ``""`` (the repository root) is included whenever there is any file.
+    """
+    dirs: set[str] = set()
+    for path in files:
+        parent = _parent(path)
+        while parent not in dirs:
+            dirs.add(parent)
+            if not parent:
+                break
+            parent = _parent(parent)
+    return frozenset(dirs)
+
+
+def _lookup_cascade(
+    path_part: str, source_dir: str, files: set[str], dirs: Container[str]
+) -> str | None:
     source_candidate = _join(source_dir, path_part)
     if source_candidate is not None:
-        hit = _lookup_exact(source_candidate, files)
+        hit = _lookup_exact(source_candidate, files, dirs)
         if hit is not None:
             return hit
 
     root_candidate = _join("", path_part)
     if root_candidate is not None:
-        hit = _lookup_exact(root_candidate, files)
+        hit = _lookup_exact(root_candidate, files, dirs)
         if hit is not None:
             return hit
 
@@ -75,10 +107,17 @@ def _lookup_cascade(path_part: str, source_dir: str, files: set[str]) -> str | N
     return None
 
 
-def _lookup_exact(candidate: str, files: set[str]) -> str | None:
+def _lookup_exact(candidate: str, files: set[str], dirs: Container[str]) -> str | None:
     if candidate in files:
         return candidate
-    return _dir_index(candidate, files, case_sensitive=True)
+    hit = _dir_index(candidate, files, case_sensitive=True)
+    if hit is not None:
+        return hit
+    # A directory that holds tracked files is a real target even without a
+    # README.md / AGENTS.md / index.md inside it.
+    if candidate in dirs:
+        return candidate
+    return None
 
 
 def _lookup_ci(candidate: str, files: set[str]) -> str | None:
@@ -153,6 +192,26 @@ def fallback_candidates(raw: str, files: Collection[str]) -> list[str]:
     if len(base_hits) > 1:
         return base_hits
     return []
+
+
+def link_dir_names(raw: str) -> frozenset[str]:
+    """Directory names written in the link (``.``/``..`` and the basename excluded)."""
+    path_part, _anchor = _split_target(raw)
+    parts = path_part.split("/")[:-1]
+    return frozenset(part for part in parts if part not in ("", ".", ".."))
+
+
+def narrow_candidates(raw: str, candidates: Iterable[str]) -> list[str]:
+    """Keep candidates whose directories share at least one name with the link.
+
+    A link without a directory part (a bare basename) has nothing to compare,
+    so the candidates pass through unchanged.
+    """
+    names = link_dir_names(raw)
+    items = list(candidates)
+    if not names:
+        return items
+    return [path for path in items if names & set(path.split("/")[:-1])]
 
 
 def _parent(path: str) -> str:

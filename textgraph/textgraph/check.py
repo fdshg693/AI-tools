@@ -9,12 +9,15 @@ from .resolve import (
     EXACT,
     GIT_RENAME,
     GIT_RENAME_BASENAME,
+    UNIQUE_BASENAME,
     UNIQUE_SUFFIX,
     UNRESOLVED,
     _join,
     _parent,
     _split_target,
+    directories_of,
     fallback_candidates,
+    narrow_candidates,
     resolve_link,
 )
 from .scan import is_script_file, list_git_files, read_source_text, stored_links_from_text
@@ -47,14 +50,15 @@ class Finding:
 
 def find_broken_links(root: Path, store: GraphStore, *, scripts: bool = False) -> list[Finding]:
     git_files = {path.replace("\\", "/") for path in list_git_files(root)}
+    git_dirs = directories_of(git_files)
     findings: list[Finding] = []
     for edge in store.all_links():
-        finding = _finding_for_edge(root, edge, git_files)
+        finding = _finding_for_edge(root, edge, git_files, git_dirs)
         if finding is not None:
             findings.append(finding)
     if scripts:
         for edge in _script_edges(root, git_files):
-            finding = _finding_for_edge(root, edge, git_files)
+            finding = _finding_for_edge(root, edge, git_files, git_dirs)
             if finding is not None:
                 findings.append(finding)
     findings.sort(key=lambda item: (item.source, item.line, item.raw))
@@ -79,8 +83,10 @@ def _script_edges(root: Path, git_files: set[str]) -> list[StoredEdge]:
     return edges
 
 
-def _finding_for_edge(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | None:
-    if not _is_broken(edge, git_files):
+def _finding_for_edge(
+    root: Path, edge: StoredEdge, git_files: set[str], git_dirs: frozenset[str]
+) -> Finding | None:
+    if not _is_broken(edge, git_files, git_dirs):
         return None
     return _suggest(root, edge, git_files)
 
@@ -225,17 +231,36 @@ def rewrite_raw(original_raw: str, target: str, source: str) -> str:
     return new_path
 
 
-def _is_broken(edge: StoredEdge, git_files: set[str]) -> bool:
+def _is_broken(edge: StoredEdge, git_files: set[str], git_dirs: frozenset[str]) -> bool:
+    """A link needs attention unless it resolved exactly to something that exists.
+
+    Non-exact resolutions (``unique-suffix`` / ``unique-basename``) only work
+    because the resolver guessed; the written path itself is wrong, so they
+    are reported. Wiki links are the exception: ``[[name]]`` means "the page
+    called name", so a unique basename is their intended resolution.
+    """
     if edge.confidence == UNRESOLVED or not edge.resolved:
         return True
-    return edge.resolved not in git_files
+    if edge.resolved not in git_files and edge.resolved not in git_dirs:
+        return True
+    return not _is_intended_resolution(edge.kind, edge.confidence)
+
+
+def _is_intended_resolution(kind: str, confidence: str) -> bool:
+    return confidence == EXACT or (kind == "wiki" and confidence == UNIQUE_BASENAME)
 
 
 def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | None:
     hit = resolve_link(edge.raw, edge.source, git_files)
-    if hit.resolved is not None and hit.confidence == EXACT:
+    if hit.resolved is not None and _is_intended_resolution(edge.kind, hit.confidence):
         return None
-    if hit.resolved is not None and hit.confidence != UNRESOLVED:
+    # A basename hit that shares no directory name with the link is a
+    # coincidence (another README.md, another SKILL.md), not a candidate.
+    if (
+        hit.resolved is not None
+        and hit.confidence != UNRESOLVED
+        and (hit.confidence != UNIQUE_BASENAME or narrow_candidates(edge.raw, [hit.resolved]))
+    ):
         return _finding(
             edge,
             status=SUGGESTED,
@@ -244,7 +269,7 @@ def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | Non
         )
     path_part, _anchor = _split_target(edge.raw)
     basename = PurePosixPath(path_part).name if path_part else ""
-    ambiguous = fallback_candidates(edge.raw, git_files)
+    ambiguous = narrow_candidates(edge.raw, fallback_candidates(edge.raw, git_files))
     # Old resolved paths can still git-rename uniquely when the basename is
     # now shared. Live script scans have no stored target, so the raw path
     # (joined to the source directory) is the next-best old path.
@@ -269,7 +294,7 @@ def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | Non
         renamed = RenameDestinations()
     for destinations, confidence in (
         (renamed.exact, GIT_RENAME),
-        (renamed.basename, GIT_RENAME_BASENAME),
+        (tuple(narrow_candidates(edge.raw, renamed.basename)), GIT_RENAME_BASENAME),
     ):
         if len(destinations) == 1:
             return _finding(
@@ -285,6 +310,16 @@ def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | Non
                 confidence=AMBIGUOUS,
                 suggested=destinations,
             )
+    if len(ambiguous) == 1:
+        # Only basename hits can be narrowed down to one (suffix hits always
+        # contain the link's directory names), and a basename guess is never
+        # applied automatically.
+        return _finding(
+            edge,
+            status=SUGGESTED,
+            confidence=UNIQUE_BASENAME,
+            suggested=tuple(ambiguous),
+        )
     if len(ambiguous) > 1:
         return _finding(
             edge,

@@ -207,7 +207,34 @@ def test_fix_apply_git_rename_when_basename_is_ambiguous(
 def test_fix_does_not_apply_basename_only_git_rename(
     git_repo: Path, write, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # B1: a rename of an unrelated same-name file must not rewrite the link.
+    # B1: a rename of a different same-name file must not rewrite the link.
+    # The destination shares the "docs" directory name, so I4 keeps it as a hint.
+    write(git_repo, "README.md", "See [x](docs/index.md).\n")
+    write(git_repo, "pkg/index.md", "pkg\n")
+    write(git_repo, "keep/index.md", "keep\n")
+    git_commit(git_repo, "initial")
+    (git_repo / "docs" / "moved").mkdir(parents=True)
+    git(git_repo, "mv", "pkg/index.md", "docs/moved/index.md")
+    git_commit(git_repo, "rename unrelated index", add_all=False)
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    check_out = capsys.readouterr().out
+    assert "git-rename-basename" in check_out
+    assert "docs/moved/index.md" in check_out
+    assert "suggested" in check_out
+    assert main(["--path", str(git_repo), "fix", "--apply"]) == 1
+    out = capsys.readouterr().out
+    assert "applied" not in out
+    assert "skipped" in out
+    text = (git_repo / "README.md").read_text(encoding="utf-8")
+    assert text == "See [x](docs/index.md).\n"
+
+
+def test_check_drops_basename_rename_without_shared_directory(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # I4: a same-name rename in an unrelated directory is not a candidate.
     write(git_repo, "README.md", "See [x](docs/index.md).\n")
     write(git_repo, "pkg/index.md", "pkg\n")
     write(git_repo, "keep/index.md", "keep\n")
@@ -218,16 +245,98 @@ def test_fix_does_not_apply_basename_only_git_rename(
     assert main(["--path", str(git_repo), "init"]) == 0
     capsys.readouterr()
     assert main(["--path", str(git_repo), "check"]) == 1
-    check_out = capsys.readouterr().out
-    assert "git-rename-basename" in check_out
-    assert "moved/index.md" in check_out
-    assert "suggested" in check_out
-    assert main(["--path", str(git_repo), "fix", "--apply"]) == 1
     out = capsys.readouterr().out
-    assert "applied" not in out
-    assert "skipped" in out
-    text = (git_repo / "README.md").read_text(encoding="utf-8")
-    assert text == "See [x](docs/index.md).\n"
+    assert "unresolved" in out
+    assert "moved/index.md" not in out
+    assert "keep/index.md" not in out
+
+
+def test_check_narrows_ambiguous_candidates_by_directory_name(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # I4: only candidates sharing a directory name with the link are listed.
+    write(
+        git_repo,
+        "README.md",
+        "See [a](../tools/x/SKILL.md) and [b](../plugins/y/SKILL.md).\n",
+    )
+    write(git_repo, "plugins/a/SKILL.md", "a\n")
+    write(git_repo, "plugins/b/SKILL.md", "b\n")
+    write(git_repo, "other/c/SKILL.md", "c\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    lines = capsys.readouterr().out.splitlines()
+    tools_line = next(line for line in lines if "../tools/x/SKILL.md" in line)
+    plugins_line = next(line for line in lines if "../plugins/y/SKILL.md" in line)
+    assert "unresolved" in tools_line
+    assert "a/SKILL.md" not in tools_line
+    assert "ambiguous" in plugins_line
+    assert "plugins/a/SKILL.md" in plugins_line
+    assert "plugins/b/SKILL.md" in plugins_line
+    assert "other/c/SKILL.md" not in plugins_line
+
+
+def test_check_reports_link_that_only_resolves_by_suffix(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # B4: moving a file one level deeper breaks its "../" link, but the
+    # resolver still finds the target by suffix. check must report it.
+    write(git_repo, "tools/plugin/README.md", "See [doc](../_plugin/guide.md).\n")
+    write(git_repo, "tools/_plugin/guide.md", "guide\n")
+    write(git_repo, "tools/_plugin/other/guide.md", "other\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 0
+    move_text(git_repo, "tools/plugin/README.md", "tools/plugin/deep/README.md")
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    out = capsys.readouterr().out
+    assert "suggested" in out
+    assert "unique-suffix" in out
+    assert "tools/_plugin/guide.md" in out
+    assert main(["--path", str(git_repo), "fix", "--apply"]) == 0
+    capsys.readouterr()
+    text = (git_repo / "tools/plugin/deep/README.md").read_text(encoding="utf-8")
+    assert text == "See [doc](../../_plugin/guide.md).\n"
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 0
+
+
+def test_check_does_not_report_wiki_basename_resolution(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "See [[guide.md]].\n")
+    write(git_repo, "notes/guide.md", "guide\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 0
+
+
+def test_check_reports_markdown_basename_resolution(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "See [g](guide.md).\n")
+    write(git_repo, "notes/guide.md", "guide\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    out = capsys.readouterr().out
+    assert "unique-basename" in out
+    assert "notes/guide.md" in out
+
+
+def test_check_accepts_directory_link_without_index_file(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # B2: a directory with tracked files is a valid target without README.md.
+    write(git_repo, "pkg/README.md", "See [skills](skills/) and [root](../).\n")
+    write(git_repo, "pkg/skills/a/SKILL.md", "a\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 0
 
 
 @pytest.mark.parametrize(

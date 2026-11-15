@@ -55,7 +55,7 @@ textgraph --path C:\src\project fix --scripts --apply
 - `status` — ファイル数・リンク数・`unresolved` 数・最終 sync 時刻。壊れたリンクの一覧は出さない。
 - `files` — 索引上のテキストファイルをリポジトリ相対で出す。`--filter` は前方一致。`--max-depth` は人間向けの木を途中で畳む（`--json` は flat な配列のまま）。
 - `impact` — あるファイルの inbound（誰が指しているか）を先に、outbound を次に出す。1 hop のみ。未解決の outbound は末尾。`<path>` はリポジトリ相対・絶対・basename。複数ヒットなら候補を出して非 0。
-- `check` — outbound のリンク切れを報告する。切れは索引上 `unresolved`、または resolved 先が今の git ファイル集合に無いもの。候補が1件なら `suggested`、2件以上は `ambiguous`、0件は `unresolved`。http(s) 等は索引に載らないので触れない。`--scripts` は索引に入れず、スクリプトをその場で同じ構文で走査する（コメント判定はしない）。終了コードは問題なし 0、切れ/曖昧あり 1、索引なし/stale/I/O 失敗 2。
+- `check` — outbound のリンク切れと、書かれたパスのままでは当たらないリンクを報告する。対象は索引上 `unresolved`、resolved 先が今の git ファイル集合（とその親ディレクトリ）に無い、または `exact` 以外（`unique-suffix`・`unique-basename`）で解決したもの。wiki `[[name]]` は basename で引くのが本来の意味なので、`unique-basename` で解決しても報告しない。候補が1件なら `suggested`、2件以上は `ambiguous`、0件は `unresolved`。basename 由来の候補（同名ファイル・`git-rename-basename`）と `ambiguous` の候補は、リンクのディレクトリ部分の名前（`.`・`..` を除く）を 1 つ以上パスに含むものだけに絞る。絞って 0 件なら `unresolved`、1 件なら `suggested`（`unique-basename`、適用しない）。basename だけのリンクは絞らない。`impact <basename>` の候補表示は絞らない。http(s) 等は索引に載らないので触れない。`--scripts` は索引に入れず、スクリプトをその場で同じ構文で走査する（コメント判定はしない）。終了コードは問題なし 0、切れ/曖昧あり 1、索引なし/stale/I/O 失敗 2。
 - `fix` — 既定は dry-run。適用予定の hunk 要約だけ出す。`--apply` は一意の `unique-suffix` と `git-rename` だけ本文のリンク先パスを書き換える。リンクテキストと `@./` 構文は維持する。`unique-basename`・`git-rename-basename`（旧パスが一致せず basename だけで当たった rename）・`ambiguous` は suggested に出しても適用しない。元の改行（LF / CRLF / 混在）は書き換えた行も含めてそのまま保つ。`--scripts` は `check` と同じ範囲。`--apply` 後も残りがあれば 1。
 - `--version` — マニフェストの版数を1行出す。`.git` も索引も触らない。
 
@@ -67,7 +67,7 @@ textgraph --path C:\src\project fix --scripts --apply
 
 走査対象は `git ls-files --cached --others --exclude-standard` のうち、既定拡張子 `.md` / `.mdc` / `.txt` / `.rst`。これらだけを索引する。スクリプトの変更では索引は stale にならない。
 
-`check --scripts` / `fix --scripts` は索引には入れず、スクリプトをその場で同じリンク構文で走査する。コメントとコードの区別はしない（`[text](url)` や `@./` が実行コードに現れることはほぼ無いため）。対象は `.py` / `.ts` / `.js` / `.ps1` / `.sh` などのソース拡張子と、basename が `justfile` / `makefile` のもの。YAML / JSON は対象外。その場で再解決するため、今も unique-suffix で当たるリンクは切れではない。索引に残った古い解決先をきっかけにする書き換えはドキュメント側の話で、スクリプトでは今解決できないリンクと `git-rename` が対象になる。
+`check --scripts` / `fix --scripts` は索引には入れず、スクリプトをその場で同じリンク構文で走査する。コメントとコードの区別はしない（`[text](url)` や `@./` が実行コードに現れることはほぼ無いため）。対象は `.py` / `.ts` / `.js` / `.ps1` / `.sh` などのソース拡張子と、basename が `justfile` / `makefile` のもの。YAML / JSON は対象外。その場で再解決し、判定はドキュメントと同じ（`exact` 以外の解決も報告する）。索引に残った古い解決先をきっかけにする書き換えはドキュメント側の話で、スクリプトでは今の解決結果と `git-rename` が対象になる。
 
 抽出するリンク:
 
@@ -77,7 +77,7 @@ textgraph --path C:\src\project fix --scripts --apply
 
 http(s) / mailto / アンカーのみは無視する。フェンスコードとインラインバッククォートの中は走査しない。
 
-解決順: ソースディレクトリ相対 → リポジトリルート相対 → 大小文字無視 → 拡張子なしなら `.md` を補う → 一意 basename → 一意 path suffix。ディレクトリリンクは `README.md` / `AGENTS.md` / `index.md` をこの順で `exact` とみなす。`check` / `fix` だけ、それでも決まらないリンクにコミット済みの git rename を足す。
+解決順: ソースディレクトリ相対 → リポジトリルート相対 → 大小文字無視 → 拡張子なしなら `.md` を補う → 一意 basename → 一意 path suffix。ディレクトリリンクは `README.md` / `AGENTS.md` / `index.md` をこの順で `exact` とみなし、どれも無ければ git ファイルの親として実在するディレクトリそのもの（末尾 `/` なしのパス）を `exact` で解決する（ディスクは見ない）。`impact` の inbound はファイル単位なので、ディレクトリそのものへのリンクは inbound に出ない。ソース相対・ルート相対で当たらない `../` 付きのリンクは、`..` より後ろの部分が一意 suffix で当たっても `unique-suffix`（非 exact）なので `check` が報告し、`fix --apply` で直せる。`check` / `fix` だけ、それでも決まらないリンクにコミット済みの git rename を足す。
 
 ## ファイル構成
 
