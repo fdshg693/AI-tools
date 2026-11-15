@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from .extract import extract_links
-from .resolve import resolve_link
+from .resolve import FileIndex, resolve_link
 from .store import StoredLink, GraphStore, db_path
 
 TEXT_EXTENSIONS = {".md", ".mdc", ".txt", ".rst"}
@@ -94,7 +94,9 @@ def is_script_file(path: str) -> bool:
     return posix.name.lower() in SCRIPT_BASENAMES
 
 
-def stored_links_from_text(text: str, source: str, file_set: set[str]) -> list[StoredLink]:
+def stored_links_from_text(
+    text: str, source: str, file_set: set[str] | FileIndex
+) -> list[StoredLink]:
     links: list[StoredLink] = []
     for extracted in extract_links(text):
         resolved = resolve_link(extracted.raw, source, file_set)
@@ -118,7 +120,7 @@ def read_source_text(root: Path, path: str) -> str:
 def sync_index(root: Path, *, force: bool = False) -> SyncStats:
     all_files = list_git_files(root)
     text_files = [path for path in all_files if is_text_file(path)]
-    file_set = set(all_files)
+    file_set = FileIndex(all_files)
     store = GraphStore(db_path(root))
     try:
         known = store.listed_paths()

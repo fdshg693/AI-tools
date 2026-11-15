@@ -580,3 +580,144 @@ def test_check_scripts_treats_on_disk_links_as_external(
     assert "missing.md" in captured.out
     assert "outside.md" not in captured.out
     assert "1 links point outside the index" in captured.err
+
+
+def _count_git_calls(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    """Record every rename query (``git log`` / ``git diff``) made by textgraph."""
+    calls: list[list[str]] = []
+    original = subprocess.run
+
+    def recording_run(args, *rest, **kwargs):
+        if isinstance(args, list) and args[:1] == ["git"] and ({"log", "diff"} & set(args)):
+            calls.append(list(args))
+        return original(args, *rest, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", recording_run)
+    return calls
+
+
+def test_check_uses_staged_git_mv(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # I8: right after `git mv` (not committed yet) the rename is already known.
+    write(git_repo, "README.md", "See [a](pkg/a/SKILL.md).\n")
+    write(git_repo, "pkg/a/SKILL.md", "a\n")
+    write(git_repo, "pkg/b/SKILL.md", "b\n")
+    git_commit(git_repo, "initial")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    (git_repo / "pkg" / "c").mkdir()
+    git(git_repo, "mv", "pkg/a/SKILL.md", "pkg/c/SKILL.md")
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    out = capsys.readouterr().out
+    assert "git-rename" in out
+    assert "git-rename-basename" not in out
+    assert "pkg/c/SKILL.md" in out
+    assert main(["--path", str(git_repo), "fix", "--apply"]) == 0
+    text = (git_repo / "README.md").read_text(encoding="utf-8")
+    assert text == "See [a](pkg/c/SKILL.md).\n"
+
+
+def test_check_follows_rename_chain(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "See [a](pkg/a/SKILL.md).\n")
+    write(git_repo, "pkg/a/SKILL.md", "a\n")
+    write(git_repo, "pkg/other/SKILL.md", "other\n")
+    git_commit(git_repo, "initial")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    (git_repo / "pkg" / "b").mkdir()
+    git(git_repo, "mv", "pkg/a/SKILL.md", "pkg/b/SKILL.md")
+    git_commit(git_repo, "a to b", add_all=False)
+    (git_repo / "pkg" / "c").mkdir()
+    git(git_repo, "mv", "pkg/b/SKILL.md", "pkg/c/SKILL.md")
+    git_commit(git_repo, "b to c", add_all=False)
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    out = capsys.readouterr().out
+    assert "git-rename" in out
+    assert "pkg/c/SKILL.md" in out
+    assert "pkg/b/SKILL.md" not in out
+    assert main(["--path", str(git_repo), "fix", "--apply"]) == 0
+    text = (git_repo / "README.md").read_text(encoding="utf-8")
+    assert text == "See [a](pkg/c/SKILL.md).\n"
+
+
+def test_rename_chain_ignores_older_rename_of_reused_path(git_repo: Path, write) -> None:
+    # x/doc.md moved to y/doc.md long ago; later old/doc.md moved to x/doc.md
+    # and then x/doc.md to z/doc.md. The old x→y rename is not part of the
+    # chain from old/doc.md.
+    write(git_repo, "x/doc.md", "first\n")
+    write(git_repo, "old/doc.md", "second\n")
+    git_commit(git_repo, "initial")
+    (git_repo / "y").mkdir()
+    git(git_repo, "mv", "x/doc.md", "y/doc.md")
+    git_commit(git_repo, "x to y", add_all=False)
+    git(git_repo, "mv", "old/doc.md", "x/doc.md")
+    git_commit(git_repo, "old to x", add_all=False)
+    (git_repo / "z").mkdir()
+    git(git_repo, "mv", "x/doc.md", "z/doc.md")
+    git_commit(git_repo, "x to z", add_all=False)
+    found = git_rename_destinations(
+        git_repo,
+        basename="doc.md",
+        old_path="old/doc.md",
+        current_files={"y/doc.md", "z/doc.md"},
+    )
+    assert found == RenameDestinations(exact=("z/doc.md",))
+
+
+def test_check_does_not_call_git_without_broken_links(
+    git_repo: Path, write, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "See [g](docs/guide.md).\n")
+    write(git_repo, "docs/guide.md", "guide\n")
+    git_commit(git_repo, "initial")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    calls = _count_git_calls(monkeypatch)
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 0
+    assert calls == []
+
+
+def test_check_reads_rename_history_once(
+    git_repo: Path, write, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(
+        git_repo,
+        "README.md",
+        "[a](pkg/a/one.md) [b](pkg/a/two.md) [c](pkg/a/three.md) [d](gone/four.md)\n",
+    )
+    for name in ("one", "two", "three"):
+        write(git_repo, f"pkg/a/{name}.md", f"{name}\n")
+    git_commit(git_repo, "initial")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    git(git_repo, "mv", "pkg/a", "pkg/moved")
+    git_commit(git_repo, "move a", add_all=False)
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    calls = _count_git_calls(monkeypatch)
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    assert len([call for call in calls if "log" in call]) == 1
+    assert len([call for call in calls if "diff" in call]) == 1
+
+
+def test_check_git_rename_with_non_ascii_path(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "See [m](docs/a/メモ.md).\n")
+    write(git_repo, "docs/a/メモ.md", "memo\n")
+    write(git_repo, "docs/b/メモ.md", "other\n")
+    git_commit(git_repo, "initial")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    (git_repo / "docs" / "c").mkdir()
+    git(git_repo, "mv", "docs/a/メモ.md", "docs/c/メモ.md")
+    git_commit(git_repo, "rename memo", add_all=False)
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    out = capsys.readouterr().out
+    assert "git-rename" in out
+    assert "docs/c/メモ.md" in out

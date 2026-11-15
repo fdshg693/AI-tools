@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Container, Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -13,10 +13,10 @@ from .resolve import (
     UNIQUE_BASENAME,
     UNIQUE_SUFFIX,
     UNRESOLVED,
+    FileIndex,
     _join,
     _parent,
     _split_target,
-    directories_of,
     fallback_candidates,
     narrow_candidates,
     resolve_link,
@@ -52,23 +52,23 @@ class Finding:
 
 
 def find_broken_links(root: Path, store: GraphStore, *, scripts: bool = False) -> list[Finding]:
-    git_files = {path.replace("\\", "/") for path in list_git_files(root)}
-    git_dirs = directories_of(git_files)
+    git_files = FileIndex(path.replace("\\", "/") for path in list_git_files(root))
+    renames = RenameIndex(root, git_files)
     findings: list[Finding] = []
     for edge in store.all_links():
-        finding = _finding_for_edge(root, edge, git_files, git_dirs)
+        finding = _finding_for_edge(root, edge, git_files, renames)
         if finding is not None:
             findings.append(finding)
     if scripts:
         for edge in _script_edges(root, git_files):
-            finding = _finding_for_edge(root, edge, git_files, git_dirs)
+            finding = _finding_for_edge(root, edge, git_files, renames)
             if finding is not None:
                 findings.append(finding)
     findings.sort(key=lambda item: (item.source, item.line, item.raw))
     return findings
 
 
-def _script_edges(root: Path, git_files: set[str]) -> list[StoredEdge]:
+def _script_edges(root: Path, git_files: FileIndex) -> list[StoredEdge]:
     edges: list[StoredEdge] = []
     for path in sorted(p for p in git_files if is_script_file(p)):
         text = read_source_text(root, path)
@@ -87,16 +87,16 @@ def _script_edges(root: Path, git_files: set[str]) -> list[StoredEdge]:
 
 
 def _finding_for_edge(
-    root: Path, edge: StoredEdge, git_files: set[str], git_dirs: frozenset[str]
+    root: Path, edge: StoredEdge, git_files: FileIndex, renames: RenameIndex
 ) -> Finding | None:
-    if not _is_broken(edge, git_files, git_dirs):
+    if not _is_broken(edge, git_files):
         return None
     # The written path is not in the index but exists on disk: a submodule
     # file, a file above the repository root, or a gitignored artifact. It is
     # not broken, so it gets no candidates and is never rewritten.
     if _exists_on_disk(root, edge.raw, edge.source):
         return _finding(edge, status=EXTERNAL, confidence=ON_DISK, suggested=())
-    return _suggest(root, edge, git_files)
+    return _suggest(edge, git_files, renames)
 
 
 def _exists_on_disk(root: Path, raw: str, source: str) -> bool:
@@ -130,7 +130,7 @@ def _exists_on_disk(root: Path, raw: str, source: str) -> bool:
 
 @dataclass(frozen=True)
 class RenameDestinations:
-    """Committed rename destinations that still exist.
+    """Rename destinations (staged or committed) that still exist.
 
     ``exact`` holds renames whose old path equals the link's old path.
     ``basename`` holds renames that only share the basename; they are hints,
@@ -141,57 +141,119 @@ class RenameDestinations:
     basename: tuple[str, ...] = ()
 
 
+MAX_RENAME_CHAIN = 64
+
+_STAGED_RENAMES = ("diff", "--cached", "-M", "--diff-filter=R", "--name-status")
+_COMMITTED_RENAMES = ("log", "--diff-filter=R", "-M", "--name-status", "--pretty=format:")
+
+
+class RenameIndex:
+    """The repository's renames, read from git at most once per run.
+
+    Nothing is read until the first lookup, so a run without broken links
+    never calls git. Pairs are kept newest first: staged renames (a move made
+    with ``git mv`` but not committed yet is the latest fact), then committed
+    renames in ``git log`` order. A destination that no longer exists is
+    followed through later renames (A→B, then B→C gives C).
+    """
+
+    def __init__(self, root: Path, current_files: Container[str]) -> None:
+        self._root = root
+        self._current = current_files
+        self._pairs: list[tuple[str, str]] | None = None
+        self._by_src: dict[str, list[int]] = {}
+        self._by_name: dict[str, list[int]] = {}
+
+    def lookup(self, *, basename: str, old_path: str | None) -> RenameDestinations:
+        if not basename:
+            return RenameDestinations()
+        pairs = self._load()
+        if not pairs:
+            return RenameDestinations()
+        if old_path:
+            exact = _unique_keep_order(
+                dest for index in self._by_src.get(old_path, ()) for dest in self._final(index)
+            )
+            if exact:
+                return RenameDestinations(exact=tuple(exact))
+        return RenameDestinations(
+            basename=tuple(
+                _unique_keep_order(
+                    dest for index in self._by_name.get(basename, ()) for dest in self._final(index)
+                )
+            )
+        )
+
+    def _final(self, start: int) -> list[str]:
+        """Existing destinations reached from pair ``start``.
+
+        Only renames newer than the current one (smaller index) are followed,
+        so an unrelated older rename that reused a path is not a link in the
+        chain, and the walk always ends. The depth cap bounds pathological
+        histories.
+        """
+        assert self._pairs is not None
+        out: list[str] = []
+        stack = [(start, 0)]
+        seen: set[int] = set()
+        while stack:
+            index, depth = stack.pop()
+            if index in seen:
+                continue
+            seen.add(index)
+            dest = self._pairs[index][1]
+            if dest in self._current:
+                out.append(dest)
+                continue
+            if depth >= MAX_RENAME_CHAIN:
+                continue
+            newer = [later for later in self._by_src.get(dest, ()) if later < index]
+            # The stack is LIFO; push the oldest first so the newest is tried first.
+            stack.extend((later, depth + 1) for later in reversed(newer))
+        return out
+
+    def _load(self) -> list[tuple[str, str]]:
+        if self._pairs is not None:
+            return self._pairs
+        pairs: list[tuple[str, str]] = []
+        if (self._root / ".git").exists():
+            pairs.extend(self._git_pairs(_STAGED_RENAMES))
+            pairs.extend(self._git_pairs(_COMMITTED_RENAMES))
+        for index, (src, dest) in enumerate(pairs):
+            self._by_src.setdefault(src, []).append(index)
+            for name in {PurePosixPath(src).name, PurePosixPath(dest).name}:
+                self._by_name.setdefault(name, []).append(index)
+        self._pairs = pairs
+        return pairs
+
+    def _git_pairs(self, args: tuple[str, ...]) -> list[tuple[str, str]]:
+        # core.quotepath=false keeps non-ASCII paths (Japanese file names)
+        # verbatim instead of octal-escaped and quoted.
+        result = subprocess.run(
+            ["git", "-c", "core.quotepath=false", *args],
+            cwd=self._root,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return []
+        pairs: list[tuple[str, str]] = []
+        for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+            parsed = _parse_rename_line(line)
+            if parsed is not None:
+                pairs.append(parsed)
+        return pairs
+
+
 def git_rename_destinations(
     root: Path,
     *,
     basename: str,
     old_path: str | None,
-    current_files: set[str],
+    current_files: Container[str],
 ) -> RenameDestinations:
-    if not (root / ".git").exists() or not basename:
-        return RenameDestinations()
-    pathspecs = []
-    if old_path:
-        pathspecs.append(old_path)
-    pathspecs.extend([basename, f"**/{basename}"])
-    result = subprocess.run(
-        [
-            "git",
-            "log",
-            "--diff-filter=R",
-            "--name-status",
-            "--pretty=format:",
-            "--",
-            *pathspecs,
-        ],
-        cwd=root,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return RenameDestinations()
-    pairs: list[tuple[str, str]] = []
-    for line in result.stdout.decode("utf-8", errors="replace").splitlines():
-        parsed = _parse_rename_line(line)
-        if parsed is None:
-            continue
-        src, dest = parsed
-        if dest not in current_files:
-            continue
-        pairs.append((src, dest))
-    if old_path:
-        exact = _unique_keep_order(dest for src, dest in pairs if src == old_path)
-        if exact:
-            return RenameDestinations(exact=tuple(exact))
-    return RenameDestinations(
-        basename=tuple(
-            _unique_keep_order(
-                dest
-                for src, dest in pairs
-                if PurePosixPath(src).name == basename or PurePosixPath(dest).name == basename
-            )
-        )
-    )
+    """One-off lookup; ``check``/``fix`` share a :class:`RenameIndex` instead."""
+    return RenameIndex(root, current_files).lookup(basename=basename, old_path=old_path)
 
 
 def preview_hunks(root: Path, findings: list[Finding]) -> list[str]:
@@ -268,7 +330,7 @@ def rewrite_raw(original_raw: str, target: str, source: str) -> str:
     return new_path
 
 
-def _is_broken(edge: StoredEdge, git_files: set[str], git_dirs: frozenset[str]) -> bool:
+def _is_broken(edge: StoredEdge, git_files: FileIndex) -> bool:
     """A link needs attention unless it resolved exactly to something that exists.
 
     Non-exact resolutions (``unique-suffix`` / ``unique-basename``) only work
@@ -278,7 +340,7 @@ def _is_broken(edge: StoredEdge, git_files: set[str], git_dirs: frozenset[str]) 
     """
     if edge.confidence == UNRESOLVED or not edge.resolved:
         return True
-    if edge.resolved not in git_files and edge.resolved not in git_dirs:
+    if edge.resolved not in git_files and edge.resolved not in git_files.dirs:
         return True
     return not _is_intended_resolution(edge.kind, edge.confidence)
 
@@ -287,7 +349,7 @@ def _is_intended_resolution(kind: str, confidence: str) -> bool:
     return confidence == EXACT or (kind == "wiki" and confidence == UNIQUE_BASENAME)
 
 
-def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | None:
+def _suggest(edge: StoredEdge, git_files: FileIndex, renames: RenameIndex) -> Finding | None:
     hit = resolve_link(edge.raw, edge.source, git_files)
     if hit.resolved is not None and _is_intended_resolution(edge.kind, hit.confidence):
         return None
@@ -314,19 +376,9 @@ def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | Non
     if not old_path and path_part:
         old_path = _join(_parent(edge.source), path_part)
     if old_path:
-        renamed = git_rename_destinations(
-            root,
-            basename=basename,
-            old_path=old_path,
-            current_files=git_files,
-        )
+        renamed = renames.lookup(basename=basename, old_path=old_path)
     elif not ambiguous:
-        renamed = git_rename_destinations(
-            root,
-            basename=basename,
-            old_path=None,
-            current_files=git_files,
-        )
+        renamed = renames.lookup(basename=basename, old_path=None)
     else:
         renamed = RenameDestinations()
     for destinations, confidence in (

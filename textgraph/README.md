@@ -81,7 +81,7 @@ textgraph --path C:\src\project fix --scripts --apply
 
 http(s) / mailto / アンカーのみは無視する。フェンスコードとインラインバッククォートの中は走査しない。
 
-解決順: ソースディレクトリ相対 → リポジトリルート相対 → 大小文字無視 → 拡張子なしなら `.md` を補う → 一意 basename → 一意 path suffix。ディレクトリリンクは `README.md` / `AGENTS.md` / `index.md` をこの順で `exact` とみなし、どれも無ければ git ファイルの親として実在するディレクトリそのもの（末尾 `/` なしのパス）を `exact` で解決する（ディスクは見ない）。`impact` の inbound はファイル単位なので、ディレクトリそのものへのリンクは inbound に出ない。ソース相対・ルート相対で当たらない `../` 付きのリンクは、`..` より後ろの部分が一意 suffix で当たっても `unique-suffix`（非 exact）なので `check` が報告し、`fix --apply` で直せる。`check` / `fix` だけ、それでも決まらないリンクにコミット済みの git rename を足す。
+解決順: ソースディレクトリ相対 → リポジトリルート相対 → 大小文字無視 → 拡張子なしなら `.md` を補う → 一意 basename → 一意 path suffix。ディレクトリリンクは `README.md` / `AGENTS.md` / `index.md` をこの順で `exact` とみなし、どれも無ければ git ファイルの親として実在するディレクトリそのもの（末尾 `/` なしのパス）を `exact` で解決する（ディスクは見ない）。`impact` の inbound はファイル単位なので、ディレクトリそのものへのリンクは inbound に出ない。ソース相対・ルート相対で当たらない `../` 付きのリンクは、`..` より後ろの部分が一意 suffix で当たっても `unique-suffix`（非 exact）なので `check` が報告し、`fix --apply` で直せる。`check` / `fix` だけ、それでも決まらないリンクに git rename を足す。使うのは stage 済みの rename（`git diff --cached`、コミット前の `git mv` を含む）とコミット済みの rename（`git log` の全履歴）で、stage 済みを優先する。移動先がもう無ければ、その後の rename を辿って今あるファイルまで進む（A→B→C なら C）。rename の一覧は 1 回の実行で最初に必要になったときに 1 回だけ取り、切れが無ければ git を呼ばない。stage していない作業ツリーだけの移動（`mv`）は git が rename として検出できないので、`git mv` するか `git add -A` してから `check` する。
 
 ## ファイル構成
 
