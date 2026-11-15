@@ -7,7 +7,7 @@ import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
-from .check import Finding, apply_findings, find_broken_links, preview_hunks
+from .check import EXTERNAL, Finding, apply_findings, find_broken_links, preview_hunks
 from .query import (
     ImpactResult,
     collapse_paths,
@@ -68,9 +68,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "impact":
             return _cmd_impact(root, args.target, as_json=args.json)
         if args.command == "check":
-            return _cmd_check(root, scripts=args.scripts)
+            return _cmd_check(root, scripts=args.scripts, external=args.external)
         if args.command == "fix":
-            return _cmd_fix(root, apply=args.apply, scripts=args.scripts)
+            return _cmd_fix(root, apply=args.apply, scripts=args.scripts, external=args.external)
     except CliError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
@@ -150,6 +150,14 @@ def _add_scripts_flag(parser: argparse.ArgumentParser) -> None:
             "also scan script files for the same local-link syntax (no comment-vs-code detection)"
         ),
     )
+    parser.add_argument(
+        "--external",
+        action="store_true",
+        help=(
+            "also list links outside the index that exist on disk "
+            "(status external; never counted in the exit code)"
+        ),
+    )
 
 
 def _resolve_root(path: Path | None) -> Path:
@@ -222,22 +230,41 @@ def _cmd_files(
         store.close()
 
 
-def _cmd_check(root: Path, *, scripts: bool) -> int:
+def _split_external(
+    findings: Sequence[Finding], *, show_external: bool
+) -> tuple[list[Finding], list[Finding]]:
+    """Return (findings to list, real problems) and report hidden externals."""
+    problems = [finding for finding in findings if finding.status != EXTERNAL]
+    external = len(findings) - len(problems)
+    if show_external:
+        return list(findings), problems
+    if external:
+        print(
+            f"{external} links point outside the index (exist on disk); use --external to list",
+            file=sys.stderr,
+        )
+    return problems, problems
+
+
+def _cmd_check(root: Path, *, scripts: bool, external: bool) -> int:
     store = _open_store(root, code=2)
     try:
         _require_fresh(root, store, code=2)
         findings = find_broken_links(root, store, scripts=scripts)
-        _print_findings(findings)
-        return 0 if not findings else 1
+        listed, problems = _split_external(findings, show_external=external)
+        _print_findings(listed)
+        return 0 if not problems else 1
     finally:
         store.close()
 
 
-def _cmd_fix(root: Path, *, apply: bool, scripts: bool) -> int:
+def _cmd_fix(root: Path, *, apply: bool, scripts: bool, external: bool) -> int:
     store = _open_store(root, code=2)
     try:
         _require_fresh(root, store, code=2)
-        findings = find_broken_links(root, store, scripts=scripts)
+        findings, problems = _split_external(
+            find_broken_links(root, store, scripts=scripts), show_external=external
+        )
         applyable = [finding for finding in findings if finding.applyable]
         skipped = [finding for finding in findings if not finding.applyable]
         hunks = preview_hunks(root, applyable)
@@ -262,8 +289,8 @@ def _cmd_fix(root: Path, *, apply: bool, scripts: bool) -> int:
             print("skipped")
             _print_findings(remaining)
         if apply:
-            return 0 if not remaining else 1
-        return 0 if not findings else 1
+            return 0 if not any(f.status != EXTERNAL for f in remaining) else 1
+        return 0 if not problems else 1
     finally:
         store.close()
 

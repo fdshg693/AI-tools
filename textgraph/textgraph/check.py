@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -26,6 +27,8 @@ from .store import StoredEdge, GraphStore
 APPLYABLE = frozenset({UNIQUE_SUFFIX, GIT_RENAME})
 AMBIGUOUS = "ambiguous"
 SUGGESTED = "suggested"
+EXTERNAL = "external"
+ON_DISK = "on-disk"
 
 
 @dataclass(frozen=True)
@@ -88,7 +91,41 @@ def _finding_for_edge(
 ) -> Finding | None:
     if not _is_broken(edge, git_files, git_dirs):
         return None
+    # The written path is not in the index but exists on disk: a submodule
+    # file, a file above the repository root, or a gitignored artifact. It is
+    # not broken, so it gets no candidates and is never rewritten.
+    if _exists_on_disk(root, edge.raw, edge.source):
+        return _finding(edge, status=EXTERNAL, confidence=ON_DISK, suggested=())
     return _suggest(root, edge, git_files)
+
+
+def _exists_on_disk(root: Path, raw: str, source: str) -> bool:
+    """Whether the written path names a file or directory on disk.
+
+    Mirrors the exact steps of the resolver (source-relative, then
+    root-relative, each also with ``.md`` appended when there is no
+    extension), but joins OS paths so ``..`` may leave the root.
+    """
+    path_part, _anchor = _split_target(raw)
+    rel_parts = [part for part in path_part.split("/") if part]
+    if not rel_parts:
+        return False
+    bases: list[Path] = []
+    if not path_part.startswith("/"):
+        source_dir = _parent(source)
+        bases.append(_abs(root, source_dir) if source_dir else root)
+    bases.append(root)
+    variants = [rel_parts]
+    if not PurePosixPath(path_part).suffix:
+        variants.append([*rel_parts[:-1], f"{rel_parts[-1]}.md"])
+    for base in bases:
+        for parts in variants:
+            try:
+                if os.path.exists(os.path.normpath(os.path.join(base, *parts))):
+                    return True
+            except (OSError, ValueError):
+                continue
+    return False
 
 
 @dataclass(frozen=True)

@@ -45,6 +45,7 @@ textgraph --path C:\src\project impact docs/guide.md
 textgraph --path C:\src\project impact guide.md --json
 textgraph --path C:\src\project check
 textgraph --path C:\src\project check --scripts
+textgraph --path C:\src\project check --external
 textgraph --path C:\src\project fix
 textgraph --path C:\src\project fix --apply
 textgraph --path C:\src\project fix --scripts --apply
@@ -56,7 +57,10 @@ textgraph --path C:\src\project fix --scripts --apply
 - `files` — 索引上のテキストファイルをリポジトリ相対で出す。`--filter` は前方一致。`--max-depth` は人間向けの木を途中で畳む（`--json` は flat な配列のまま）。
 - `impact` — あるファイルの inbound（誰が指しているか）を先に、outbound を次に出す。1 hop のみ。未解決の outbound は末尾。`<path>` はリポジトリ相対・絶対・basename。複数ヒットなら候補を出して非 0。
 - `check` — outbound のリンク切れと、書かれたパスのままでは当たらないリンクを報告する。対象は索引上 `unresolved`、resolved 先が今の git ファイル集合（とその親ディレクトリ）に無い、または `exact` 以外（`unique-suffix`・`unique-basename`）で解決したもの。wiki `[[name]]` は basename で引くのが本来の意味なので、`unique-basename` で解決しても報告しない。候補が1件なら `suggested`、2件以上は `ambiguous`、0件は `unresolved`。basename 由来の候補（同名ファイル・`git-rename-basename`）と `ambiguous` の候補は、リンクのディレクトリ部分の名前（`.`・`..` を除く）を 1 つ以上パスに含むものだけに絞る。絞って 0 件なら `unresolved`、1 件なら `suggested`（`unique-basename`、適用しない）。basename だけのリンクは絞らない。`impact <basename>` の候補表示は絞らない。http(s) 等は索引に載らないので触れない。`--scripts` は索引に入れず、スクリプトをその場で同じ構文で走査する（コメント判定はしない）。終了コードは問題なし 0、切れ/曖昧あり 1、索引なし/stale/I/O 失敗 2。
-- `fix` — 既定は dry-run。適用予定の hunk 要約だけ出す。`--apply` は一意の `unique-suffix` と `git-rename` だけ本文のリンク先パスを書き換える。リンクテキストと `@./` 構文は維持する。`unique-basename`・`git-rename-basename`（旧パスが一致せず basename だけで当たった rename）・`ambiguous` は suggested に出しても適用しない。元の改行（LF / CRLF / 混在）は書き換えた行も含めてそのまま保つ。`--scripts` は `check` と同じ範囲。`--apply` 後も残りがあれば 1。
+  - 索引（git ファイル集合）では exact に当たらないが、書かれたパスがディスク上にファイルかディレクトリとして実在するリンクは status `external`（confidence `on-disk`）。候補探し・git rename より先に判定する。サブモジュールの中のファイル（アンブレラから見た `tools/README.md` など）、`..` でリポジトリルートの外に出るファイル（サブモジュールから見たアンブレラのファイル）、gitignore された生成物がここに入る。見る順は解決順の exact の段と同じ（ソース相対 → ルート相対、拡張子なしなら `.md` を補う）だが、OS のパスで組み立てるのでルートより上も見る。
+  - `external` は既定で一覧に出さず、終了コードにも数えない。1 件以上あれば stderr に `N links point outside the index (exist on disk); use --external to list` を 1 行出す。`--external`（`fix` も同じ）で一覧に含める。その場合も終了コードには数えない。
+  - Windows のファイルシステムは大小文字を区別しないので、大小文字だけ違うリンクも実在扱いで `external` になることがある（git 集合内のファイルなら先に大小文字無視の exact で拾う）。Junction を辿った先も実在扱いになる。これはリンク 1 件ごとの存在確認で、リポジトリの走査ではない。
+- `fix` — 既定は dry-run。適用予定の hunk 要約だけ出す。`--apply` は一意の `unique-suffix` と `git-rename` だけ本文のリンク先パスを書き換える。リンクテキストと `@./` 構文は維持する。`unique-basename`・`git-rename-basename`（旧パスが一致せず basename だけで当たった rename）・`ambiguous` は suggested に出しても適用しない。`external` は実在するリンクなので書き換えない。元の改行（LF / CRLF / 混在）は書き換えた行も含めてそのまま保つ。`--scripts` と `--external` は `check` と同じ範囲。`--apply` 後も残り（`external` を除く）があれば 1。
 - `--version` — マニフェストの版数を1行出す。`.git` も索引も触らない。
 
 `files` / `impact` / `check` / `fix` は索引が無い、またはソースが索引より新しい（未索引のドキュメント追加を含む）ときは `sync` を案内して非 0（`files`/`impact` は 1、`check`/`fix` は 2）。クエリ側で自動 sync はしない。ソース本文は出さない。`fix --apply` のあと索引は古くなるので、直したドキュメントを確認するなら `sync` してから `check` する。`--scripts` で直したスクリプトは索引に無いので、確認も `check --scripts`。

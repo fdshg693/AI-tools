@@ -485,3 +485,98 @@ def test_fix_scripts_apply_git_rename(
     assert text == "# See [a](pkg/c/note.md) and @./pkg/c/note.md\n"
     capsys.readouterr()
     assert main(["--path", str(git_repo), "check", "--scripts"]) == 0
+
+
+def _external_repo(git_repo: Path, write) -> None:
+    """Links that are outside the index but exist on disk, plus one real break."""
+    # A nested repository stands in for a submodule.
+    sub = git_repo / "sub"
+    sub.mkdir()
+    git(sub, "init")
+    write(sub, "doc.md", "nested\n")
+    # A file next to the repository (an umbrella file seen from a submodule).
+    write(git_repo.parent, "outside.md", "outside\n")
+    # A gitignored generated file.
+    write(git_repo, ".gitignore", "build/\n")
+    write(git_repo, "build/out.md", "generated\n")
+    write(
+        git_repo,
+        "docs/guide.md",
+        "[sub](../sub/doc.md) [up](../../outside.md) [gen](../build/out.md)"
+        " [dir](../sub) [gone](./missing.md)\n",
+    )
+
+
+def test_check_hides_links_that_exist_on_disk(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _external_repo(git_repo, write)
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    captured = capsys.readouterr()
+    assert "missing.md" in captured.out
+    for raw in ("sub/doc.md", "outside.md", "build/out.md", "../sub "):
+        assert raw not in captured.out
+    # ``../sub`` is the nested repository's own path, which git lists, so it
+    # resolves exactly and is not counted as external.
+    assert "3 links point outside the index (exist on disk); use --external to list" in (
+        captured.err
+    )
+
+
+def test_check_external_flag_lists_without_failing(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _external_repo(git_repo, write)
+    (git_repo / "docs" / "guide.md").write_text(
+        "[sub](../sub/doc.md) [up](../../outside.md)\n", encoding="utf-8"
+    )
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "(none)"
+    assert "2 links point outside the index" in captured.err
+    assert main(["--path", str(git_repo), "check", "--external"]) == 0
+    captured = capsys.readouterr()
+    assert "../sub/doc.md" in captured.out
+    assert "../../outside.md" in captured.out
+    assert "external" in captured.out
+    assert "on-disk" in captured.out
+    assert captured.err == ""
+
+
+def test_fix_never_rewrites_external_links(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Same basename tracked elsewhere: without the on-disk check this would
+    # be suggested as a unique-basename / suffix candidate.
+    write(git_repo, "other/sub/doc.md", "tracked twin\n")
+    _external_repo(git_repo, write)
+    (git_repo / "docs" / "guide.md").write_text("[sub](../sub/doc.md)\n", encoding="utf-8")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    original = (git_repo / "docs" / "guide.md").read_text(encoding="utf-8")
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "fix", "--apply"]) == 0
+    assert (git_repo / "docs" / "guide.md").read_text(encoding="utf-8") == original
+    assert main(["--path", str(git_repo), "fix", "--apply", "--external"]) == 0
+    out = capsys.readouterr().out
+    assert "applied" not in out
+    assert "external" in out
+    assert (git_repo / "docs" / "guide.md").read_text(encoding="utf-8") == original
+
+
+def test_check_scripts_treats_on_disk_links_as_external(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "ok\n")
+    write(git_repo.parent, "outside.md", "outside\n")
+    write(git_repo, "tool.py", "# See [up](../outside.md) and [gone](./missing.md)\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check", "--scripts"]) == 1
+    captured = capsys.readouterr()
+    assert "missing.md" in captured.out
+    assert "outside.md" not in captured.out
+    assert "1 links point outside the index" in captured.err
