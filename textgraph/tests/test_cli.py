@@ -180,3 +180,29 @@ def test_script_file_classification() -> None:
     assert not is_script_file("notes.txt")
     assert not is_text_file("foo.py")
     assert not is_text_file("justfile")
+
+
+def test_status_shows_config(git_repo: Path, write, capsys: pytest.CaptureFixture[str]) -> None:
+    write(git_repo, "README.md", "ok\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "status"]) == 0
+    assert "config: (none)" in capsys.readouterr().out
+    write(git_repo, ".textgraph.toml", 'exclude = ["a/**", "b/**"]\nscripts_exclude = ["c/**"]\n')
+    assert main(["--path", str(git_repo), "status"]) == 0
+    out = capsys.readouterr().out
+    assert f"config: {(git_repo / '.textgraph.toml').resolve()}" in out
+    assert "exclude: 2" in out
+    assert "scripts_exclude: 1" in out
+
+
+@pytest.mark.parametrize("command", ["init", "sync", "status", "check"])
+def test_invalid_config_exits_two_with_path(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str], command: str
+) -> None:
+    write(git_repo, "README.md", "ok\n")
+    write(git_repo, ".textgraph.toml", 'exclude = "a/**"\n')
+    assert main(["--path", str(git_repo), command]) == 2
+    err = capsys.readouterr().err
+    assert str((git_repo / ".textgraph.toml").resolve()) in err
+    assert "array of strings" in err

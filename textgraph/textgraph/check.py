@@ -6,6 +6,7 @@ from collections.abc import Container, Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from .config import Config, load_config
 from .resolve import (
     EXACT,
     GIT_RENAME,
@@ -51,7 +52,20 @@ class Finding:
         )
 
 
-def find_broken_links(root: Path, store: GraphStore, *, scripts: bool = False) -> list[Finding]:
+# A raw path with any of these characters in a script is a template or a code
+# fragment (f"{name}.md", "[x](...)" in a regex, "$HOME/...", "*.md"), not a
+# link someone wrote to a file. Documents keep reporting them: there such a
+# link is a real typo.
+SCRIPT_NOISE_CHARS = frozenset("{}[]$*")
+
+
+def find_broken_links(
+    root: Path, store: GraphStore, *, scripts: bool = False, config: Config | None = None
+) -> list[Finding]:
+    if config is None:
+        config = load_config(root)
+    # The resolution set stays unfiltered: ``exclude`` only removes sources,
+    # so a link to an excluded file still resolves exactly.
     git_files = FileIndex(path.replace("\\", "/") for path in list_git_files(root))
     renames = RenameIndex(root, git_files)
     findings: list[Finding] = []
@@ -60,7 +74,7 @@ def find_broken_links(root: Path, store: GraphStore, *, scripts: bool = False) -
         if finding is not None:
             findings.append(finding)
     if scripts:
-        for edge in _script_edges(root, git_files):
+        for edge in _script_edges(root, git_files, config):
             finding = _finding_for_edge(root, edge, git_files, renames)
             if finding is not None:
                 findings.append(finding)
@@ -68,11 +82,18 @@ def find_broken_links(root: Path, store: GraphStore, *, scripts: bool = False) -
     return findings
 
 
-def _script_edges(root: Path, git_files: FileIndex) -> list[StoredEdge]:
+def is_script_noise(raw: str) -> bool:
+    return any(char in SCRIPT_NOISE_CHARS for char in raw)
+
+
+def _script_edges(root: Path, git_files: FileIndex, config: Config) -> list[StoredEdge]:
     edges: list[StoredEdge] = []
-    for path in sorted(p for p in git_files if is_script_file(p)):
+    targets = sorted(p for p in git_files if is_script_file(p) and not config.excludes_script(p))
+    for path in targets:
         text = read_source_text(root, path)
         for link in stored_links_from_text(text, path, git_files):
+            if is_script_noise(link.raw):
+                continue
             edges.append(
                 StoredEdge(
                     source=path,

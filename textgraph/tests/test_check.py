@@ -721,3 +721,87 @@ def test_check_git_rename_with_non_ascii_path(
     out = capsys.readouterr().out
     assert "git-rename" in out
     assert "docs/c/メモ.md" in out
+
+
+def test_excluded_files_are_not_indexed_nor_stale(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, ".textgraph.toml", 'exclude = ["output/**"]\n')
+    write(git_repo, "README.md", "See [page](output/page.md).\n")
+    write(git_repo, "output/page.md", "[gone](/site/absolute/path.md)\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "files", "--json"]) == 0
+    assert "output/page.md" not in capsys.readouterr().out
+    # The link to the excluded file still resolves, and the excluded file's
+    # own broken link is not reported.
+    assert main(["--path", str(git_repo), "check"]) == 0
+    assert capsys.readouterr().out.strip() == "(none)"
+    # A new excluded file does not make the index stale.
+    write(git_repo, "output/new.md", "new\n")
+    assert main(["--path", str(git_repo), "check"]) == 0
+
+
+def test_widening_exclude_makes_index_stale(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "ok\n")
+    write(git_repo, "output/page.md", "page\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    write(git_repo, ".textgraph.toml", 'exclude = ["output/**"]\n')
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 2
+    assert "sync" in capsys.readouterr().err
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    assert "removed 1" in capsys.readouterr().out
+    assert main(["--path", str(git_repo), "check"]) == 0
+
+
+def test_check_scripts_skips_template_fragments(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "ok\n")
+    write(
+        git_repo,
+        "tool.py",
+        'A = f"[x]({name}.md)"\n'
+        'B = "[x]($HOME/a.md)"\n'
+        'C = "[x](docs/*.md)"\n'
+        'D = "[x](./real-missing.md)"\n',
+    )
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check", "--scripts"]) == 1
+    out = capsys.readouterr().out
+    assert "real-missing.md" in out
+    assert "{name}" not in out
+    assert "$HOME" not in out
+    assert "*.md" not in out
+
+
+def test_document_template_links_are_still_reported(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "[x]({var}.md)\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    assert "{var}.md" in capsys.readouterr().out
+
+
+def test_scripts_exclude_only_limits_the_script_scan(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, ".textgraph.toml", 'scripts_exclude = ["**/tests/**"]\n')
+    write(git_repo, "README.md", "ok\n")
+    write(git_repo, "pkg/tests/test_a.py", "# [fixture](./missing-fixture.md)\n")
+    write(git_repo, "pkg/tests/notes.md", "[gone](./missing-note.md)\n")
+    write(git_repo, "pkg/tool.py", "# [gone](./missing-tool.md)\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check", "--scripts"]) == 1
+    out = capsys.readouterr().out
+    assert "missing-fixture.md" not in out
+    assert "missing-tool.md" in out
+    # Documents under tests/ are still indexed and checked.
+    assert "missing-note.md" in out

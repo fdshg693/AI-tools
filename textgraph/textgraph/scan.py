@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
+from .config import Config, load_config
 from .extract import extract_links
 from .resolve import FileIndex, resolve_link
 from .store import StoredLink, GraphStore, db_path
@@ -94,6 +95,15 @@ def is_script_file(path: str) -> bool:
     return posix.name.lower() in SCRIPT_BASENAMES
 
 
+def indexed_text_files(all_files: list[str], config: Config) -> list[str]:
+    """The text files the index should hold: git's list minus ``exclude``.
+
+    ``sync`` and the stale check both call this, so an excluded file is
+    neither indexed nor reported as missing from the index.
+    """
+    return [path for path in config.sources(all_files) if is_text_file(path)]
+
+
 def stored_links_from_text(
     text: str, source: str, file_set: set[str] | FileIndex
 ) -> list[StoredLink]:
@@ -117,9 +127,13 @@ def read_source_text(root: Path, path: str) -> str:
     return full.read_text(encoding="utf-8", errors="replace")
 
 
-def sync_index(root: Path, *, force: bool = False) -> SyncStats:
+def sync_index(root: Path, *, force: bool = False, config: Config | None = None) -> SyncStats:
+    if config is None:
+        config = load_config(root)
     all_files = list_git_files(root)
-    text_files = [path for path in all_files if is_text_file(path)]
+    text_files = indexed_text_files(all_files, config)
+    # Links resolve against every git file, excluded or not: a link to an
+    # excluded document is still a correct link.
     file_set = FileIndex(all_files)
     store = GraphStore(db_path(root))
     try:

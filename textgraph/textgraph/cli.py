@@ -7,6 +7,7 @@ import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
+from .config import Config, ConfigError, load_config
 from .check import EXTERNAL, Finding, apply_findings, find_broken_links, preview_hunks
 from .query import (
     ImpactResult,
@@ -52,25 +53,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     try:
         root = _resolve_root(args.path)
+        config = load_config(root)
         if args.command == "init":
-            return _cmd_init(root)
+            return _cmd_init(root, config)
         if args.command == "sync":
-            return _cmd_sync(root, force=args.force)
+            return _cmd_sync(root, config, force=args.force)
         if args.command == "status":
-            return _cmd_status(root)
+            return _cmd_status(root, config)
         if args.command == "files":
             return _cmd_files(
                 root,
+                config,
                 prefix=args.filter,
                 max_depth=args.max_depth,
                 as_json=args.json,
             )
         if args.command == "impact":
-            return _cmd_impact(root, args.target, as_json=args.json)
+            return _cmd_impact(root, config, args.target, as_json=args.json)
         if args.command == "check":
-            return _cmd_check(root, scripts=args.scripts, external=args.external)
+            return _cmd_check(root, config, scripts=args.scripts, external=args.external)
         if args.command == "fix":
-            return _cmd_fix(root, apply=args.apply, scripts=args.scripts, external=args.external)
+            return _cmd_fix(
+                root, config, apply=args.apply, scripts=args.scripts, external=args.external
+            )
+    except ConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     except CliError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
@@ -172,21 +180,21 @@ def _resolve_root(path: Path | None) -> Path:
     return found
 
 
-def _cmd_init(root: Path) -> int:
+def _cmd_init(root: Path, config: Config) -> int:
     index = root / INDEX_DIR
     if index.exists():
         print("index already exists; run `textgraph sync`", file=sys.stderr)
         return 1
     index.mkdir()
-    _print_sync_stats(sync_index(root, force=True))
+    _print_sync_stats(sync_index(root, force=True, config=config))
     return 0
 
 
-def _cmd_sync(root: Path, *, force: bool) -> int:
+def _cmd_sync(root: Path, config: Config, *, force: bool) -> int:
     if not (root / INDEX_DIR).exists():
         print("index not found; run `textgraph init`", file=sys.stderr)
         return 1
-    _print_sync_stats(sync_index(root, force=force))
+    _print_sync_stats(sync_index(root, force=force, config=config))
     return 0
 
 
@@ -194,7 +202,7 @@ def _print_sync_stats(stats: SyncStats) -> None:
     print(f"updated {stats.updated}, skipped {stats.skipped}, removed {stats.removed}")
 
 
-def _cmd_status(root: Path) -> int:
+def _cmd_status(root: Path, config: Config) -> int:
     store = _open_store(root)
     try:
         files, links, unresolved = store.counts()
@@ -203,6 +211,12 @@ def _cmd_status(root: Path) -> int:
         print(f"links: {links}")
         print(f"unresolved: {unresolved}")
         print(f"last_sync: {last}")
+        if config.path is None:
+            print("config: (none)")
+        else:
+            print(f"config: {config.path}")
+            print(f"exclude: {len(config.exclude)}")
+            print(f"scripts_exclude: {len(config.scripts_exclude)}")
         return 0
     finally:
         store.close()
@@ -210,6 +224,7 @@ def _cmd_status(root: Path) -> int:
 
 def _cmd_files(
     root: Path,
+    config: Config,
     *,
     prefix: str | None,
     max_depth: int | None,
@@ -219,7 +234,7 @@ def _cmd_files(
         raise CliError("--max-depth must be >= 1")
     store = _open_store(root)
     try:
-        _require_fresh(root, store)
+        _require_fresh(root, store, config)
         paths = filter_paths(store.list_files(), prefix)
         if as_json:
             print(json.dumps(paths, indent=2))
@@ -246,11 +261,11 @@ def _split_external(
     return problems, problems
 
 
-def _cmd_check(root: Path, *, scripts: bool, external: bool) -> int:
+def _cmd_check(root: Path, config: Config, *, scripts: bool, external: bool) -> int:
     store = _open_store(root, code=2)
     try:
-        _require_fresh(root, store, code=2)
-        findings = find_broken_links(root, store, scripts=scripts)
+        _require_fresh(root, store, config, code=2)
+        findings = find_broken_links(root, store, scripts=scripts, config=config)
         listed, problems = _split_external(findings, show_external=external)
         _print_findings(listed)
         return 0 if not problems else 1
@@ -258,12 +273,13 @@ def _cmd_check(root: Path, *, scripts: bool, external: bool) -> int:
         store.close()
 
 
-def _cmd_fix(root: Path, *, apply: bool, scripts: bool, external: bool) -> int:
+def _cmd_fix(root: Path, config: Config, *, apply: bool, scripts: bool, external: bool) -> int:
     store = _open_store(root, code=2)
     try:
-        _require_fresh(root, store, code=2)
+        _require_fresh(root, store, config, code=2)
         findings, problems = _split_external(
-            find_broken_links(root, store, scripts=scripts), show_external=external
+            find_broken_links(root, store, scripts=scripts, config=config),
+            show_external=external,
         )
         applyable = [finding for finding in findings if finding.applyable]
         skipped = [finding for finding in findings if not finding.applyable]
@@ -295,10 +311,10 @@ def _cmd_fix(root: Path, *, apply: bool, scripts: bool, external: bool) -> int:
         store.close()
 
 
-def _cmd_impact(root: Path, raw_target: str, *, as_json: bool) -> int:
+def _cmd_impact(root: Path, config: Config, raw_target: str, *, as_json: bool) -> int:
     store = _open_store(root)
     try:
-        _require_fresh(root, store)
+        _require_fresh(root, store, config)
         files = store.listed_paths()
         target = resolve_target(raw_target, root, files, cwd=Path.cwd())
         if target.path is None:
@@ -325,8 +341,8 @@ def _open_store(root: Path, *, code: int = 1) -> GraphStore:
     return GraphStore(path)
 
 
-def _require_fresh(root: Path, store: GraphStore, *, code: int = 1) -> None:
-    if is_index_stale(root, store):
+def _require_fresh(root: Path, store: GraphStore, config: Config, *, code: int = 1) -> None:
+    if is_index_stale(root, store, config):
         raise CliError("index is stale; run `textgraph sync`", code=code)
 
 

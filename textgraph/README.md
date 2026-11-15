@@ -53,7 +53,7 @@ textgraph --path C:\src\project fix --scripts --apply
 
 - `init` — `.textgraph/` を作り、初回索引を構築する。既にある場合は拒否して `sync` を案内する。
 - `sync` — 内容 hash が変わったテキストファイルだけ再抽出する。hash が同じでも索引の mtime はディスクに合わせる（内容を変えずに書き直したファイルで stale が抜けなくなるのを防ぐ）。削除されたファイルは索引から落とす。`--force` は全件再抽出。`init` と `sync` は `updated N, skipped N, removed N` を stdout に 1 行出す。
-- `status` — ファイル数・リンク数・`unresolved` 数・最終 sync 時刻。壊れたリンクの一覧は出さない。
+- `status` — ファイル数・リンク数・`unresolved` 数・最終 sync 時刻と、読み込んだ設定ファイル（`config: <絶対パス>` と `exclude`・`scripts_exclude` のパターン数。無ければ `config: (none)`）。壊れたリンクの一覧は出さない。
 - `files` — 索引上のテキストファイルをリポジトリ相対で出す。`--filter` は前方一致。`--max-depth` は人間向けの木を途中で畳む（`--json` は flat な配列のまま）。
 - `impact` — あるファイルの inbound（誰が指しているか）を先に、outbound を次に出す。1 hop のみ。未解決の outbound は末尾。`<path>` はリポジトリ相対・絶対・basename。複数ヒットなら候補を出して非 0。
 - `check` — outbound のリンク切れと、書かれたパスのままでは当たらないリンクを報告する。対象は索引上 `unresolved`、resolved 先が今の git ファイル集合（とその親ディレクトリ）に無い、または `exact` 以外（`unique-suffix`・`unique-basename`）で解決したもの。wiki `[[name]]` は basename で引くのが本来の意味なので、`unique-basename` で解決しても報告しない。候補が1件なら `suggested`、2件以上は `ambiguous`、0件は `unresolved`。basename 由来の候補（同名ファイル・`git-rename-basename`）と `ambiguous` の候補は、リンクのディレクトリ部分の名前（`.`・`..` を除く）を 1 つ以上パスに含むものだけに絞る。絞って 0 件なら `unresolved`、1 件なら `suggested`（`unique-basename`、適用しない）。basename だけのリンクは絞らない。`impact <basename>` の候補表示は絞らない。http(s) 等は索引に載らないので触れない。`--scripts` は索引に入れず、スクリプトをその場で同じ構文で走査する（コメント判定はしない）。終了コードは問題なし 0、切れ/曖昧あり 1、索引なし/stale/I/O 失敗 2。
@@ -69,9 +69,9 @@ textgraph --path C:\src\project fix --scripts --apply
 
 ## 対象と抽出
 
-走査対象は `git ls-files --cached --others --exclude-standard` のうち、既定拡張子 `.md` / `.mdc` / `.txt` / `.rst`。これらだけを索引する。スクリプトの変更では索引は stale にならない。
+走査対象は `git ls-files --cached --others --exclude-standard` のうち、既定拡張子 `.md` / `.mdc` / `.txt` / `.rst`。これらだけを索引する。スクリプトの変更では索引は stale にならない。`.textgraph.toml` の `exclude` に一致するファイルは索引しない（[設定](#設定)）。
 
-`check --scripts` / `fix --scripts` は索引には入れず、スクリプトをその場で同じリンク構文で走査する。コメントとコードの区別はしない（`[text](url)` や `@./` が実行コードに現れることはほぼ無いため）。対象は `.py` / `.ts` / `.js` / `.ps1` / `.sh` などのソース拡張子と、basename が `justfile` / `makefile` のもの。YAML / JSON は対象外。その場で再解決し、判定はドキュメントと同じ（`exact` 以外の解決も報告する）。索引に残った古い解決先をきっかけにする書き換えはドキュメント側の話で、スクリプトでは今の解決結果と `git-rename` が対象になる。
+`check --scripts` / `fix --scripts` は索引には入れず、スクリプトをその場で同じリンク構文で走査する。コメントとコードの区別はしない（`[text](url)` や `@./` が実行コードに現れることはほぼ無いため）。対象は `.py` / `.ts` / `.js` / `.ps1` / `.sh` などのソース拡張子と、basename が `justfile` / `makefile` のもの。YAML / JSON は対象外。`exclude`・`scripts_exclude` に一致するスクリプトは走査しない。抽出した raw のうち `{`・`}`・`[`・`]`・`$`・`*` を含むもの（f-string・テンプレート・正規表現・glob の断片）はスクリプトでは常に捨てる。ドキュメントでは同じ raw を報告し続ける（`[x]({var})` はドキュメントなら本物の誤記）。その場で再解決し、判定はドキュメントと同じ（`exact` 以外の解決も報告する）。索引に残った古い解決先をきっかけにする書き換えはドキュメント側の話で、スクリプトでは今の解決結果と `git-rename` が対象になる。
 
 抽出するリンク:
 
@@ -83,6 +83,23 @@ http(s) / mailto / アンカーのみは無視する。フェンスコードと�
 
 解決順: ソースディレクトリ相対 → リポジトリルート相対 → 大小文字無視 → 拡張子なしなら `.md` を補う → 一意 basename → 一意 path suffix。ディレクトリリンクは `README.md` / `AGENTS.md` / `index.md` をこの順で `exact` とみなし、どれも無ければ git ファイルの親として実在するディレクトリそのもの（末尾 `/` なしのパス）を `exact` で解決する（ディスクは見ない）。`impact` の inbound はファイル単位なので、ディレクトリそのものへのリンクは inbound に出ない。ソース相対・ルート相対で当たらない `../` 付きのリンクは、`..` より後ろの部分が一意 suffix で当たっても `unique-suffix`（非 exact）なので `check` が報告し、`fix --apply` で直せる。`check` / `fix` だけ、それでも決まらないリンクに git rename を足す。使うのは stage 済みの rename（`git diff --cached`、コミット前の `git mv` を含む）とコミット済みの rename（`git log` の全履歴）で、stage 済みを優先する。移動先がもう無ければ、その後の rename を辿って今あるファイルまで進む（A→B→C なら C）。rename の一覧は 1 回の実行で最初に必要になったときに 1 回だけ取り、切れが無ければ git を呼ばない。stage していない作業ツリーだけの移動（`mv`）は git が rename として検出できないので、`git mv` するか `git add -A` してから `check` する。
 
+## 設定
+
+`--path` で指すリポジトリルート（`.git` があるディレクトリ）の `.textgraph.toml` だけを読む。無ければ何も除外しない。記入例は [config.example.toml](config.example.toml)。
+
+```toml
+exclude = ["plugins/*/skills/*/output/**"]
+scripts_exclude = ["**/tests/**"]
+```
+
+- `exclude` — 一致するパスを索引・stale 判定・`--scripts` の走査から外す。外すのはリンク元としてだけで、リンク先の解決に使うファイル集合には残す。除外したファイルへのリンクは今までどおり `exact` で解決し、切れにならない
+- `scripts_exclude` — 一致するパスを `check --scripts` / `fix --scripts` の走査からだけ外す。ドキュメントの索引には効かない
+- glob はルートからのリポジトリ相対パス全体に当てる（gitignore のような途中一致はしない）。`*`・`?`・`[abc]`・`[!abc]` は 1 セグメントの中だけ、`**` のセグメントは 0 個以上のディレクトリ、末尾の `**` は配下すべて、末尾の `/` は `/**` と同じ。先頭の `./`・`/` は無視する。どのディレクトリの `tests` でも外すなら `**/tests/**` と書く
+- 未知のキー・型違い（`exclude = "a/**"` のような配列でない値、文字列でない要素、空文字）・TOML の構文エラーは、ファイルの絶対パス付きのメッセージを stderr に出して終了コード 2 で止める（`--version` 以外のすべてのコマンド）
+- 設定を変えたら `sync` する。設定の変更そのものは stale 判定に入れないが、除外を増やす・減らすと索引すべきファイルの一覧が変わるので、`files`・`impact`・`check`・`fix` は stale として `sync` を案内する
+
+[tool-conventions](../../maintenance/docs/tool-conventions.md) のレイヤー設定（環境変数 → CWD から遡るプロジェクト設定 → グローバル設定）は使わない。索引はリポジトリルート単位なので、CWD によって除外が変わると `sync` と `check` の範囲がずれる。除外はリポジトリ固有の内容で、グローバルな既定値や環境変数で切り替える意味も無い。未知のキーと型違いを止める・`tomllib` で読む・`config.example.toml` を置く点は規約に従う。
+
 ## ファイル構成
 
 - `textgraph/cli.py` — エントリポイント
@@ -92,4 +109,5 @@ http(s) / mailto / アンカーのみは無視する。フェンスコードと�
 - `textgraph/store.py` — SQLite 索引
 - `textgraph/query.py` — `files` / `impact` の読み取り
 - `textgraph/check.py` — `check` / `fix` と git rename 候補
-- `tests/` — 抽出・解決・init/sync/status・files/impact・check/fix
+- `textgraph/config.py` — `.textgraph.toml` の読み込み・検証と glob の一致
+- `tests/` — 抽出・解決・設定・init/sync/status・files/impact・check/fix
