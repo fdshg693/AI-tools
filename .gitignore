@@ -38,3 +38,11 @@ fb/
 # local hook selection (the committed sample is .claude/skill-tools.hooks.example.yaml)
 .claude/skill-tools.hooks.yaml
 .skill-tools/
+
+# Links created by `just links-sync` from .links.yaml (never committed). info/exclude lists them
+# with a trailing "/", which matches Windows junctions but not macOS/Linux symlinks.
+/_umbrella/
+/.claude/skills/committing
+/.claude/skills/changing-skills-and-tools
+/.claude/skills/meta
+/.claude/skills/writing-skill

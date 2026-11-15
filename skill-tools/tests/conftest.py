@@ -176,6 +176,19 @@ def isolated_run_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SKILL_TOOLS_LOG_DIR", str(tmp_path / "run-logs"))
 
 
+@pytest.fixture(autouse=True)
+def isolated_user_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the developer's real global skill-tools.yaml out of every test.
+
+    Windows reads %APPDATA%; elsewhere XDG_CONFIG_HOME (else ~/.config). Tests
+    that only set APPDATA would otherwise read ~/.config/skill-tools on macOS/Linux.
+    """
+
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.delenv("SKILL_TOOLS_CONFIG", raising=False)
+
+
 @pytest.fixture
 def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     """Point home, config, cache, and state locations at tmp directories.

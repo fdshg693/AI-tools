@@ -37,7 +37,7 @@ _FILE_KEYS = {"path", "installPath"}
 # command string is never part of the catalog; the installer builds it.
 _REGISTRATION_KEYS = {
     "claude": {"event", "matcher", "timeout", "statusMessage", "async"},
-    "codex": {"event", "matcher", "timeout", "statusMessage", "additionalContextLimit"},
+    "codex": {"event", "matcher", "timeout", "statusMessage", "additionalContextLimit", "async"},
     "cursor": {"event", "matcher", "timeout"},
     "antigravity": {"event", "matcher", "timeout"},
     "kilo": set(),

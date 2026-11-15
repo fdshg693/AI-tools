@@ -2,6 +2,9 @@
 # at the umbrella root; never committed). `path` is relative to this repository, `target` to the
 # umbrella (fdshg693/AI). In a standalone clone the targets are missing and sync skips them.
 links:
+  - path: plans
+    target: plans
+    why: share implementation plans across the umbrella and submodules
   - path: .claude/skills/committing
     target: maintenance/plugin/skills/committing
     why: commit procedure and lefthook wrapper (two-step submodule commit)
