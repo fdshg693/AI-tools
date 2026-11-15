@@ -12,6 +12,8 @@ _REF = re.compile(
 )
 _WIKI = re.compile(r"\[\[(?P<dest>[^\]|]+)(?:\|[^\]]*)?\]\]")
 _AT = re.compile(r"@(?P<dest>\.\./|\./)(?P<rest>[^\s]+)")
+# A blank line (whitespace only) ends the paragraph; code spans never cross it.
+_BLANK_LINE = re.compile(r"\n[ \t\r\f\v]*\n")
 
 _REMOTE_PREFIXES = (
     "http://",
@@ -191,10 +193,14 @@ def _backtick_run(text: str, start: int) -> int:
 
 
 def _find_closing_run(text: str, start: int, width: int) -> int:
-    i = text.find("`", start)
+    # Search only up to the end of the paragraph, so one stray backtick cannot
+    # pair with a far-away one and hide every link in between.
+    blank = _BLANK_LINE.search(text, start)
+    end = blank.start() if blank else len(text)
+    i = text.find("`", start, end)
     while i != -1:
         run = _backtick_run(text, i)
         if run == width:
             return i
-        i = text.find("`", i + run)
+        i = text.find("`", i + run, end)
     return -1
