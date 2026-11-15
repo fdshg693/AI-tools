@@ -407,8 +407,8 @@ meta:
 - textgraph
 ---
 name: textgraph
-description: Explains when to use the `textgraph` CLI for local file-link graphs in text files. Use when deciding among status, impact, and check, when editing Markdown or SKILL.md and needing inbound references, when choosing whether `fix --apply` is safe, when choosing `check --scripts` for script-comment links, or when falling back to grep for YAML or imports.
-# 前提条件: `textgraph` コマンドが PATH 上にインストール済み（`uv tool install --editable tools/textgraph`）であること。API キーは不要。このスキルはインストール・セットアップは一切行わない。
+description: Explains when to use the `textgraph` CLI for local file-link graphs in text files. Use when deciding among status, impact, and check, when editing Markdown or SKILL.md and needing inbound references, when moving files and comparing link breakage before and after with `check --baseline`, when choosing whether `fix --apply` is safe, when choosing `check --scripts` for script-comment links, or when falling back to grep for YAML or imports.
+# 前提条件: `textgraph` コマンドが PATH 上にインストール済み（`uv tool install --editable tools/textgraph`）であること。このリポジトリの中なら、入れずに `uv run --project tools/textgraph textgraph ...` でも動く。API キーは不要。このスキルはインストール・セットアップは一切行わない。
 # このスキルの設計意図・前提条件の背景は同階層の README.md 参照（人間のメンテナ向け）
 meta:
   tag: []
@@ -420,7 +420,7 @@ meta:
   requires_skills: none
   status: experimental
   description: テキストローカルリンクの impact / check / fix 判断
-  version: 1.0.4
+  version: 1.1.0
 ---
 
 - use-context
