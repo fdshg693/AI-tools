@@ -44,9 +44,8 @@
 - [skill-tools](skill-tools/README.md)
 - [textgraph](textgraph/README.md)
 - [vscode-profiles](vscode-profiles/README.md)
-- [infra](infra/AGENTS.md) — インフラ利用ツール。[ai-logs](infra/ai-logs/README.md)
 
-`ai-usage`・`openrouter`・`infra` 以外は [`repo-tools.yaml`](../registry/repo-tools.yaml) に登録済み。
+`ai-usage`・`openrouter` 以外は [`repo-tools.yaml`](../registry/repo-tools.yaml) に登録済み。
 
 ## 他の置き場所
 
