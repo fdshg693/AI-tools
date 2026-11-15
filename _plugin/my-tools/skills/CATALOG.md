@@ -264,26 +264,6 @@ meta:
   version: 1.0.4
 ---
 
-- ona-run
----
-name: ona-run
-description: リポジトリURL（またはOnaプロジェクトID）とタスク内容を指定してOnaの環境（コンテナ）を作成・起動し、その中でAIエージェントCLI等のタスクを実行して完了後に停止する`ona-run` CLIツールの使い方を説明する。`--agent`/`--command`の選び方、`--cleanup`モードの選び方、終了コード・stderrマーカーの意味を判断したい場合に使う。
-# 前提条件: `ona-run`コマンドがPATH上にインストール済み（`uv tool install --editable tools/ona-run`）であり、Ona公式CLI（`ona`）もインストール・`ona login`で認証済みであること。ona-run自体は追加の環境変数を必要としない
-# コンテナ内でAIエージェントCLI（claude/codex）を動かす場合、対象リポジトリのDev Container側にそのCLIが導入済みであることが前提（このスキル・ツールとも導入までは面倒を見ない）
-# このスキルの設計意図・前提条件の背景は同階層のREADME.md参照（人間のメンテナ向け）
-meta:
-  tag: []
-  requires_repo_tools: ona-run
-  requires_env: none
-  dependencies: none
-  requires_install: uv tool install --editable tools/ona-run, ona CLI + ona login
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.0.4
----
-
 - parallel-agent-worktree
 ---
 name: parallel-agent-worktree
