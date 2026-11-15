@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -9,6 +11,11 @@ from textgraph.scan import is_script_file, is_text_file, sync_index
 from textgraph.store import INDEX_DIR
 from textgraph.store import db_path
 
+# pre-commit auto-bumps the patch version, so read it instead of hard-coding.
+MANIFEST_VERSION = tomllib.loads(
+    (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+)["project"]["version"]
+
 
 def test_version_prints_command_and_manifest_version(
     capsys: pytest.CaptureFixture[str],
@@ -16,7 +23,7 @@ def test_version_prints_command_and_manifest_version(
     assert main(["--version"]) == 0
     captured = capsys.readouterr()
     assert captured.err == ""
-    assert captured.out.splitlines() == ["textgraph 0.1.0"]
+    assert captured.out.splitlines() == [f"textgraph {MANIFEST_VERSION}"]
 
 
 def test_init_creates_index_and_status_reports_counts(
@@ -83,6 +90,38 @@ def test_sync_skips_unchanged_hashes(git_repo: Path, write) -> None:
     assert second.skipped == 2
 
 
+def test_sync_prints_counts(git_repo: Path, write, capsys: pytest.CaptureFixture[str]) -> None:
+    write(git_repo, "README.md", "See [guide](./guide.md).\n")
+    write(git_repo, "guide.md", "ok\n")
+    write(git_repo, "old.md", "gone soon\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    assert capsys.readouterr().out.strip() == "updated 3, skipped 0, removed 0"
+    write(git_repo, "guide.md", "changed\n")
+    (git_repo / "old.md").unlink()
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    assert capsys.readouterr().out.strip() == "updated 1, skipped 1, removed 1"
+
+
+def test_sync_refreshes_mtime_when_hash_is_unchanged(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # B5: same content with a newer mtime (editor save, checkout) must not
+    # leave the index stale after one sync.
+    write(git_repo, "README.md", "See [guide](./guide.md).\n")
+    write(git_repo, "guide.md", "ok\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    guide = git_repo / "guide.md"
+    stat = guide.stat()
+    os.utime(guide, (stat.st_atime + 100, stat.st_mtime + 100))
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 2
+    assert "stale" in capsys.readouterr().err
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    assert capsys.readouterr().out.strip() == "updated 0, skipped 2, removed 0"
+    assert main(["--path", str(git_repo), "check"]) == 0
+    assert capsys.readouterr().out.strip() == "(none)"
+
+
 def test_gitignore_files_are_not_indexed(
     git_repo: Path, write, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -101,7 +140,7 @@ def test_version_does_not_touch_git_or_index(
     git_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.splitlines() == ["textgraph 0.1.0"]
+    assert capsys.readouterr().out.splitlines() == [f"textgraph {MANIFEST_VERSION}"]
     assert not (git_repo / INDEX_DIR).exists()
 
 

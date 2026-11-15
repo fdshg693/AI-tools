@@ -9,6 +9,7 @@ EXACT = "exact"
 UNIQUE_BASENAME = "unique-basename"
 UNIQUE_SUFFIX = "unique-suffix"
 GIT_RENAME = "git-rename"
+GIT_RENAME_BASENAME = "git-rename-basename"
 UNRESOLVED = "unresolved"
 
 

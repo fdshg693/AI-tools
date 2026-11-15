@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from textgraph.check import git_rename_destinations
+from textgraph.check import RenameDestinations, git_rename_destinations
 from textgraph.cli import main
 
 
@@ -204,6 +204,61 @@ def test_fix_apply_git_rename_when_basename_is_ambiguous(
     assert text == "See [a](pkg/c/SKILL.md).\n"
 
 
+def test_fix_does_not_apply_basename_only_git_rename(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # B1: a rename of an unrelated same-name file must not rewrite the link.
+    write(git_repo, "README.md", "See [x](docs/index.md).\n")
+    write(git_repo, "pkg/index.md", "pkg\n")
+    write(git_repo, "keep/index.md", "keep\n")
+    git_commit(git_repo, "initial")
+    (git_repo / "moved").mkdir()
+    git(git_repo, "mv", "pkg/index.md", "moved/index.md")
+    git_commit(git_repo, "rename unrelated index", add_all=False)
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    check_out = capsys.readouterr().out
+    assert "git-rename-basename" in check_out
+    assert "moved/index.md" in check_out
+    assert "suggested" in check_out
+    assert main(["--path", str(git_repo), "fix", "--apply"]) == 1
+    out = capsys.readouterr().out
+    assert "applied" not in out
+    assert "skipped" in out
+    text = (git_repo / "README.md").read_text(encoding="utf-8")
+    assert text == "See [x](docs/index.md).\n"
+
+
+@pytest.mark.parametrize(
+    "original",
+    [
+        b"# Title\r\n\r\nSee [a](./deep/file.md).\r\nTail line\r\n",
+        b"# Title\n\r\nSee [a](./deep/file.md).\r\nTail\nlast-no-newline",
+    ],
+    ids=["crlf", "mixed"],
+)
+def test_fix_apply_keeps_line_endings(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str], original: bytes
+) -> None:
+    # B3: only the rewritten path changes; every other byte stays as-is.
+    intro = git_repo / "docs" / "intro.md"
+    intro.parent.mkdir(parents=True)
+    intro.write_bytes(original)
+    write(git_repo, "docs/old/deep/file.md", "moved\n")
+    write(git_repo, "docs/other/file.md", "other\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    move_text(git_repo, "docs/old/deep/file.md", "docs/new/deep/file.md")
+    assert main(["--path", str(git_repo), "sync"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "fix"]) == 1
+    assert "./new/deep/file.md" in capsys.readouterr().out
+    assert intro.read_bytes() == original
+    assert main(["--path", str(git_repo), "fix", "--apply"]) == 0
+    expected = original.replace(b"./deep/file.md", b"./new/deep/file.md")
+    assert intro.read_bytes() == expected
+
+
 def test_fix_preserves_at_prefix(git_repo: Path, write, capsys: pytest.CaptureFixture[str]) -> None:
     write(git_repo, "docs/intro.md", "See @./deep/file.md\n")
     write(git_repo, "docs/old/deep/file.md", "moved\n")
@@ -225,7 +280,7 @@ def test_git_rename_skipped_without_git(tmp_path: Path) -> None:
             old_path="old/file.md",
             current_files={"new/file.md"},
         )
-        == []
+        == RenameDestinations()
     )
 
 

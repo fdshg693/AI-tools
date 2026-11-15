@@ -129,17 +129,25 @@ def sync_index(root: Path, *, force: bool = False) -> SyncStats:
             removed += 1
         updated = 0
         skipped = 0
+        mtimes = store.file_mtimes()
         for path in text_files:
             full = root.joinpath(*path.split("/"))
             data = full.read_bytes()
             digest = hashlib.sha256(data).hexdigest()
             if not force and store.file_hash(path) == digest:
+                # Content is unchanged, but a newer mtime (rewrite, checkout,
+                # touch) would keep is_index_stale true forever unless the
+                # stored mtime follows the disk.
+                mtime = full.stat().st_mtime
+                if mtimes.get(path) != mtime:
+                    store.update_mtime(path, mtime)
                 skipped += 1
                 continue
             text = data.decode("utf-8", errors="replace")
             links = stored_links_from_text(text, path, file_set)
             store.replace_file(path, digest, full.stat().st_mtime, links)
             updated += 1
+        store.commit()
         store.set_last_sync(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
         return SyncStats(updated=updated, skipped=skipped, removed=removed)
     finally:

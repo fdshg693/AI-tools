@@ -17,7 +17,7 @@ from .query import (
     is_index_stale,
     resolve_target,
 )
-from .scan import GitError, find_repo_root, sync_index
+from .scan import GitError, SyncStats, find_repo_root, sync_index
 from .store import INDEX_DIR, GraphStore, db_path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -136,7 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
     fix.add_argument(
         "--apply",
         action="store_true",
-        help="write unique-suffix and git-rename replacements",
+        help="write unique-suffix and git-rename replacements (not git-rename-basename)",
     )
     _add_scripts_flag(fix)
     return parser
@@ -170,7 +170,7 @@ def _cmd_init(root: Path) -> int:
         print("index already exists; run `textgraph sync`", file=sys.stderr)
         return 1
     index.mkdir()
-    sync_index(root, force=True)
+    _print_sync_stats(sync_index(root, force=True))
     return 0
 
 
@@ -178,8 +178,12 @@ def _cmd_sync(root: Path, *, force: bool) -> int:
     if not (root / INDEX_DIR).exists():
         print("index not found; run `textgraph init`", file=sys.stderr)
         return 1
-    sync_index(root, force=force)
+    _print_sync_stats(sync_index(root, force=force))
     return 0
+
+
+def _print_sync_stats(stats: SyncStats) -> None:
+    print(f"updated {stats.updated}, skipped {stats.skipped}, removed {stats.removed}")
 
 
 def _cmd_status(root: Path) -> int:

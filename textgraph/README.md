@@ -51,12 +51,12 @@ textgraph --path C:\src\project fix --scripts --apply
 ```
 
 - `init` — `.textgraph/` を作り、初回索引を構築する。既にある場合は拒否して `sync` を案内する。
-- `sync` — 内容 hash が変わったテキストファイルだけ再抽出する。削除されたファイルは索引から落とす。`--force` は全件再抽出。
+- `sync` — 内容 hash が変わったテキストファイルだけ再抽出する。hash が同じでも索引の mtime はディスクに合わせる（内容を変えずに書き直したファイルで stale が抜けなくなるのを防ぐ）。削除されたファイルは索引から落とす。`--force` は全件再抽出。`init` と `sync` は `updated N, skipped N, removed N` を stdout に 1 行出す。
 - `status` — ファイル数・リンク数・`unresolved` 数・最終 sync 時刻。壊れたリンクの一覧は出さない。
 - `files` — 索引上のテキストファイルをリポジトリ相対で出す。`--filter` は前方一致。`--max-depth` は人間向けの木を途中で畳む（`--json` は flat な配列のまま）。
 - `impact` — あるファイルの inbound（誰が指しているか）を先に、outbound を次に出す。1 hop のみ。未解決の outbound は末尾。`<path>` はリポジトリ相対・絶対・basename。複数ヒットなら候補を出して非 0。
 - `check` — outbound のリンク切れを報告する。切れは索引上 `unresolved`、または resolved 先が今の git ファイル集合に無いもの。候補が1件なら `suggested`、2件以上は `ambiguous`、0件は `unresolved`。http(s) 等は索引に載らないので触れない。`--scripts` は索引に入れず、スクリプトをその場で同じ構文で走査する（コメント判定はしない）。終了コードは問題なし 0、切れ/曖昧あり 1、索引なし/stale/I/O 失敗 2。
-- `fix` — 既定は dry-run。適用予定の hunk 要約だけ出す。`--apply` は一意の `unique-suffix` と `git-rename` だけ本文のリンク先パスを書き換える。リンクテキストと `@./` 構文は維持する。`unique-basename` と `ambiguous` は suggested に出しても適用しない。`--scripts` は `check` と同じ範囲。`--apply` 後も残りがあれば 1。
+- `fix` — 既定は dry-run。適用予定の hunk 要約だけ出す。`--apply` は一意の `unique-suffix` と `git-rename` だけ本文のリンク先パスを書き換える。リンクテキストと `@./` 構文は維持する。`unique-basename`・`git-rename-basename`（旧パスが一致せず basename だけで当たった rename）・`ambiguous` は suggested に出しても適用しない。元の改行（LF / CRLF / 混在）は書き換えた行も含めてそのまま保つ。`--scripts` は `check` と同じ範囲。`--apply` 後も残りがあれば 1。
 - `--version` — マニフェストの版数を1行出す。`.git` も索引も触らない。
 
 `files` / `impact` / `check` / `fix` は索引が無い、またはソースが索引より新しい（未索引のドキュメント追加を含む）ときは `sync` を案内して非 0（`files`/`impact` は 1、`check`/`fix` は 2）。クエリ側で自動 sync はしない。ソース本文は出さない。`fix --apply` のあと索引は古くなるので、直したドキュメントを確認するなら `sync` してから `check` する。`--scripts` で直したスクリプトは索引に無いので、確認も `check --scripts`。

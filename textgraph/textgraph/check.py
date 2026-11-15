@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 from .resolve import (
     EXACT,
     GIT_RENAME,
+    GIT_RENAME_BASENAME,
     UNIQUE_SUFFIX,
     UNRESOLVED,
     _join,
@@ -84,15 +85,28 @@ def _finding_for_edge(root: Path, edge: StoredEdge, git_files: set[str]) -> Find
     return _suggest(root, edge, git_files)
 
 
+@dataclass(frozen=True)
+class RenameDestinations:
+    """Committed rename destinations that still exist.
+
+    ``exact`` holds renames whose old path equals the link's old path.
+    ``basename`` holds renames that only share the basename; they are hints,
+    not proof, so they are never applied automatically.
+    """
+
+    exact: tuple[str, ...] = ()
+    basename: tuple[str, ...] = ()
+
+
 def git_rename_destinations(
     root: Path,
     *,
     basename: str,
     old_path: str | None,
     current_files: set[str],
-) -> list[str]:
+) -> RenameDestinations:
     if not (root / ".git").exists() or not basename:
-        return []
+        return RenameDestinations()
     pathspecs = []
     if old_path:
         pathspecs.append(old_path)
@@ -112,7 +126,7 @@ def git_rename_destinations(
         check=False,
     )
     if result.returncode != 0:
-        return []
+        return RenameDestinations()
     pairs: list[tuple[str, str]] = []
     for line in result.stdout.decode("utf-8", errors="replace").splitlines():
         parsed = _parse_rename_line(line)
@@ -125,11 +139,15 @@ def git_rename_destinations(
     if old_path:
         exact = _unique_keep_order(dest for src, dest in pairs if src == old_path)
         if exact:
-            return exact
-    return _unique_keep_order(
-        dest
-        for src, dest in pairs
-        if PurePosixPath(src).name == basename or PurePosixPath(dest).name == basename
+            return RenameDestinations(exact=tuple(exact))
+    return RenameDestinations(
+        basename=tuple(
+            _unique_keep_order(
+                dest
+                for src, dest in pairs
+                if PurePosixPath(src).name == basename or PurePosixPath(dest).name == basename
+            )
+        )
     )
 
 
@@ -162,10 +180,10 @@ def apply_findings(root: Path, findings: list[Finding]) -> list[Finding]:
     for source in sorted(by_source):
         path = _abs(root, source)
         try:
-            text = path.read_text(encoding="utf-8")
+            text = _read_raw_text(path)
         except OSError as exc:
             raise OSError(f"failed to read {source}: {exc}") from exc
-        lines = text.splitlines(keepends=True)
+        lines = _split_lines_keepends(text)
         changed = False
         for finding in by_source[source]:
             idx = finding.line - 1
@@ -182,7 +200,7 @@ def apply_findings(root: Path, findings: list[Finding]) -> list[Finding]:
             changed = True
         if changed:
             try:
-                path.write_text("".join(lines), encoding="utf-8")
+                path.write_text("".join(lines), encoding="utf-8", newline="")
             except OSError as exc:
                 raise OSError(f"failed to write {source}: {exc}") from exc
     return failed
@@ -248,21 +266,25 @@ def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | Non
             current_files=git_files,
         )
     else:
-        renamed = []
-    if len(renamed) == 1:
-        return _finding(
-            edge,
-            status=SUGGESTED,
-            confidence=GIT_RENAME,
-            suggested=(renamed[0],),
-        )
-    if len(renamed) > 1:
-        return _finding(
-            edge,
-            status=AMBIGUOUS,
-            confidence=AMBIGUOUS,
-            suggested=tuple(renamed),
-        )
+        renamed = RenameDestinations()
+    for destinations, confidence in (
+        (renamed.exact, GIT_RENAME),
+        (renamed.basename, GIT_RENAME_BASENAME),
+    ):
+        if len(destinations) == 1:
+            return _finding(
+                edge,
+                status=SUGGESTED,
+                confidence=confidence,
+                suggested=destinations,
+            )
+        if len(destinations) > 1:
+            return _finding(
+                edge,
+                status=AMBIGUOUS,
+                confidence=AMBIGUOUS,
+                suggested=destinations,
+            )
     if len(ambiguous) > 1:
         return _finding(
             edge,
@@ -388,13 +410,30 @@ def _display_line(line: str) -> str:
 def _read_line(root: Path, source: str, line: int) -> str | None:
     path = _abs(root, source)
     try:
-        text = path.read_text(encoding="utf-8")
+        text = _read_raw_text(path)
     except OSError:
         return None
-    lines = text.splitlines(keepends=True)
+    lines = _split_lines_keepends(text)
     if line < 1 or line > len(lines):
         return None
     return lines[line - 1]
+
+
+def _read_raw_text(path: Path) -> str:
+    # newline="" keeps CRLF / mixed endings intact (Path.read_text has no
+    # newline argument before Python 3.13).
+    with path.open(encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
+def _split_lines_keepends(text: str) -> list[str]:
+    # Split on "\n" only, matching extract._line_at. str.splitlines would also
+    # break on a lone "\r", "\v", U+2028 etc. and shift line numbers.
+    lines = text.split("\n")
+    out = [line + "\n" for line in lines[:-1]]
+    if lines[-1]:
+        out.append(lines[-1])
+    return out
 
 
 def _abs(root: Path, posix_path: str) -> Path:
