@@ -24,8 +24,8 @@ from ..install.installer import (
     load_project_manifest,
     recover_transaction,
 )
-from ..models import InstallError
-from ..install.scope import InstallScope, ensure_project_root_allowed
+from ..models import ConfigError, InstallError
+from ..install.scope import InstallScope, ensure_outside_store, ensure_project_root_allowed
 from .arguments import (
     _add_runtime_arguments,
     _add_scope_arguments,
@@ -95,6 +95,25 @@ def _add_hooks_command(commands) -> None:
         help="replace modified hook files and skip registrations edited by hand",
     )
 
+    sync = subcommands.add_parser(
+        "sync",
+        help="make the managed hooks match hooks.install in the config: install the listed "
+        "hooks that are missing and remove managed hooks that are no longer listed",
+    )
+    _add_runtime_arguments(sync)
+    _add_scope_arguments(sync, global_option=True)
+    sync.add_argument("--dry-run", action="store_true", help="show changes without applying")
+    sync.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace unmanaged files that already exist at a new hook's install path",
+    )
+    sync.add_argument(
+        "--force",
+        action="store_true",
+        help="delete modified hook files of unlisted hooks and skip registrations edited by hand",
+    )
+
     remove = subcommands.add_parser(
         "remove", help="remove hooks managed in this project (or with --global, user-wide)"
     )
@@ -148,6 +167,7 @@ def _command_hooks_install(args: argparse.Namespace, cwd: Path, scope: InstallSc
     with _project_install_lock(scope.root, state_dir=scope.state_dir):
         recover_transaction(scope.root, state_dir=scope.state_dir)
     config = _load_runtime_config(args, cwd, scope=scope)
+    ensure_outside_store(scope, config.store.path)
     agents = parse_agents(args.agent, config.hooks)
     scope_warnings: list[str] = []
     if scope.is_global:
@@ -222,6 +242,7 @@ def _command_hooks_update(args: argparse.Namespace, cwd: Path, scope: InstallSco
         print("(no managed hooks)")
         return 0
     config = _load_runtime_config(args, cwd, scope=scope)
+    ensure_outside_store(scope, config.store.path)
     source = create_source(config)
     warnings_: list[str] = []
     matching: list[dict] = []
@@ -267,6 +288,62 @@ def _command_hooks_update(args: argparse.Namespace, cwd: Path, scope: InstallSco
         )
     result.warnings[:0] = warnings_
     _print_hook_changes(result, args.dry_run, scope)
+    return 0
+
+
+def _command_hooks_sync(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
+    """Converge the managed hooks on ``hooks.install``; hooks already installed are kept as is."""
+
+    ensure_project_root_allowed(scope, "hooks sync")
+    config = _load_runtime_config(args, cwd, scope=scope)
+    desired = config.hooks.install
+    if not desired:
+        where = config.config_path or "skill-tools.yaml"
+        raise ConfigError(f"hooks.install is empty in {where}; list the hook ids per agent")
+    ensure_outside_store(scope, config.store.path)
+    agents = tuple(desired)
+    warnings_: list[str] = []
+    if scope.is_global:
+        agents, warnings_ = global_agents(agents, explicit=False)
+    wanted = {(hook_id, agent) for agent in agents for hook_id in desired[agent]}
+    managed = _managed_hooks(scope)
+    managed_keys = {(entry["hookId"], entry["agent"]) for entry in managed}
+    removals = [entry for entry in managed if (entry["hookId"], entry["agent"]) not in wanted]
+    source = create_source(config)
+    catalog = load_hook_catalog(source)
+    targets: list[HookTarget] = []
+    for agent in agents:
+        missing = [hook_id for hook_id in desired[agent] if (hook_id, agent) not in managed_keys]
+        if not missing:
+            continue
+        selected, selection_warnings = select_install_targets(
+            catalog,
+            missing,
+            (agent,),
+            config.hooks,
+            source,
+            scope.root,
+            global_scope=scope.is_global,
+        )
+        targets.extend(selected)
+        warnings_.extend(selection_warnings)
+    result = HookChangeSet()
+    if removals or targets:
+        result = apply_hook_changes(
+            scope.root,
+            source=source,
+            hooks_config=config.hooks,
+            remove=removals,
+            install=targets,
+            overwrite=args.overwrite,
+            force=args.force,
+            dry_run=args.dry_run,
+            state_dir=scope.state_dir,
+            global_scope=scope.is_global,
+        )
+    result.warnings[:0] = warnings_
+    _print_hook_changes(result, args.dry_run, scope)
+    print(f"source: {_source_description(source)}", file=sys.stderr)
     return 0
 
 

@@ -4,7 +4,7 @@ description: Microsoft Learn/Azure公式ドキュメントを`mslearn`で検索�
 
 # 前提条件(このスキル自体はインストール・セットアップを一切行わない):
 #   - `mslearn` コマンドが PATH 上で使えること
-#     (セットアップは tools/mslearn/README.md 参照)
+#     (セットアップは tools/web-research/mslearn/README.md 参照)
 #   - `aim` コマンドが PATH 上で使え、OPENROUTER_API_KEY が設定済みであること
 #     (セットアップは tools/_plugin/my-tools/skills/aim-cli/SKILL.md 参照)
 #
@@ -21,7 +21,7 @@ meta:
   requires_skills: ms-learn, aim-cli
   status: stable
   description: no description
-  version: 1.3.6
+  version: 1.3.7
 ---
 
 ## 全体の流れ

@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.6
+  version: 1.2.10
 ---
 
 # skill-tools の使い方
@@ -139,6 +139,24 @@ skill-tools installed-skills --global
 - `update-skills` / `remove-skills`はhash drift・欠落・追加file・symlinkがあれば既定で中止する。`--force`は対象managed directory内の変更を置換・削除し得るため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
 - install-skills/update-skills/remove-skillsはjournalで中断を記録する。process termination時は次回managed操作でrollbackを試みるが、複数pathの完全な原子性や電断・storage障害時の復旧は保証しない
 
+### `--mode link` / `store` — 共有ストアへのリンクで配る
+
+```powershell
+skill-tools install-skills --mode link alpha --dry-run
+skill-tools install-skills --mode link alpha
+skill-tools store list
+skill-tools store update --dry-run
+skill-tools store gc --dry-run
+```
+
+- **使い分け:** 既定は`copy`。**同じスキルを多くのプロジェクトに入れ、常に最新にそろえたい**（でも`--global`で全プロジェクトに出したくはない）ときだけ`--mode link`を選ぶ。スキルはストア（既定`%LOCALAPPDATA%\skill-tools\store`等、設定`store.path`）に1つだけコピーされ、プロジェクトにはそこを指すJunction（Windows）／symlinkが置かれる。プロジェクト固有に手を入れたいスキル・リンクを読まないエージェント向けのスキルは`copy`のまま
+- 省略時の方式は設定`install_mode`（既定`copy`）。`--global`は常にコピーで、`--mode link --global`は終了コード`2`
+- **リンクのentryへの`update-skills`は、ストアを更新するので同じスキルにリンクした他のすべてのプロジェクトにも効く。** 出力の`(shared: store entry ... has N link(s))`で影響範囲が分かるので、Nが2以上なら`--dry-run`の結果をユーザーに見せてから実行する。プロジェクトを経由せずに更新するなら`store update`
+- **リンクしたスキルのファイルを編集しない。** ストアのコピーが変わり全プロジェクトに効き、次の更新はdriftで止まる。編集が必要なら`install-skills --mode copy --overwrite <skill>`でコピーに戻してから
+- `remove-skills`はリンクだけを消し、ストアのentryは残る。参照されなくなったentryは`store gc`で消す（先に`--dry-run`）
+- リンクにした配置先は`.gitignore`に入れるようユーザーに勧める（Git for WindowsはJunctionの中身を通常ファイルとしてコミットしてしまう）
+- スキルがエージェントの一覧に出ない（Antigravityなどはリンクを読まない報告がある）ときは`--mode copy --overwrite`に戻す。Windowsでストアの更新が終了コード`4`で止まり「file in the store open」と出たら、スキルを開いているエディタやエージェントを閉じて再実行する
+
 ## `list-tools` / `install-tools` — repo-tools.yaml のCLIツール
 
 ```powershell
@@ -150,7 +168,7 @@ skill-tools install-tools aim tav
 
 - 対象はsource（設定中の`source`）の`registry/repo-tools.yaml`（無ければルートの`repo-tools.yaml`）の全エントリ。**`release`の値では絞らない**（タグ+Release対象かどうかは別の軸であり、`release: false`や未設定のツールも含めて全件が列挙・インストール対象）
 - `list-tools`は`tool name<TAB>path<TAB>install command<TAB>summary`の4列をタブ区切りで標準出力へ出す。`summary`は`repo-tools.yaml`の`description` locator（`tools/.../pyproject.toml#project.description`、READMEパス等）を解決した1行概要で、locator未指定なら空。locatorが壊れているとツール名とlocatorを出して終了コード`2`で止まる。**概要を機械的に扱うなら`--json`**（`{name, path, install, description}`の配列。stderrの`source: ...`は同じ）。最初にこれで登録名と`install`コマンドを確認する
-- `install-tools`は選択したツールの`install`文字列（`uv tool install --editable tools/...`や`cd tools/... && pnpm add -g .`）を**sourceのルートで**実行する。選択子は登録名（`aim`）またはリポジトリ相対の`path`（`tools/aim`）。**1つも指定しなければ全ツール**が対象なので、いきなり全件を走らせる前に`--dry-run`で内容を確認する
+- `install-tools`は選択したツールの`install`文字列（`uv tool install --editable tools/...`や`cd tools/... && pnpm add -g .`）を**sourceのルートで**実行する。選択子は登録名（`aim`）またはリポジトリ相対の`path`（`tools/llm/aim`）。**1つも指定しなければ全ツール**が対象なので、いきなり全件を走らせる前に`--dry-run`で内容を確認する
 - **インストールはlocal sourceが必要。** コマンドがリポジトリ相対のため、GitHub sourceでは実行せずエラー（終了コード`4`）になる。cloneのパスは`config show`の`source.path`で確認できる
 - あるツールのコマンドが非ゼロ終了すると、そこで停止し`install failed for <name> (exit N)`を出す。後続ツールは実行されない。失敗コマンド自体の出力はそのまま標準出力/標準エラーへ流れる
 - このCLIが扱うのは列挙と実行だけ。`repo-tools.yaml`への登録や`install`文字列の修正はしない（SSOTは`repo-tools.yaml`自身）
@@ -179,6 +197,7 @@ skill-tools hooks install --agent claude nested_agents_md
 skill-tools hooks installed
 skill-tools hooks update --dry-run
 skill-tools hooks remove nested_agents_md --agent codex
+skill-tools hooks sync --dry-run
 skill-tools hooks install --global --agent claude,codex nested_agents_md --dry-run
 skill-tools hooks installed --global
 ```
@@ -186,10 +205,11 @@ skill-tools hooks installed --global
 - 対象はsourceの`repo-hooks.yaml`が指す`catalog.json`（agent-toolingのビルド生成物）。`repo-hooks.yaml`が無いsourceは「フック0件」でエラーにしない。`list`は`hook id<TAB>agents<TAB>summary`を出し副作用なし。`distributable: false`（このリポジトリ構造前提のフック）は`--all`を付けたときだけ出る
 - エージェントは`claude` / `codex` / `cursor` / `antigravity` / `kilo`。`--agent`省略時は設定の`hooks.default_agents`、それも無ければ終了コード`2`。配置先・Claudeの登録先（`settings_file: project|local`）は`skill-tools.yaml`の`hooks.agents.<agent>`で変える
 - `install`はファイル配置・seed設定（未存在時だけ）・登録ファイル（`.claude/settings.json` / `.codex/hooks.json` / `.cursor/hooks.json` / `.agents/hooks.json`。Kiloは無し）へのエントリ追加・manifest記録を1トランザクションで行う。**インストール＝有効化**で、無効化したいなら`remove`する
+- 入れるフックを設定ファイルで宣言するなら`hooks.install.<agent>: [hook-id, ...]`を書いて`hooks sync`。未管理の列挙フックを入れ、列挙から外れた管理フックを消す（既存の管理フックは触らないので、更新は`hooks update`）。`hooks.install`が空なら終了コード`2`
 - **登録ファイルで書き換えるのはskill-toolsが追加したエントリだけ。** 利用者自身のエントリは保持する。同じフックファイルを実行する管理外エントリがあると二重発火の警告が出る（自動削除しない）ので、どちらを残すかユーザーに確認する
 - `update` / `remove`は配置ファイルの変更・登録エントリの手編集をdriftとして中止する。`--force`の前に`--dry-run`で対象を確認する。seed設定は利用者が編集する前提なので追跡せず、`remove`でも消さない
 - 配置後にフックが発火しない場合は、AIツールのセッション再起動を案内する
-- **全プロジェクトで使うフックは`--global`。** 配置先は`~/.claude/hooks/`・`~/.codex/hooks/`・`~/.cursor/hooks/`・`~/.config/kilo/plugin/`、登録先は`~/.claude/settings.json`・`~/.codex/hooks.json`・`~/.cursor/hooks.json`で、コマンド行は絶対パスになる。`installed` / `update` / `remove`にも`--global`を付ける。Antigravityを`--agent`で指定したり`distributable: false`のフックを選んだりすると終了コード`2`
+- **全プロジェクトで使うフックは`--global`。** 配置先は`~/.claude/hooks/`・`~/.codex/hooks/`・`~/.cursor/hooks/`・`~/.gemini/config/hooks/`・`~/.config/kilo/plugin/`、登録先は`~/.claude/settings.json`・`~/.codex/hooks.json`・`~/.cursor/hooks.json`・`~/.gemini/config/hooks.json`で、コマンド行は絶対パスになる（Cursor は `~/.cursor/` 相対）。`installed` / `update` / `remove`にも`--global`を付ける。`distributable: false`のフックを選ぶと終了コード`2`
 - `--global`で`~/.claude/settings.json`を書き換えるときは、**Claude Codeを閉じてから実行するようユーザーに案内し、先に`--dry-run`を見せる**。実行中のClaude Codeが同じファイルを書くと、skill-toolsは変更を検知して何も書かずに止まる（終了コード`4`）
 - プロジェクトと`--global`の両方に同じフックを入れると二重に発火する（skill-toolsは検出しない）。どちらか一方にする
 - ホーム（またはその親）をプロジェクトのルートにした`hooks install` / `hooks update`は終了コード`2`で止まり、`--global`を案内する

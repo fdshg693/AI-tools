@@ -3,7 +3,7 @@ name: gdev-docs
 description: Search, fetch, and answer from official Google Cloud and Google Workspace developer documentation via the self-built `gdevdocs` CLI, a fastmcp wrapper around the Developer Knowledge MCP (https://developerknowledge.googleapis.com/mcp). Use when you need GCP or Workspace developer docs (concepts, APIs, SDKs, configuration, quotas, error explanations). Do not use for general web research (`tav-cli`), Microsoft docs (`ms-learn`), AWS docs (`aws-docs`), operating GCP or Workspace resources, or version-specific client-library APIs (`use-context`).
 
 # 前提条件: `gdevdocs` コマンドが PATH 上にインストール済み
-# (`uv tool install --editable tools/gdevdocs`)であり、`GDEVDOCS_API_KEY` が
+# (`uv tool install --editable tools/web-research/gdevdocs`)であり、`GDEVDOCS_API_KEY` が
 # 環境変数かグローバル設定で解決できること。このスキルはインストール・API の有効化を
 # 一切行わない。公式 Agent Skill（google/skills の retrieving-developer-knowledge）も
 # 入れない。設計意図は同階層の README.md（人間のメンテナ向け）。
@@ -12,12 +12,12 @@ meta:
   requires_repo_tools: gdevdocs
   requires_env: GDEVDOCS_API_KEY, GDEVDOCS_MCP_OUTPUT_DIR, GDEVDOCS_MCP_ENDPOINT
   dependencies: none
-  requires_install: uv tool install --editable tools/gdevdocs
+  requires_install: uv tool install --editable tools/web-research/gdevdocs
   requires_hooks: none
   requires_skills: none
   status: experimental
   description: GCP と Workspace の開発者向け公式ドキュメントを gdevdocs で引く
-  version: 0.1.0
+  version: 0.1.1
 ---
 
 ## エントリポイント: `gdevdocs` コマンド
@@ -27,7 +27,7 @@ gdevdocs --help
 ```
 
 未インストール、または API キーが解決できないときは、このスキルでは対処しない。
-ユーザーに `tools/gdevdocs/README.md` のセットアップ（`uv tool install --editable tools/gdevdocs`、
+ユーザーに `tools/web-research/gdevdocs/README.md` のセットアップ（`uv tool install --editable tools/web-research/gdevdocs`、
 `GDEVDOCS_API_KEY`、Developer Knowledge API `developerknowledge.googleapis.com` の有効化）を案内する。
 
 キーは環境変数かグローバル設定だけ。プロジェクトの `.gdevdocs.toml` と、リポジトリルートの

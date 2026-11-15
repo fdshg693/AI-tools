@@ -3,7 +3,7 @@ name: use-context
 description: Resolve and fetch current, version-aware library/framework documentation, API references, setup instructions, migration guidance, and code examples from Context7 via the self-built `ctx7` CLI (Context7's REST API directly — not the official Context7 MCP server/plugin). Activate when a task depends on an external package's current API, setup, or migration behavior. Prefer `ms-learn` for Microsoft/Azure, `aws-docs` for AWS, and `gdev-docs` for Google Cloud and Google Workspace developer documentation; do not use for general web research or local-code reading. For shipped implementation or a PyPI wheel's contents, use `inspecting-python-libraries`. Skip this skill if the official `context7-mcp` skill, the `docs-researcher` agent, or the `/context7:docs` command has already handled the same lookup in this session, to avoid duplicate calls.
 
 # 前提条件: `ctx7`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/ctx7`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/ctx7`)であること。このスキルはインストール・
 # セットアップは一切行わない。APIキー(CONTEXT7_API_KEY)は任意(未設定でも動くが
 # レート制限が低い)。このスキルの設計意図・前提条件の背景は同階層のREADME.md参照
 # (人間のメンテナ向け)。
@@ -12,12 +12,12 @@ meta:
   requires_repo_tools: ctx7
   requires_env: CONTEXT7_API_KEY
   dependencies: requests, python-dotenv
-  requires_install: uv tool install --editable tools/ctx7
+  requires_install: uv tool install --editable tools/web-research/ctx7
   requires_hooks: none
   requires_skills: none
   status: experimental
   description: no description
-  version: 1.0.5
+  version: 1.0.6
 ---
 
 ## エントリポイント: `ctx7` コマンド
@@ -32,7 +32,7 @@ ctx7 --help
 ```
 
 未インストール・エラーが出た場合はこのスキルでは対処しない。ユーザーに
-`tools/ctx7/README.md` のセットアップ手順を案内する。
+`tools/web-research/ctx7/README.md` のセットアップ手順を案内する。
 
 ## 最初に見るべき判断フロー
 
@@ -148,7 +148,7 @@ IDは、その問い合わせの間は保持し、同じ質問の途中で何度
 - `--timeout <seconds>`: リクエストタイムアウト(既定30秒)。
 - `--api-key <key>`: `CONTEXT7_API_KEY`をその場だけ上書き。省略時は`.env`/環境変数を使う(未設定でも動作する)。
 
-終了コード(`tools/mslearn`と同じ番号体系):
+終了コード(`tools/web-research/mslearn`と同じ番号体系):
 
 | code | 意味                                                                                            |
 | ---- | ----------------------------------------------------------------------------------------------- |
@@ -158,7 +158,7 @@ IDは、その問い合わせの間は保持し、同じ質問の途中で何度
 | `4`  | `library`の検索結果が0件                                                                        |
 | `5`  | `docs`が202(ライブラリのインデックス中)のままポーリングを使い切った。少し時間を置いて再実行する |
 
-429・202・301の内部リトライ挙動の詳細は`tools/ctx7/README.md`の「エラー処理・
+429・202・301の内部リトライ挙動の詳細は`tools/web-research/ctx7/README.md`の「エラー処理・
 リトライ」を参照(このスキルの範囲では自動リトライ済みの結果だけを扱えばよく、
 エージェント側で追加のリトライループを組む必要はない)。
 

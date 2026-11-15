@@ -21,6 +21,19 @@ fb:
 # built-in default is the skill-tools-cli companion skill shown here.
 self_skill: tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md
 
+# How install-skills places a skill when --mode is omitted: copy (default) or link.
+# link copies the skill once into the store below and puts a junction (Windows)
+# or directory symlink in the project; updating the store updates every linked
+# project. --global always copies.
+install_mode: copy
+
+# The shared store that --mode link points at. Omit it to use
+# SKILL_TOOLS_HOME/store, else %LOCALAPPDATA%/skill-tools/store on Windows or
+# $XDG_STATE_HOME/skill-tools/store. Changing it leaves existing links pointing
+# at the old store. Relative paths are resolved from this file.
+store:
+  path: ~/.local/state/skill-tools/store
+
 # Optional destination overrides used by install-skills.
 skills:
   skills/plugins/coding/skills/example/SKILL.md:
@@ -62,6 +75,10 @@ hooks:
       # Home-relative directory for `hooks install --global` (default .codex/hooks).
       # Defaults: claude .claude/hooks, cursor .cursor/hooks, kilo .config/kilo/plugin.
       global_destination: .codex/hooks
+  # Hook ids per agent that `hooks sync` installs; managed hooks not listed are removed.
+  # install:
+  #   claude: [nested_agents_md, agent_sessions]
+  #   codex: [nested_agents_md]
 
 # Successful skill and hook installs are recorded in the project-local .skill-tools/manifest.json.
 # The CLI does not edit .gitignore or require the manifest to be committed.

@@ -2,7 +2,7 @@
 
 ## このスキルの狙い
 
-同一ローカル環境上で複数のClaude Codeセッションを並行起動し、Linearの未着手issueをタスクキューとして衝突なく分担するための「使い方」を与える薄いオーケストレーション層。専用の常駐オーケストレータープロセスは作らず、各セッションが自然言語のSKILL.md指示に従って自律的に「検索→worktree作成→claim→作業→完了報告」を行う設計（初期実装の詳細な経緯・検討過程は[.claude/plans/parallel-agent-worktree-task-groups/00-overview.md](../../../../.claude/plans/parallel-agent-worktree-task-groups/00-overview.md)参照）。
+同一ローカル環境上で複数のClaude Codeセッションを並行起動し、Linearの未着手issueをタスクキューとして衝突なく分担するための「使い方」を与える薄いオーケストレーション層。専用の常駐オーケストレータープロセスは作らず、各セッションが自然言語のSKILL.md指示に従って自律的に「検索→worktree作成→claim→作業→完了報告」を行う設計（初期実装の詳細な経緯・検討過程は削除済みのプラン `parallel-agent-worktree-task-groups` にあり、git の履歴で辿れる）。
 
 対象issueの型（タスクグループ・依存関係・ブランチ共有）は[issue-shape.md](issue-shape.md)が、issue起票の手順は[issue-authoring.md](issue-authoring.md)が定める。タスクグループ対応（ブランチ共有・依存関係・worktree再利用）の設計意図は本ファイルの「タスクグループ・依存関係・worktree再利用に対応した経緯」節を参照。
 
@@ -27,7 +27,7 @@
 
 ## タスクグループ・依存関係・worktree再利用に対応した経緯
 
-当初は「1 issue = 1 worktree」固定で、依存関係のある一連のissueを同じブランチ上で順番に実装する手段が無く、issueを消化するたびにworktreeが増え続ける（乱立する）問題があった。ユーザー要望を受け、①どのISSUE群（タスクグループ）に取り組んでいるかを可視化し、グループ完了・ユーザー確認後に次グループへ進められる仕組み、②issueが依存関係と作業ブランチを明示し、同じブランチ上で関連issueを順番に実装できる仕組み、の2点を追加した（検討過程は[.claude/plans/parallel-agent-worktree-task-groups/00-overview.md](../../../../.claude/plans/parallel-agent-worktree-task-groups/00-overview.md)参照）。対象は「このスキル専用の型を持つISSUE」に限定し、汎用issue全般との後方互換は考慮していない。
+当初は「1 issue = 1 worktree」固定で、依存関係のある一連のissueを同じブランチ上で順番に実装する手段が無く、issueを消化するたびにworktreeが増え続ける（乱立する）問題があった。ユーザー要望を受け、①どのISSUE群（タスクグループ）に取り組んでいるかを可視化し、グループ完了・ユーザー確認後に次グループへ進められる仕組み、②issueが依存関係と作業ブランチを明示し、同じブランチ上で関連issueを順番に実装できる仕組み、の2点を追加した（検討過程は削除済みのプラン `parallel-agent-worktree-task-groups` にある）。対象は「このスキル専用の型を持つISSUE」に限定し、汎用issue全般との後方互換は考慮していない。
 
 ### なぜ「ラベル」でなく「Linear Project + `.linear-cli/config.json`」でタスクグループを表すか
 

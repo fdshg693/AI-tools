@@ -1,19 +1,27 @@
 from __future__ import annotations
 
+import json
+import os
 import subprocess
-from collections.abc import Iterable
+from collections import Counter
+from collections.abc import Container, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from .config import Config, load_config
 from .resolve import (
     EXACT,
     GIT_RENAME,
+    GIT_RENAME_BASENAME,
+    UNIQUE_BASENAME,
     UNIQUE_SUFFIX,
     UNRESOLVED,
+    FileIndex,
     _join,
     _parent,
     _split_target,
     fallback_candidates,
+    narrow_candidates,
     resolve_link,
 )
 from .scan import is_script_file, list_git_files, read_source_text, stored_links_from_text
@@ -22,6 +30,8 @@ from .store import StoredEdge, GraphStore
 APPLYABLE = frozenset({UNIQUE_SUFFIX, GIT_RENAME})
 AMBIGUOUS = "ambiguous"
 SUGGESTED = "suggested"
+EXTERNAL = "external"
+ON_DISK = "on-disk"
 
 
 @dataclass(frozen=True)
@@ -44,27 +54,56 @@ class Finding:
         )
 
 
-def find_broken_links(root: Path, store: GraphStore, *, scripts: bool = False) -> list[Finding]:
-    git_files = {path.replace("\\", "/") for path in list_git_files(root)}
+# A raw path with any of these characters in a script is a template or a code
+# fragment (f"{name}.md", "[x](...)" in a regex, "$HOME/...", "*.md"), not a
+# link someone wrote to a file. ``is_script_noise`` also drops raws with a
+# backslash and raws with neither "/" nor ".". Documents keep reporting all of
+# them: there such a link is a real typo.
+SCRIPT_NOISE_CHARS = frozenset("{}[]$*")
+
+
+def find_broken_links(
+    root: Path, store: GraphStore, *, scripts: bool = False, config: Config | None = None
+) -> list[Finding]:
+    if config is None:
+        config = load_config(root)
+    # The resolution set stays unfiltered: ``exclude`` only removes sources,
+    # so a link to an excluded file still resolves exactly.
+    git_files = FileIndex(path.replace("\\", "/") for path in list_git_files(root))
+    renames = RenameIndex(root, git_files)
     findings: list[Finding] = []
     for edge in store.all_links():
-        finding = _finding_for_edge(root, edge, git_files)
+        finding = _finding_for_edge(root, edge, git_files, renames)
         if finding is not None:
             findings.append(finding)
     if scripts:
-        for edge in _script_edges(root, git_files):
-            finding = _finding_for_edge(root, edge, git_files)
+        for edge in _script_edges(root, git_files, config):
+            finding = _finding_for_edge(root, edge, git_files, renames)
             if finding is not None:
                 findings.append(finding)
     findings.sort(key=lambda item: (item.source, item.line, item.raw))
     return findings
 
 
-def _script_edges(root: Path, git_files: set[str]) -> list[StoredEdge]:
+def is_script_noise(raw: str) -> bool:
+    if any(char in SCRIPT_NOISE_CHARS for char in raw):
+        return True
+    # Escapes and regex fragments ("^\\", "\\d+", "./AGENTS.md\\n") carry a backslash.
+    if "\\" in raw:
+        return True
+    # Code such as ``FORMATTERS[fmt](results)`` yields a bare word with neither
+    # a directory separator nor an extension; scripts rarely link that way.
+    return "/" not in raw and "." not in raw
+
+
+def _script_edges(root: Path, git_files: FileIndex, config: Config) -> list[StoredEdge]:
     edges: list[StoredEdge] = []
-    for path in sorted(p for p in git_files if is_script_file(p)):
+    targets = sorted(p for p in git_files if is_script_file(p) and not config.excludes_script(p))
+    for path in targets:
         text = read_source_text(root, path)
         for link in stored_links_from_text(text, path, git_files):
+            if is_script_noise(link.raw):
+                continue
             edges.append(
                 StoredEdge(
                     source=path,
@@ -78,10 +117,253 @@ def _script_edges(root: Path, git_files: set[str]) -> list[StoredEdge]:
     return edges
 
 
-def _finding_for_edge(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | None:
+def _finding_for_edge(
+    root: Path, edge: StoredEdge, git_files: FileIndex, renames: RenameIndex
+) -> Finding | None:
     if not _is_broken(edge, git_files):
         return None
-    return _suggest(root, edge, git_files)
+    # The written path is not in the index but exists on disk: a submodule
+    # file, a file above the repository root, or a gitignored artifact. It is
+    # not broken, so it gets no candidates and is never rewritten.
+    if _exists_on_disk(root, edge.raw, edge.source):
+        return _finding(edge, status=EXTERNAL, confidence=ON_DISK, suggested=())
+    return _suggest(edge, git_files, renames)
+
+
+def _exists_on_disk(root: Path, raw: str, source: str) -> bool:
+    """Whether the written path names a file or directory on disk.
+
+    Mirrors the exact steps of the resolver (source-relative, then
+    root-relative, each also with ``.md`` appended when there is no
+    extension), but joins OS paths so ``..`` may leave the root.
+    """
+    path_part, _anchor = _split_target(raw)
+    rel_parts = [part for part in path_part.split("/") if part]
+    if not rel_parts:
+        return False
+    bases: list[Path] = []
+    if not path_part.startswith("/"):
+        source_dir = _parent(source)
+        bases.append(_abs(root, source_dir) if source_dir else root)
+    bases.append(root)
+    variants = [rel_parts]
+    if not PurePosixPath(path_part).suffix:
+        variants.append([*rel_parts[:-1], f"{rel_parts[-1]}.md"])
+    for base in bases:
+        for parts in variants:
+            try:
+                if os.path.exists(os.path.normpath(os.path.join(base, *parts))):
+                    return True
+            except (OSError, ValueError):
+                continue
+    return False
+
+
+@dataclass(frozen=True)
+class RenameDestinations:
+    """Rename destinations (staged or committed) that still exist.
+
+    ``exact`` holds renames whose old path equals the link's old path.
+    ``basename`` holds renames that only share the basename; they are hints,
+    not proof, so they are never applied automatically.
+    """
+
+    exact: tuple[str, ...] = ()
+    basename: tuple[str, ...] = ()
+
+
+MAX_RENAME_CHAIN = 64
+
+_STAGED_RENAMES = ("diff", "--cached", "-M", "--diff-filter=R", "--name-status")
+_COMMITTED_RENAMES = ("log", "--diff-filter=R", "-M", "--name-status", "--pretty=format:")
+
+
+class RenameIndex:
+    """The repository's renames, read from git at most once per run.
+
+    Nothing is read until the first lookup, so a run without broken links
+    never calls git. Pairs are kept newest first: staged renames (a move made
+    with ``git mv`` but not committed yet is the latest fact), then committed
+    renames in ``git log`` order. A destination that no longer exists is
+    followed through later renames (A→B, then B→C gives C).
+    """
+
+    def __init__(self, root: Path, current_files: Container[str]) -> None:
+        self._root = root
+        self._current = current_files
+        self._pairs: list[tuple[str, str]] | None = None
+        self._by_src: dict[str, list[int]] = {}
+        self._by_name: dict[str, list[int]] = {}
+
+    def lookup(self, *, basename: str, old_path: str | None) -> RenameDestinations:
+        if not basename:
+            return RenameDestinations()
+        pairs = self._load()
+        if not pairs:
+            return RenameDestinations()
+        if old_path:
+            exact = _unique_keep_order(
+                dest for index in self._by_src.get(old_path, ()) for dest in self._final(index)
+            )
+            if exact:
+                return RenameDestinations(exact=tuple(exact))
+        return RenameDestinations(
+            basename=tuple(
+                _unique_keep_order(
+                    dest for index in self._by_name.get(basename, ()) for dest in self._final(index)
+                )
+            )
+        )
+
+    def _final(self, start: int) -> list[str]:
+        """Existing destinations reached from pair ``start``.
+
+        Only renames newer than the current one (smaller index) are followed,
+        so an unrelated older rename that reused a path is not a link in the
+        chain, and the walk always ends. The depth cap bounds pathological
+        histories.
+        """
+        assert self._pairs is not None
+        out: list[str] = []
+        stack = [(start, 0)]
+        seen: set[int] = set()
+        while stack:
+            index, depth = stack.pop()
+            if index in seen:
+                continue
+            seen.add(index)
+            dest = self._pairs[index][1]
+            if dest in self._current:
+                out.append(dest)
+                continue
+            if depth >= MAX_RENAME_CHAIN:
+                continue
+            newer = [later for later in self._by_src.get(dest, ()) if later < index]
+            # The stack is LIFO; push the oldest first so the newest is tried first.
+            stack.extend((later, depth + 1) for later in reversed(newer))
+        return out
+
+    def _load(self) -> list[tuple[str, str]]:
+        if self._pairs is not None:
+            return self._pairs
+        pairs: list[tuple[str, str]] = []
+        if (self._root / ".git").exists():
+            pairs.extend(self._git_pairs(_STAGED_RENAMES))
+            pairs.extend(self._git_pairs(_COMMITTED_RENAMES))
+        for index, (src, dest) in enumerate(pairs):
+            self._by_src.setdefault(src, []).append(index)
+            for name in {PurePosixPath(src).name, PurePosixPath(dest).name}:
+                self._by_name.setdefault(name, []).append(index)
+        self._pairs = pairs
+        return pairs
+
+    def _git_pairs(self, args: tuple[str, ...]) -> list[tuple[str, str]]:
+        # core.quotepath=false keeps non-ASCII paths (Japanese file names)
+        # verbatim instead of octal-escaped and quoted.
+        result = subprocess.run(
+            ["git", "-c", "core.quotepath=false", *args],
+            cwd=self._root,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return []
+        pairs: list[tuple[str, str]] = []
+        for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+            parsed = _parse_rename_line(line)
+            if parsed is not None:
+                pairs.append(parsed)
+        return pairs
+
+
+class BaselineError(ValueError):
+    """The baseline file is unreadable or not a ``check --json`` output."""
+
+
+BASELINE_KEYS = ("source", "raw", "status")
+
+
+def finding_to_dict(finding: Finding) -> dict[str, object]:
+    return {
+        "source": finding.source,
+        "line": finding.line,
+        "raw": finding.raw,
+        "kind": finding.kind,
+        "status": finding.status,
+        "confidence": finding.confidence,
+        "suggested": list(finding.suggested),
+        "replacement": finding.replacement,
+    }
+
+
+def findings_to_json(findings: Iterable[Finding], *, external: int) -> dict[str, object]:
+    return {"findings": [finding_to_dict(finding) for finding in findings], "external": external}
+
+
+def load_baseline(path: Path) -> list[tuple[str, str, str]]:
+    """Read a ``check --json`` output and return its comparison keys.
+
+    The key is ``(source, raw, status)``; line numbers shift with edits and
+    candidates change with the resolver, so neither is compared.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise BaselineError(f"failed to read baseline {path}: {exc}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise BaselineError(f"invalid baseline {path}: {exc}") from exc
+    findings = data.get("findings") if isinstance(data, dict) else None
+    if not isinstance(findings, list):
+        raise BaselineError(f"invalid baseline {path}: expected the output of `check --json`")
+    keys: list[tuple[str, str, str]] = []
+    for index, item in enumerate(findings):
+        if not isinstance(item, dict) or not all(
+            isinstance(item.get(key), str) for key in BASELINE_KEYS
+        ):
+            raise BaselineError(
+                f"invalid baseline {path}: findings[{index}] needs string "
+                + ", ".join(BASELINE_KEYS)
+            )
+        keys.append((item["source"], item["raw"], item["status"]))
+    return keys
+
+
+@dataclass(frozen=True)
+class BaselineDiff:
+    new: tuple[Finding, ...]
+    resolved: int
+
+
+def compare_baseline(
+    root: Path, findings: Sequence[Finding], baseline: Iterable[tuple[str, str, str]]
+) -> BaselineDiff:
+    """Findings that are not in the baseline, compared by count per key.
+
+    A baseline source that no longer exists is read as its current path when
+    the renames (staged or committed) lead to exactly one current file, so a
+    moved file's findings are not new. Otherwise it stays as written and its
+    findings count as resolved.
+    """
+    keys = list(baseline)
+    current = FileIndex(path.replace("\\", "/") for path in list_git_files(root))
+    renames = RenameIndex(root, current)
+    moved: dict[str, str] = {}
+    remaining: Counter[tuple[str, str, str]] = Counter()
+    for source, raw, status in keys:
+        if source not in current:
+            if source not in moved:
+                hit = renames.lookup(basename=PurePosixPath(source).name, old_path=source)
+                moved[source] = hit.exact[0] if len(hit.exact) == 1 else source
+            source = moved[source]
+        remaining[(source, raw, status)] += 1
+    new: list[Finding] = []
+    for finding in findings:
+        key = (finding.source, finding.raw, finding.status)
+        if remaining[key] > 0:
+            remaining[key] -= 1
+        else:
+            new.append(finding)
+    return BaselineDiff(new=tuple(new), resolved=sum(remaining.values()))
 
 
 def git_rename_destinations(
@@ -89,48 +371,10 @@ def git_rename_destinations(
     *,
     basename: str,
     old_path: str | None,
-    current_files: set[str],
-) -> list[str]:
-    if not (root / ".git").exists() or not basename:
-        return []
-    pathspecs = []
-    if old_path:
-        pathspecs.append(old_path)
-    pathspecs.extend([basename, f"**/{basename}"])
-    result = subprocess.run(
-        [
-            "git",
-            "log",
-            "--diff-filter=R",
-            "--name-status",
-            "--pretty=format:",
-            "--",
-            *pathspecs,
-        ],
-        cwd=root,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return []
-    pairs: list[tuple[str, str]] = []
-    for line in result.stdout.decode("utf-8", errors="replace").splitlines():
-        parsed = _parse_rename_line(line)
-        if parsed is None:
-            continue
-        src, dest = parsed
-        if dest not in current_files:
-            continue
-        pairs.append((src, dest))
-    if old_path:
-        exact = _unique_keep_order(dest for src, dest in pairs if src == old_path)
-        if exact:
-            return exact
-    return _unique_keep_order(
-        dest
-        for src, dest in pairs
-        if PurePosixPath(src).name == basename or PurePosixPath(dest).name == basename
-    )
+    current_files: Container[str],
+) -> RenameDestinations:
+    """One-off lookup; ``check``/``fix`` share a :class:`RenameIndex` instead."""
+    return RenameIndex(root, current_files).lookup(basename=basename, old_path=old_path)
 
 
 def preview_hunks(root: Path, findings: list[Finding]) -> list[str]:
@@ -162,10 +406,10 @@ def apply_findings(root: Path, findings: list[Finding]) -> list[Finding]:
     for source in sorted(by_source):
         path = _abs(root, source)
         try:
-            text = path.read_text(encoding="utf-8")
+            text = _read_raw_text(path)
         except OSError as exc:
             raise OSError(f"failed to read {source}: {exc}") from exc
-        lines = text.splitlines(keepends=True)
+        lines = _split_lines_keepends(text)
         changed = False
         for finding in by_source[source]:
             idx = finding.line - 1
@@ -182,7 +426,7 @@ def apply_findings(root: Path, findings: list[Finding]) -> list[Finding]:
             changed = True
         if changed:
             try:
-                path.write_text("".join(lines), encoding="utf-8")
+                path.write_text("".join(lines), encoding="utf-8", newline="")
             except OSError as exc:
                 raise OSError(f"failed to write {source}: {exc}") from exc
     return failed
@@ -207,17 +451,36 @@ def rewrite_raw(original_raw: str, target: str, source: str) -> str:
     return new_path
 
 
-def _is_broken(edge: StoredEdge, git_files: set[str]) -> bool:
+def _is_broken(edge: StoredEdge, git_files: FileIndex) -> bool:
+    """A link needs attention unless it resolved exactly to something that exists.
+
+    Non-exact resolutions (``unique-suffix`` / ``unique-basename``) only work
+    because the resolver guessed; the written path itself is wrong, so they
+    are reported. Wiki links are the exception: ``[[name]]`` means "the page
+    called name", so a unique basename is their intended resolution.
+    """
     if edge.confidence == UNRESOLVED or not edge.resolved:
         return True
-    return edge.resolved not in git_files
+    if edge.resolved not in git_files and edge.resolved not in git_files.dirs:
+        return True
+    return not _is_intended_resolution(edge.kind, edge.confidence)
 
 
-def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | None:
+def _is_intended_resolution(kind: str, confidence: str) -> bool:
+    return confidence == EXACT or (kind == "wiki" and confidence == UNIQUE_BASENAME)
+
+
+def _suggest(edge: StoredEdge, git_files: FileIndex, renames: RenameIndex) -> Finding | None:
     hit = resolve_link(edge.raw, edge.source, git_files)
-    if hit.resolved is not None and hit.confidence == EXACT:
+    if hit.resolved is not None and _is_intended_resolution(edge.kind, hit.confidence):
         return None
-    if hit.resolved is not None and hit.confidence != UNRESOLVED:
+    # A basename hit that shares no directory name with the link is a
+    # coincidence (another README.md, another SKILL.md), not a candidate.
+    if (
+        hit.resolved is not None
+        and hit.confidence != UNRESOLVED
+        and (hit.confidence != UNIQUE_BASENAME or narrow_candidates(edge.raw, [hit.resolved]))
+    ):
         return _finding(
             edge,
             status=SUGGESTED,
@@ -226,7 +489,7 @@ def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | Non
         )
     path_part, _anchor = _split_target(edge.raw)
     basename = PurePosixPath(path_part).name if path_part else ""
-    ambiguous = fallback_candidates(edge.raw, git_files)
+    ambiguous = narrow_candidates(edge.raw, fallback_candidates(edge.raw, git_files))
     # Old resolved paths can still git-rename uniquely when the basename is
     # now shared. Live script scans have no stored target, so the raw path
     # (joined to the source directory) is the next-best old path.
@@ -234,34 +497,38 @@ def _suggest(root: Path, edge: StoredEdge, git_files: set[str]) -> Finding | Non
     if not old_path and path_part:
         old_path = _join(_parent(edge.source), path_part)
     if old_path:
-        renamed = git_rename_destinations(
-            root,
-            basename=basename,
-            old_path=old_path,
-            current_files=git_files,
-        )
+        renamed = renames.lookup(basename=basename, old_path=old_path)
     elif not ambiguous:
-        renamed = git_rename_destinations(
-            root,
-            basename=basename,
-            old_path=None,
-            current_files=git_files,
-        )
+        renamed = renames.lookup(basename=basename, old_path=None)
     else:
-        renamed = []
-    if len(renamed) == 1:
+        renamed = RenameDestinations()
+    for destinations, confidence in (
+        (renamed.exact, GIT_RENAME),
+        (tuple(narrow_candidates(edge.raw, renamed.basename)), GIT_RENAME_BASENAME),
+    ):
+        if len(destinations) == 1:
+            return _finding(
+                edge,
+                status=SUGGESTED,
+                confidence=confidence,
+                suggested=destinations,
+            )
+        if len(destinations) > 1:
+            return _finding(
+                edge,
+                status=AMBIGUOUS,
+                confidence=AMBIGUOUS,
+                suggested=destinations,
+            )
+    if len(ambiguous) == 1:
+        # Only basename hits can be narrowed down to one (suffix hits always
+        # contain the link's directory names), and a basename guess is never
+        # applied automatically.
         return _finding(
             edge,
             status=SUGGESTED,
-            confidence=GIT_RENAME,
-            suggested=(renamed[0],),
-        )
-    if len(renamed) > 1:
-        return _finding(
-            edge,
-            status=AMBIGUOUS,
-            confidence=AMBIGUOUS,
-            suggested=tuple(renamed),
+            confidence=UNIQUE_BASENAME,
+            suggested=tuple(ambiguous),
         )
     if len(ambiguous) > 1:
         return _finding(
@@ -388,13 +655,30 @@ def _display_line(line: str) -> str:
 def _read_line(root: Path, source: str, line: int) -> str | None:
     path = _abs(root, source)
     try:
-        text = path.read_text(encoding="utf-8")
+        text = _read_raw_text(path)
     except OSError:
         return None
-    lines = text.splitlines(keepends=True)
+    lines = _split_lines_keepends(text)
     if line < 1 or line > len(lines):
         return None
     return lines[line - 1]
+
+
+def _read_raw_text(path: Path) -> str:
+    # newline="" keeps CRLF / mixed endings intact (Path.read_text has no
+    # newline argument before Python 3.13).
+    with path.open(encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
+def _split_lines_keepends(text: str) -> list[str]:
+    # Split on "\n" only, matching extract._line_at. str.splitlines would also
+    # break on a lone "\r", "\v", U+2028 etc. and shift line numbers.
+    lines = text.split("\n")
+    out = [line + "\n" for line in lines[:-1]]
+    if lines[-1]:
+        out.append(lines[-1])
+    return out
 
 
 def _abs(root: Path, posix_path: str) -> Path:

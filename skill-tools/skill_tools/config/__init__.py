@@ -21,6 +21,8 @@ DEFAULT_GITHUB_REPOSITORY = "ai"
 DEFAULT_GITHUB_REF = "main"
 DEFAULT_DESTINATION = ".claude/skills"
 DEFAULT_SELF_SKILL = "tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md"
+INSTALL_MODES = ("copy", "link")
+DEFAULT_INSTALL_MODE = "copy"
 
 
 @dataclass(frozen=True)
@@ -42,8 +44,19 @@ class FbConfig:
     path: Path
 
 
+@dataclass(frozen=True)
+class StoreConfig:
+    """``store:`` settings: where link installs keep the shared skill copies."""
+
+    path: Path
+
+
 def _default_fb_config() -> FbConfig:
     return FbConfig(default_fb_path())
+
+
+def _default_store_config() -> StoreConfig:
+    return StoreConfig(store_dir())
 
 
 CLAUDE_SETTINGS_FILES = {
@@ -61,6 +74,8 @@ class HooksConfig:
     claude_settings_file: str = "project"
     global_destinations: dict[str, str] = field(default_factory=dict)
     """Home-relative hook directories for ``--global`` (``hooks.agents.<a>.global_destination``)."""
+    install: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """Desired hook ids per agent (``hooks.install.<agent>``), applied by ``hooks sync``."""
 
 
 @dataclass(frozen=True)
@@ -74,6 +89,9 @@ class SkillToolsConfig:
     target_destinations: dict[str, dict[str, str]] = field(default_factory=dict)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     fb: FbConfig = field(default_factory=_default_fb_config)
+    store: StoreConfig = field(default_factory=_default_store_config)
+    install_mode: str = DEFAULT_INSTALL_MODE
+    """`install-skills` placement when `--mode` is omitted: copy or link."""
     self_skill: str = DEFAULT_SELF_SKILL
     config_path: Path | None = None
     global_config_path: Path | None = None
@@ -118,6 +136,22 @@ def _cache_home() -> Path:
     return Path.home() / ".cache" / "skill-tools"
 
 
+def _state_home() -> Path:
+    """skill-tools' state root: never the cache directory (clearing a cache must keep state)."""
+
+    override = os.environ.get("SKILL_TOOLS_HOME")
+    if override:
+        return Path(override).expanduser().resolve()
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data).expanduser().resolve() / "skill-tools"
+    xdg_state = os.environ.get("XDG_STATE_HOME")
+    if xdg_state:
+        return Path(xdg_state).expanduser().resolve() / "skill-tools"
+    return Path.home().resolve() / ".local" / "state" / "skill-tools"
+
+
 def global_state_dir() -> Path:
     """Manifest, journal, and backups for ``--global`` installs.
 
@@ -126,17 +160,17 @@ def global_state_dir() -> Path:
     installed skills).
     """
 
-    override = os.environ.get("SKILL_TOOLS_HOME")
-    if override:
-        return Path(override).expanduser().resolve() / "global"
-    if os.name == "nt":
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        if local_app_data:
-            return Path(local_app_data).expanduser().resolve() / "skill-tools" / "global"
-    xdg_state = os.environ.get("XDG_STATE_HOME")
-    if xdg_state:
-        return Path(xdg_state).expanduser().resolve() / "skill-tools" / "global"
-    return Path.home().resolve() / ".local" / "state" / "skill-tools" / "global"
+    return _state_home() / "global"
+
+
+def store_dir() -> Path:
+    """Default store that link installs point at (``store.path`` overrides it).
+
+    Beside ``global_state_dir()`` and out of the cache directory for the same
+    reason: clearing a cache must not break every project's links.
+    """
+
+    return _state_home() / "store"
 
 
 def default_index_path() -> Path:
@@ -173,6 +207,8 @@ def _embedded_default_data() -> dict[str, Any]:
         },
         "index": {"path": str(default_index_path())},
         "fb": {"path": str(default_fb_path())},
+        "install_mode": DEFAULT_INSTALL_MODE,
+        "store": {"path": str(store_dir())},
         "self_skill": DEFAULT_SELF_SKILL,
         "skills": {},
     }
@@ -305,14 +341,15 @@ def _normalize_paths(data: dict[str, Any], base_dir: Path) -> dict[str, Any]:
             if not index_path.is_absolute()
             else index_path.resolve()
         )
-    feedback = normalized.get("fb")
-    if isinstance(feedback, dict) and isinstance(feedback.get("path"), str) and feedback["path"]:
-        feedback_path = Path(feedback["path"]).expanduser()
-        feedback["path"] = str(
-            (base_dir / feedback_path).resolve()
-            if not feedback_path.is_absolute()
-            else feedback_path.resolve()
-        )
+    for key in ("fb", "store"):
+        section = normalized.get(key)
+        if isinstance(section, dict) and isinstance(section.get("path"), str) and section["path"]:
+            section_path = Path(section["path"]).expanduser()
+            section["path"] = str(
+                (base_dir / section_path).resolve()
+                if not section_path.is_absolute()
+                else section_path.resolve()
+            )
     return normalized
 
 
@@ -431,7 +468,7 @@ def _parse_hooks(data: object, filename: str) -> HooksConfig:
         return HooksConfig()
     if not isinstance(data, dict):
         raise ConfigError(f"{filename}.hooks must be a mapping")
-    unknown = set(data) - {"default_agents", "agents"}
+    unknown = set(data) - {"default_agents", "agents", "install"}
     if unknown:
         raise ConfigError(f"{filename}.hooks contains unknown keys: {', '.join(sorted(unknown))}")
     raw_defaults = data.get("default_agents", [])
@@ -481,7 +518,23 @@ def _parse_hooks(data: object, filename: str) -> HooksConfig:
         destinations=destinations,
         claude_settings_file=settings_file,
         global_destinations=global_destinations,
+        install=_parse_hooks_install(data.get("install", {}), filename),
     )
+
+
+def _parse_hooks_install(data: object, filename: str) -> dict[str, tuple[str, ...]]:
+    if not isinstance(data, dict):
+        raise ConfigError(f"{filename}.hooks.install must be a mapping of agent to hook ids")
+    install: dict[str, tuple[str, ...]] = {}
+    for agent, ids in data.items():
+        if agent not in HOOK_AGENTS:
+            raise ConfigError(f"{filename}.hooks.install has an unknown agent: {agent!r}")
+        if ids is None:
+            ids = []
+        if not isinstance(ids, list) or not all(isinstance(item, str) and item for item in ids):
+            raise ConfigError(f"{filename}.hooks.install.{agent} must be a list of hook ids")
+        install[agent] = tuple(dict.fromkeys(ids))
+    return install
 
 
 def _parse_fb(data: object, path: Path | None) -> FbConfig:
@@ -503,11 +556,38 @@ def _parse_fb(data: object, path: Path | None) -> FbConfig:
     return FbConfig(fb_path.resolve())
 
 
+def _parse_store(data: object, path: Path | None) -> StoreConfig:
+    if data is None:
+        return _default_store_config()
+    if not isinstance(data, dict):
+        raise ConfigError("store must be a mapping")
+    unknown = set(data) - {"path"}
+    if unknown:
+        raise ConfigError(f"store contains unknown keys: {', '.join(sorted(unknown))}")
+    raw_path = data.get("path")
+    if raw_path is None:
+        return _default_store_config()
+    if not isinstance(raw_path, str) or not raw_path:
+        raise ConfigError("store.path must be a non-empty string")
+    store_path = Path(raw_path).expanduser()
+    if not store_path.is_absolute():
+        store_path = (path.parent if path is not None else Path.cwd()) / store_path
+    return StoreConfig(store_path.resolve())
+
+
+def _parse_install_mode(value: object) -> str:
+    if value not in INSTALL_MODES:
+        raise ConfigError(f"install_mode must be one of {', '.join(INSTALL_MODES)}: {value!r}")
+    return str(value)
+
+
 def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
     allowed = {
         "source",
         "index",
         "fb",
+        "store",
+        "install_mode",
         "skills",
         "targets",
         "global_destination",
@@ -570,6 +650,8 @@ def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
         target_destinations=target_destinations,
         hooks=_parse_hooks(data.get("hooks"), path.name if path else "skill-tools.yaml"),
         fb=_parse_fb(data.get("fb"), path),
+        store=_parse_store(data.get("store"), path),
+        install_mode=_parse_install_mode(data.get("install_mode", DEFAULT_INSTALL_MODE)),
         self_skill=_parse_self_skill(data.get("self_skill", DEFAULT_SELF_SKILL)),
         config_path=path,
     )

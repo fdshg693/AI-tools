@@ -1,6 +1,6 @@
 # issue-shape — タスクグループ対応版ISSUEの型とLinear/linear-cli設定
 
-このファイルは[parallel-agent-worktree](SKILL.md)がタスクグループ（依存関係を持つ一連のissue群）に対応するために、ISSUE側が満たすべき型と、それを支えるLinear/`linear-cli`側の設定をまとめる。[02-issue-authoring-procedure](../../../../.claude/plans/parallel-agent-worktree-task-groups/02-issue-authoring-procedure.md)（AI向け手順書）・[03-linear-cli-extension](../../../../.claude/plans/parallel-agent-worktree-task-groups/03-linear-cli-extension.md)（CLI拡張）・[04-skill-rewrite](../../../../.claude/plans/parallel-agent-worktree-task-groups/04-skill-rewrite.md)（スキル本体書き換え）はこのファイルが定める仕様を前提に進める。
+このファイルは[parallel-agent-worktree](SKILL.md)がタスクグループ（依存関係を持つ一連のissue群）に対応するために、ISSUE側が満たすべき型と、それを支えるLinear/`linear-cli`側の設定をまとめる。削除済みのプラン `parallel-agent-worktree-task-groups` の `02-issue-authoring-procedure`（AI向け手順書）・`03-linear-cli-extension`（CLI拡張）・`04-skill-rewrite`（スキル本体書き換え）は、このファイルが定める仕様を前提に進めた。
 
 対象は「このスキル専用の型を持つISSUE」に限定する。汎用issue全般との後方互換は考慮しない。
 
@@ -16,7 +16,7 @@
 - 同じブランチ上で順番に実装するissue群は、description構造化ヘッダの`branch:<slug>`フィールド（後述）を共通の値にする
 - `slug`はgitブランチ名の一部としてそのまま使われるため、**小文字英数字とハイフンのみ**（正規表現でいう`^[a-z0-9-]+$`）に制限する
 - 「同じブランチに未完了issueが残っているか」は、Linearラベルではなく`--project`スコープの総当たり（`search --project`→各issueを`show`してヘッダの`branch:`を照合）で判定する（[SKILL.md](SKILL.md)の「完了時のブランチ残issueチェック」節参照）。当初はLinearラベル`branch:<slug>`も併用する設計だったが、ラベル値はslugを切るたび（＝タスクグループを起票するたび）にteam側へ事前登録するLinear UI手動作業を要求し、起票のたびに人手が挟まる運用コストが見合わないため廃止した。ラベルの新設自体は`linear-cli`が意図的にサポートしていない（typoによるラベル乱立防止のための設計。`tools/linear-cli/src/labels.mjs`参照）ため、この情報はもともとdescription構造化ヘッダ側にしかない一次情報であり、ラベル側は単なる重複インデックスに過ぎなかった
-- worktree再利用の可否そのものはラベルやヘッダではなくホスト上の`git worktree list`を正とする（[00-overview.md](../../../../.claude/plans/parallel-agent-worktree-task-groups/00-overview.md)の決定事項）
+- worktree再利用の可否そのものはラベルやヘッダではなくホスト上の`git worktree list`を正とする（プラン `parallel-agent-worktree-task-groups` の決定事項）
 
 ## Issue descriptionの構造化ヘッダ
 
@@ -43,7 +43,7 @@ Linear純正のissue relations APIは使わない（SDK側の対応状況の裏�
 
 ### `base_branch`を明示指定する場合の注意
 
-`base_branch`がリポジトリのdefaultブランチと同じ場合のみが主経路（このケースは`EnterWorktree({ name })`だけで完結する）。それ以外の値を指定する運用も書式上は許すが、[04-skill-rewrite](../../../../.claude/plans/parallel-agent-worktree-task-groups/04-skill-rewrite.md)側で「`git worktree add`で手動作成 → `EnterWorktree({ path })`でアタッチ」という追加手順が必要になる。`EnterWorktree`は呼び出し単位でbase refを指定できず、`worktree.baseRef`設定はリポジトリ全体に影響するため切り替えない、という制約による（[00-overview.md](../../../../.claude/plans/parallel-agent-worktree-task-groups/00-overview.md)参照）。issueを書く時点でこのコストを把握できるよう、ここに明記する。
+`base_branch`がリポジトリのdefaultブランチと同じ場合のみが主経路（このケースは`EnterWorktree({ name })`だけで完結する）。それ以外の値を指定する運用も書式上は許すが、[SKILL.md](SKILL.md)側で「`git worktree add`で手動作成 → `EnterWorktree({ path })`でアタッチ」という追加手順が必要になる。`EnterWorktree`は呼び出し単位でbase refを指定できず、`worktree.baseRef`設定はリポジトリ全体に影響するため切り替えない、という制約による。issueを書く時点でこのコストを把握できるよう、ここに明記する。
 
 ## トラッキングissueコメント書式の拡張
 

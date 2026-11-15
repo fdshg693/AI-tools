@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .config import Config, load_config
 from .resolve import UNRESOLVED, lookup_candidates, resolve_link
-from .scan import is_text_file, list_git_files
+from .scan import indexed_text_files, list_git_files
 from .store import GraphStore, StoredEdge
 
 UNRESOLVED_CONFIDENCE = UNRESOLVED
@@ -25,8 +26,10 @@ class ImpactResult:
     unresolved: tuple[StoredEdge, ...]
 
 
-def is_index_stale(root: Path, store: GraphStore) -> bool:
-    git_text = {path for path in list_git_files(root) if is_text_file(path)}
+def is_index_stale(root: Path, store: GraphStore, config: Config | None = None) -> bool:
+    if config is None:
+        config = load_config(root)
+    git_text = set(indexed_text_files(list_git_files(root), config))
     indexed = store.listed_paths()
     if git_text != indexed:
         return True

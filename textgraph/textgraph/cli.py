@@ -7,7 +7,18 @@ import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
-from .check import Finding, apply_findings, find_broken_links, preview_hunks
+from .config import Config, ConfigError, load_config
+from .check import (
+    EXTERNAL,
+    BaselineError,
+    Finding,
+    apply_findings,
+    compare_baseline,
+    find_broken_links,
+    findings_to_json,
+    load_baseline,
+    preview_hunks,
+)
 from .query import (
     ImpactResult,
     collapse_paths,
@@ -17,7 +28,7 @@ from .query import (
     is_index_stale,
     resolve_target,
 )
-from .scan import GitError, find_repo_root, sync_index
+from .scan import GitError, SyncStats, find_repo_root, sync_index
 from .store import INDEX_DIR, GraphStore, db_path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -52,25 +63,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     try:
         root = _resolve_root(args.path)
+        config = load_config(root)
         if args.command == "init":
-            return _cmd_init(root)
+            return _cmd_init(root, config)
         if args.command == "sync":
-            return _cmd_sync(root, force=args.force)
+            return _cmd_sync(root, config, force=args.force)
         if args.command == "status":
-            return _cmd_status(root)
+            return _cmd_status(root, config)
         if args.command == "files":
             return _cmd_files(
                 root,
+                config,
                 prefix=args.filter,
                 max_depth=args.max_depth,
                 as_json=args.json,
             )
         if args.command == "impact":
-            return _cmd_impact(root, args.target, as_json=args.json)
+            return _cmd_impact(root, config, args.target, as_json=args.json)
         if args.command == "check":
-            return _cmd_check(root, scripts=args.scripts)
+            return _cmd_check(
+                root,
+                config,
+                scripts=args.scripts,
+                external=args.external,
+                as_json=args.json,
+                baseline=args.baseline,
+            )
         if args.command == "fix":
-            return _cmd_fix(root, apply=args.apply, scripts=args.scripts)
+            return _cmd_fix(
+                root, config, apply=args.apply, scripts=args.scripts, external=args.external
+            )
+    except (ConfigError, BaselineError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     except CliError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
@@ -129,6 +154,21 @@ def _build_parser() -> argparse.ArgumentParser:
     impact.add_argument("--json", action="store_true", help="write inbound/outbound as JSON")
     check = sub.add_parser("check", help="report broken outbound links")
     _add_scripts_flag(check)
+    check.add_argument(
+        "--json",
+        action="store_true",
+        help='write {"findings": [...], "external": N} as JSON',
+    )
+    check.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help=(
+            "compare with an earlier `check --json` output and list only new findings "
+            "(key: source, raw, status; renamed sources follow git renames)"
+        ),
+    )
     fix = sub.add_parser(
         "fix",
         help="rewrite unique broken links (dry-run unless --apply)",
@@ -136,7 +176,7 @@ def _build_parser() -> argparse.ArgumentParser:
     fix.add_argument(
         "--apply",
         action="store_true",
-        help="write unique-suffix and git-rename replacements",
+        help="write unique-suffix and git-rename replacements (not git-rename-basename)",
     )
     _add_scripts_flag(fix)
     return parser
@@ -148,6 +188,14 @@ def _add_scripts_flag(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help=(
             "also scan script files for the same local-link syntax (no comment-vs-code detection)"
+        ),
+    )
+    parser.add_argument(
+        "--external",
+        action="store_true",
+        help=(
+            "also list links outside the index that exist on disk "
+            "(status external; never counted in the exit code)"
         ),
     )
 
@@ -164,25 +212,29 @@ def _resolve_root(path: Path | None) -> Path:
     return found
 
 
-def _cmd_init(root: Path) -> int:
+def _cmd_init(root: Path, config: Config) -> int:
     index = root / INDEX_DIR
     if index.exists():
         print("index already exists; run `textgraph sync`", file=sys.stderr)
         return 1
     index.mkdir()
-    sync_index(root, force=True)
+    _print_sync_stats(sync_index(root, force=True, config=config))
     return 0
 
 
-def _cmd_sync(root: Path, *, force: bool) -> int:
+def _cmd_sync(root: Path, config: Config, *, force: bool) -> int:
     if not (root / INDEX_DIR).exists():
         print("index not found; run `textgraph init`", file=sys.stderr)
         return 1
-    sync_index(root, force=force)
+    _print_sync_stats(sync_index(root, force=force, config=config))
     return 0
 
 
-def _cmd_status(root: Path) -> int:
+def _print_sync_stats(stats: SyncStats) -> None:
+    print(f"updated {stats.updated}, skipped {stats.skipped}, removed {stats.removed}")
+
+
+def _cmd_status(root: Path, config: Config) -> int:
     store = _open_store(root)
     try:
         files, links, unresolved = store.counts()
@@ -191,6 +243,12 @@ def _cmd_status(root: Path) -> int:
         print(f"links: {links}")
         print(f"unresolved: {unresolved}")
         print(f"last_sync: {last}")
+        if config.path is None:
+            print("config: (none)")
+        else:
+            print(f"config: {config.path}")
+            print(f"exclude: {len(config.exclude)}")
+            print(f"scripts_exclude: {len(config.scripts_exclude)}")
         return 0
     finally:
         store.close()
@@ -198,6 +256,7 @@ def _cmd_status(root: Path) -> int:
 
 def _cmd_files(
     root: Path,
+    config: Config,
     *,
     prefix: str | None,
     max_depth: int | None,
@@ -207,7 +266,7 @@ def _cmd_files(
         raise CliError("--max-depth must be >= 1")
     store = _open_store(root)
     try:
-        _require_fresh(root, store)
+        _require_fresh(root, store, config)
         paths = filter_paths(store.list_files(), prefix)
         if as_json:
             print(json.dumps(paths, indent=2))
@@ -218,22 +277,64 @@ def _cmd_files(
         store.close()
 
 
-def _cmd_check(root: Path, *, scripts: bool) -> int:
+def _split_external(
+    findings: Sequence[Finding], *, show_external: bool
+) -> tuple[list[Finding], list[Finding]]:
+    """Return (findings to list, real problems) and report hidden externals."""
+    problems = [finding for finding in findings if finding.status != EXTERNAL]
+    external = len(findings) - len(problems)
+    if show_external:
+        return list(findings), problems
+    if external:
+        print(
+            f"{external} links point outside the index (exist on disk); use --external to list",
+            file=sys.stderr,
+        )
+    return problems, problems
+
+
+def _cmd_check(
+    root: Path,
+    config: Config,
+    *,
+    scripts: bool,
+    external: bool,
+    as_json: bool = False,
+    baseline: Path | None = None,
+) -> int:
+    # Read the baseline first so a broken file fails before the scan.
+    baseline_keys = load_baseline(baseline) if baseline is not None else None
     store = _open_store(root, code=2)
     try:
-        _require_fresh(root, store, code=2)
-        findings = find_broken_links(root, store, scripts=scripts)
-        _print_findings(findings)
-        return 0 if not findings else 1
+        _require_fresh(root, store, config, code=2)
+        findings = find_broken_links(root, store, scripts=scripts, config=config)
+        external_count = sum(1 for finding in findings if finding.status == EXTERNAL)
+        listed, problems = _split_external(findings, show_external=external)
+        if baseline_keys is not None:
+            # Hidden externals are on neither side, so they are never "resolved".
+            if not external:
+                baseline_keys = [key for key in baseline_keys if key[2] != EXTERNAL]
+            diff = compare_baseline(root, listed, baseline_keys)
+            listed = list(diff.new)
+            problems = [finding for finding in listed if finding.status != EXTERNAL]
+            print(f"{diff.resolved} findings resolved since the baseline", file=sys.stderr)
+        if as_json:
+            print(json.dumps(findings_to_json(listed, external=external_count), indent=2))
+        else:
+            _print_findings(listed)
+        return 0 if not problems else 1
     finally:
         store.close()
 
 
-def _cmd_fix(root: Path, *, apply: bool, scripts: bool) -> int:
+def _cmd_fix(root: Path, config: Config, *, apply: bool, scripts: bool, external: bool) -> int:
     store = _open_store(root, code=2)
     try:
-        _require_fresh(root, store, code=2)
-        findings = find_broken_links(root, store, scripts=scripts)
+        _require_fresh(root, store, config, code=2)
+        findings, problems = _split_external(
+            find_broken_links(root, store, scripts=scripts, config=config),
+            show_external=external,
+        )
         applyable = [finding for finding in findings if finding.applyable]
         skipped = [finding for finding in findings if not finding.applyable]
         hunks = preview_hunks(root, applyable)
@@ -258,16 +359,16 @@ def _cmd_fix(root: Path, *, apply: bool, scripts: bool) -> int:
             print("skipped")
             _print_findings(remaining)
         if apply:
-            return 0 if not remaining else 1
-        return 0 if not findings else 1
+            return 0 if not any(f.status != EXTERNAL for f in remaining) else 1
+        return 0 if not problems else 1
     finally:
         store.close()
 
 
-def _cmd_impact(root: Path, raw_target: str, *, as_json: bool) -> int:
+def _cmd_impact(root: Path, config: Config, raw_target: str, *, as_json: bool) -> int:
     store = _open_store(root)
     try:
-        _require_fresh(root, store)
+        _require_fresh(root, store, config)
         files = store.listed_paths()
         target = resolve_target(raw_target, root, files, cwd=Path.cwd())
         if target.path is None:
@@ -294,8 +395,8 @@ def _open_store(root: Path, *, code: int = 1) -> GraphStore:
     return GraphStore(path)
 
 
-def _require_fresh(root: Path, store: GraphStore, *, code: int = 1) -> None:
-    if is_index_stale(root, store):
+def _require_fresh(root: Path, store: GraphStore, config: Config, *, code: int = 1) -> None:
+    if is_index_stale(root, store, config):
         raise CliError("index is stale; run `textgraph sync`", code=code)
 
 

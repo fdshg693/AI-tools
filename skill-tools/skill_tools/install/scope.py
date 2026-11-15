@@ -111,3 +111,32 @@ def ensure_project_root_allowed(scope: InstallScope, command: str) -> None:
         f"here: `skill-tools {remove}` in this directory, then "
         f"`skill-tools {install} --global {item}...`"
     )
+
+
+def ensure_not_store_state(scope: InstallScope) -> None:
+    """Refuse a scope whose state directory is the link store's own (its root is the store).
+
+    Managing the store from there would bypass its referrer records: removing an
+    entry would leave every project linking to it with a broken link.
+    """
+
+    from .store import REFERRERS_FILE
+
+    if (scope.state_dir / REFERRERS_FILE).exists():
+        raise ConfigError(
+            f"{scope.root} is a skill store, not a project; use `skill-tools store` to manage it"
+        )
+
+
+def ensure_outside_store(scope: InstallScope, store_root: Path) -> None:
+    """Refuse a project root inside the configured link store.
+
+    A root reached through a link (``--project-dir`` or a CWD inside a linked
+    skill) resolves into the shared store entry; writing skills, hooks or a
+    manifest there would change what every linking project sees.
+    """
+
+    from .store import Store
+
+    ensure_not_store_state(scope)
+    Store(store_root).ensure_outside(scope.root, "project root")

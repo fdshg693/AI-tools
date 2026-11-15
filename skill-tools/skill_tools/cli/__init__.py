@@ -30,6 +30,7 @@ from .hooks import (
     _command_hooks_installed,
     _command_hooks_list,
     _command_hooks_remove,
+    _command_hooks_sync,
     _command_hooks_update,
 )
 from .index_cmd import (
@@ -54,6 +55,7 @@ from .tools_cmd import (
     _command_install_tools,
     _command_list_tools,
 )
+from .store_cmd import STORE_COMMANDS, _add_store_command
 from .self_update_cmd import _add_self_update_command, _command_self_update
 from .workflow import _add_workflow_command, _command_workflow
 
@@ -80,7 +82,8 @@ def build_parser(*, prog: str = "skill-tools") -> argparse.ArgumentParser:
             "(list-skills / install-skills / ...; `install-skills self` installs the "
             "skill-tools companion skill), "
             "enumerate / install repo tools registered in repo-tools.yaml, "
-            "and browse agent hooks published by repo-hooks.yaml."
+            "browse agent hooks published by repo-hooks.yaml, "
+            "and maintain the shared skill store behind `install-skills --mode link`."
         ),
         epilog=(
             "Save feedback without a subcommand: "
@@ -100,6 +103,7 @@ def build_parser(*, prog: str = "skill-tools") -> argparse.ArgumentParser:
     _add_hooks_command(commands)
     _add_search_command(commands)
     _add_build_index_command(commands)
+    _add_store_command(commands)
     _add_config_command(commands)
     _add_self_update_command(commands)
     return parser
@@ -138,9 +142,12 @@ def run(
             "installed": _command_hooks_installed,
             "update": _command_hooks_update,
             "remove": _command_hooks_remove,
+            "sync": _command_hooks_sync,
         }.get(hooks_command)
         if handler is not None:
             return handler(args, working_directory, resolve_scope(args, working_directory))
+    if args.command == "store":
+        return STORE_COMMANDS[args.store_command](args, working_directory)
     if args.command == "search":
         return _command_search(args, working_directory, embedder)
     if args.command == "build-index":

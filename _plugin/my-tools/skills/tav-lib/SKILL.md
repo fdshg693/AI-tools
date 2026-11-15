@@ -1,22 +1,22 @@
 ---
 name: tav-lib
-description: "`tools/tav-cli` のグローバルインストール済み Python 実装をライブラリとして使い、Tavily 経由で Web 検索・URL 本文抽出・サイトマップ・クロール・リサーチを行う方法を説明する。Python コードから Tavily API を呼び出したい、`--detail` プリセットを適用した結果を取り出したい場合に使う。CLI コマンドを実行する場合は `tav-cli` を使う。"
+description: "`tools/web-research/tav-cli` のグローバルインストール済み Python 実装をライブラリとして使い、Tavily 経由で Web 検索・URL 本文抽出・サイトマップ・クロール・リサーチを行う方法を説明する。Python コードから Tavily API を呼び出したい、`--detail` プリセットを適用した結果を取り出したい場合に使う。CLI コマンドを実行する場合は `tav-cli` を使う。"
 meta:
   tag: []
-  requires_repo_tools: tools/tav-cli
+  requires_repo_tools: tools/web-research/tav-cli
   requires_env: TAVILY_API_KEY
   dependencies: tav-cli, python>=3.11
-  requires_install: tools/tav-cli (uv tool install --editable tools/tav-cli)
+  requires_install: tools/web-research/tav-cli (uv tool install --editable tools/web-research/tav-cli)
   requires_hooks: none
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.5
+  version: 1.0.6
 ---
 
 # tav-cli を Python ライブラリとして使う
 
-`tools/tav-cli` は、Tavily SDK をプロジェクト固有のプリセットで固定したラッパー群である。パッケージ名は `tav-cli` で、共通実装を `tav_core` パッケージが、各操作（search / extract / map / crawl / research）のラッパーをトップレベルモジュール（`search_topic` / `extract_url_content` 等）が担う。いずれも `pyproject.toml` の `packages` / `py-modules` に含まれるため、`uv tool install --editable tools/tav-cli` 済みなら `from tav_core import ...` / `from search_topic import ...` で import できる。
+`tools/web-research/tav-cli` は、Tavily SDK をプロジェクト固有のプリセットで固定したラッパー群である。パッケージ名は `tav-cli` で、共通実装を `tav_core` パッケージが、各操作（search / extract / map / crawl / research）のラッパーをトップレベルモジュール（`search_topic` / `extract_url_content` 等）が担う。いずれも `pyproject.toml` の `packages` / `py-modules` に含まれるため、`uv tool install --editable tools/web-research/tav-cli` 済みなら `from tav_core import ...` / `from search_topic import ...` で import できる。
 
 ライブラリ利用では `tav` コマンドや `tav_cli.main()` を呼ばず、以下の2層だけを使う。
 
@@ -29,10 +29,10 @@ meta:
 
 ## 前提条件
 
-- `tools/tav-cli` がグローバル環境にインストール済みであること（README の前提どおり `uv tool install --editable tools/tav-cli`）
+- `tools/web-research/tav-cli` がグローバル環境にインストール済みであること（README の前提どおり `uv tool install --editable tools/web-research/tav-cli`）
 - Python 3.11 以上を使うこと
-- `TAVILY_API_KEY` が環境変数、またはグローバル設定 `~/.config/tav/config.toml` の `api_key` に設定済みであること。`create_tavily_client()` はプロジェクト設定 `.tav.toml` から `api_key` を読まない（詳細は `tools/tav-cli/README.md` の「設定とパス解決」）。設定ファイルが不正なときも `ValueError`（`ConfigError`）を投げる
-- 未インストール・API キー未設定の場合、このスキルでインストールやキー発行を行わず、`tools/tav-cli/README.md` のセットアップ手順を案内する
+- `TAVILY_API_KEY` が環境変数、またはグローバル設定 `~/.config/tav/config.toml` の `api_key` に設定済みであること。`create_tavily_client()` はプロジェクト設定 `.tav.toml` から `api_key` を読まない（詳細は `tools/web-research/tav-cli/README.md` の「設定とパス解決」）。設定ファイルが不正なときも `ValueError`（`ConfigError`）を投げる
+- 未インストール・API キー未設定の場合、このスキルでインストールやキー発行を行わず、`tools/web-research/tav-cli/README.md` のセットアップ手順を案内する
 
 ## 基本パターン（同期・search）
 

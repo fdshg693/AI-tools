@@ -4,7 +4,7 @@ description: tav`で`--topic`指定して収集した`pages/`(extract/crawl/sear
 
 # 前提条件(このスキル自体はインストール・セットアップを一切行わない):
 #   - `tav` コマンドが PATH 上で使えること
-#     (セットアップは tools/tav-cli/README.md 参照)
+#     (セットアップは tools/web-research/tav-cli/README.md 参照)
 #   - `aim` コマンドが PATH 上で使え、OPENROUTER_API_KEY が設定済みであること
 #     (セットアップは tools/_plugin/my-tools/skills/aim-cli/SKILL.md 参照)
 #
@@ -21,7 +21,7 @@ meta:
   requires_skills: tav-cli, aim-cli
   status: stable
   description: no description
-  version: 1.0.6
+  version: 1.0.7
 ---
 
 ## 全体の流れ

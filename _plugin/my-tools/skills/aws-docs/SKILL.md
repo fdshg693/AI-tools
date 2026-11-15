@@ -3,7 +3,7 @@ name: aws-docs
 description: Search and fetch official AWS documentation (docs.aws.amazon.com, AWS Blog, What's New, re:Post Knowledge Center, CDK/CloudFormation references) and check regional availability via the self-built `awsdocs` CLI, a fastmcp wrapper around the official AWS Knowledge MCP Server (https://knowledge-mcp.global.api.aws). Use when you need AWS service docs, API/SDK/CLI references, troubleshooting articles, recent AWS launches, or whether a service/API/CFN resource is available in a region. Do not use for general web research (use `tav-cli`), Microsoft/Azure docs (use `ms-learn`), or running AWS APIs.
 
 # 前提条件: `awsdocs`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/awsdocs`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/awsdocs`)であること。このスキルはインストール・
 # セットアップは一切行わない。認証不要(AWS Knowledge MCP は公開エンドポイント、
 # AWSアカウント不要)。このスキルの設計意図・前提条件の背景は同階層のREADME.md参照
 # (人間のメンテナ向け)
@@ -12,12 +12,12 @@ meta:
   requires_repo_tools: awsdocs
   requires_env: AWSDOCS_MCP_OUTPUT_DIR, AWSDOCS_MCP_ENDPOINT
   dependencies: none
-  requires_install: uv tool install --editable tools/awsdocs
+  requires_install: uv tool install --editable tools/web-research/awsdocs
   requires_hooks: none
   requires_skills: none
   status: experimental
   description: no description
-  version: 0.1.1
+  version: 0.1.2
 ---
 
 ## エントリポイント: `awsdocs` コマンド
@@ -27,7 +27,7 @@ awsdocs --help
 ```
 
 未インストール・エラーが出た場合はこのスキルでは対処しない。ユーザーに
-`tools/awsdocs/README.md` のセットアップ手順を案内する。
+`tools/web-research/awsdocs/README.md` のセットアップ手順を案内する。
 
 ## 最初に見るべき判断フロー
 
