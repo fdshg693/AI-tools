@@ -2,7 +2,7 @@
 
 **関連スキル: `tools/_plugin/my-tools/skills/linear-cli`**
 
-[`@linear/sdk`](https://www.npmjs.com/package/@linear/sdk)を使い、[parallel-agent-worktree](../_plugin/my-tools/skills/parallel-agent-worktree/)スキルが必要とする最小限のLinear操作（issue検索・作成・ステータス更新・ラベル付与/更新・コメント追加/一覧取得/削除・issue詳細取得）だけを提供するNode CLI。設計の背景・決定事項は[.claude/plans/linear-integration/](../../.claude/plans/linear-integration/)（初期実装）・[.claude/plans/parallel-agent-worktree-task-groups/03-linear-cli-extension.md](../../.claude/plans/parallel-agent-worktree-task-groups/03-linear-cli-extension.md)（ラベル・`show`拡張）を参照。
+[`@linear/sdk`](https://www.npmjs.com/package/@linear/sdk)を使い、[parallel-agent-worktree](../_plugin/my-tools/skills/parallel-agent-worktree/)スキルが必要とする最小限のLinear操作（issue検索・作成・ステータス更新・ラベル付与/更新・コメント追加/一覧取得/削除・issue詳細取得）だけを提供するNode CLI。設計の背景・決定事項は削除済みのプラン `linear-integration`（初期実装）と `parallel-agent-worktree-task-groups` の `03-linear-cli-extension`（ラベル・`show`拡張）にある（git の履歴で辿れる）。
 
 CLIオプション・設定ファイル形式・挙動を変更した場合は、上記スキルの`SKILL.md`も同じ変更の中で更新すること（スキル側は自動追随しない）。
 

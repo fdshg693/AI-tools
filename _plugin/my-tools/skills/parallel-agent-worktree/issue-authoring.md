@@ -49,7 +49,7 @@
 
 - 各issueの`--project`引数には決定したグループ名を明示的に渡し、issue自体はそのLinear Projectに所属させる
 - 一方、`.linear-cli/config.json`の`project`既定値（＝「現在アクティブなタスクグループ」）は、作成直後にはそのグループ名へ**切り替えない**。ユーザーが明示的に「このグループへ進めて」等と指示したときだけ切り替える
-- 理由: 既存issueの処理中に、誤って将来グループのissueを先取りしてしまう事故を防ぐため（[00-overview.md](../../../../.claude/plans/parallel-agent-worktree-task-groups/00-overview.md)の「Project+config」方式の安全設計の要）
+- 理由: 既存issueの処理中に、誤って将来グループのissueを先取りしてしまう事故を防ぐため（プラン `parallel-agent-worktree-task-groups` で決めた「Project+config」方式の安全設計の要）
 
 ## Linear作成の実務: 依存順に1件ずつ
 
