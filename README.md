@@ -28,7 +28,6 @@
 - [grepapp](grepapp/README.md)
 - [linear-cli](linear-cli/README.md)
 - [mslearn](mslearn/README.md)
-- [ona-run](ona-run/README.md)
 - [pyinspect](pyinspect/README.md)
 - [skill-tools](skill-tools/README.md)
 - [tav-cli](tav-cli/README.md)（キーは `tav`）
