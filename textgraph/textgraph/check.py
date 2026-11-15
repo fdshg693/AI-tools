@@ -56,8 +56,9 @@ class Finding:
 
 # A raw path with any of these characters in a script is a template or a code
 # fragment (f"{name}.md", "[x](...)" in a regex, "$HOME/...", "*.md"), not a
-# link someone wrote to a file. Documents keep reporting them: there such a
-# link is a real typo.
+# link someone wrote to a file. ``is_script_noise`` also drops raws with a
+# backslash and raws with neither "/" nor ".". Documents keep reporting all of
+# them: there such a link is a real typo.
 SCRIPT_NOISE_CHARS = frozenset("{}[]$*")
 
 
@@ -85,7 +86,14 @@ def find_broken_links(
 
 
 def is_script_noise(raw: str) -> bool:
-    return any(char in SCRIPT_NOISE_CHARS for char in raw)
+    if any(char in SCRIPT_NOISE_CHARS for char in raw):
+        return True
+    # Escapes and regex fragments ("^\\", "\\d+", "./AGENTS.md\\n") carry a backslash.
+    if "\\" in raw:
+        return True
+    # Code such as ``FORMATTERS[fmt](results)`` yields a bare word with neither
+    # a directory separator nor an extension; scripts rarely link that way.
+    return "/" not in raw and "." not in raw
 
 
 def _script_edges(root: Path, git_files: FileIndex, config: Config) -> list[StoredEdge]:

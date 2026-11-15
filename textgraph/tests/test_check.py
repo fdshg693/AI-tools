@@ -790,6 +790,40 @@ def test_document_template_links_are_still_reported(
     assert "{var}.md" in capsys.readouterr().out
 
 
+def test_check_scripts_skips_backslash_and_bare_word_raws(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "ok\n")
+    write(
+        git_repo,
+        "tool.py",
+        'A = r"\\[x\\](\\d+)"\n'
+        "B = FORMATTERS[fmt](results)\n"
+        'C = "[x](docs\\\\old.md)"\n'
+        'D = "[x](missing-name.md)"\n',
+    )
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check", "--scripts"]) == 1
+    out = capsys.readouterr().out
+    assert "missing-name.md" in out
+    assert "\\d+" not in out
+    assert "results" not in out
+    assert "old.md" not in out
+
+
+def test_document_backslash_and_bare_word_links_are_still_reported(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "[x](NOTES) and [y](docs\\gone.md)\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check"]) == 1
+    out = capsys.readouterr().out
+    assert "NOTES" in out
+    assert "docs\\gone.md" in out
+
+
 def test_scripts_exclude_only_limits_the_script_scan(
     git_repo: Path, write, capsys: pytest.CaptureFixture[str]
 ) -> None:

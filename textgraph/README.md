@@ -54,7 +54,7 @@ textgraph --path C:\src\project fix --scripts --apply
 ```
 
 - `init` — `.textgraph/` を作り、初回索引を構築する。既にある場合は拒否して `sync` を案内する。
-- `sync` — 内容 hash が変わったテキストファイルだけ再抽出する。hash が同じでも索引の mtime はディスクに合わせる（内容を変えずに書き直したファイルで stale が抜けなくなるのを防ぐ）。削除されたファイルは索引から落とす。`--force` は全件再抽出。`init` と `sync` は `updated N, skipped N, removed N` を stdout に 1 行出す。
+- `sync` — 内容 hash が変わったテキストファイルだけ再抽出する。hash が同じでも索引の mtime はディスクに合わせる（内容を変えずに書き直したファイルで stale が抜けなくなるのを防ぐ）。削除されたファイルは索引から落とす。`--force` は全件再抽出。抽出の挙動が変わる版の textgraph に上げたら、内容の変わっていないファイルにも反映するため `sync --force` する。`init` と `sync` は `updated N, skipped N, removed N` を stdout に 1 行出す。
 - `status` — ファイル数・リンク数・`unresolved` 数・最終 sync 時刻と、読み込んだ設定ファイル（`config: <絶対パス>` と `exclude`・`scripts_exclude` のパターン数。無ければ `config: (none)`）。壊れたリンクの一覧は出さない。
 - `files` — 索引上のテキストファイルをリポジトリ相対で出す。`--filter` は前方一致。`--max-depth` は人間向けの木を途中で畳む（`--json` は flat な配列のまま）。
 - `impact` — あるファイルの inbound（誰が指しているか）を先に、outbound を次に出す。1 hop のみ。未解決の outbound は末尾。`<path>` はリポジトリ相対・絶対・basename。複数ヒットなら候補を出して非 0。
@@ -76,7 +76,7 @@ textgraph --path C:\src\project fix --scripts --apply
 
 走査対象は `git ls-files --cached --others --exclude-standard` のうち、既定拡張子 `.md` / `.mdc` / `.txt` / `.rst`。これらだけを索引する。スクリプトの変更では索引は stale にならない。`.textgraph.toml` の `exclude` に一致するファイルは索引しない（[設定](#設定)）。
 
-`check --scripts` / `fix --scripts` は索引には入れず、スクリプトをその場で同じリンク構文で走査する。コメントとコードの区別はしない（`[text](url)` や `@./` が実行コードに現れることはほぼ無いため）。対象は `.py` / `.ts` / `.js` / `.ps1` / `.sh` などのソース拡張子と、basename が `justfile` / `makefile` のもの。YAML / JSON は対象外。`exclude`・`scripts_exclude` に一致するスクリプトは走査しない。抽出した raw のうち `{`・`}`・`[`・`]`・`$`・`*` を含むもの（f-string・テンプレート・正規表現・glob の断片）はスクリプトでは常に捨てる。ドキュメントでは同じ raw を報告し続ける（`[x]({var})` はドキュメントなら本物の誤記）。その場で再解決し、判定はドキュメントと同じ（`exact` 以外の解決も報告する）。索引に残った古い解決先をきっかけにする書き換えはドキュメント側の話で、スクリプトでは今の解決結果と `git-rename` が対象になる。
+`check --scripts` / `fix --scripts` は索引には入れず、スクリプトをその場で同じリンク構文で走査する。コメントとコードの区別はしない（`[text](url)` や `@./` が実行コードに現れることはほぼ無いため）。対象は `.py` / `.ts` / `.js` / `.ps1` / `.sh` などのソース拡張子と、basename が `justfile` / `makefile` のもの。YAML / JSON は対象外。`exclude`・`scripts_exclude` に一致するスクリプトは走査しない。抽出した raw のうち、`{`・`}`・`[`・`]`・`$`・`*` を含むもの（f-string・テンプレート・正規表現・glob の断片）、`\` を含むもの（エスケープ付きの文字列・正規表現。Windows のパス区切りも含む）、`/` も `.` も含まないもの（コード中の `FORMATTERS[fmt](results)` のような断片。拡張子なしのリンク・wiki `[[name]]`・`README#sec` も一緒に捨てる）はスクリプトでは常に捨てる。ドキュメントでは同じ raw を報告し続ける（`[x]({var})`・`[x](README)` はドキュメントなら本物の誤記）。`.` を含むコード中の `a[b](c)`（`FORMATTERS[x](self.results)` など）は捨てられずに誤検出として残りうるので、`scripts_exclude` で外すか、コメントならバッククォートで囲んで消す。その場で再解決し、判定はドキュメントと同じ（`exact` 以外の解決も報告する）。索引に残った古い解決先をきっかけにする書き換えはドキュメント側の話で、スクリプトでは今の解決結果と `git-rename` が対象になる。
 
 抽出するリンク:
 
@@ -84,7 +84,7 @@ textgraph --path C:\src\project fix --scripts --apply
 - wiki `[[path]]` / `[[path|label]]`
 - `@./` と `@../` のローカルパス（行頭でも行中でも）
 
-http(s) / mailto / アンカーのみは無視する。フェンスコードとインラインバッククォートの中は走査しない。
+http(s) / mailto / アンカーのみは無視する。フェンスコードとインラインのコードスパンの中は走査しない。コードスパンは CommonMark どおり、n 個連続するバッククォートで開き、ちょうど n 個の連続で閉じる（` ``[[name]]`` ` の中も走査しない）。閉じが無ければ開きのバッククォートは通常の文字として扱う。
 
 解決順: ソースディレクトリ相対 → リポジトリルート相対 → 大小文字無視 → 拡張子なしなら `.md` を補う → 一意 basename → 一意 path suffix。ディレクトリリンクは `README.md` / `AGENTS.md` / `index.md` をこの順で `exact` とみなし、どれも無ければ git ファイルの親として実在するディレクトリそのもの（末尾 `/` なしのパス）を `exact` で解決する（ディスクは見ない）。`impact` の inbound はファイル単位なので、ディレクトリそのものへのリンクは inbound に出ない。ソース相対・ルート相対で当たらない `../` 付きのリンクは、`..` より後ろの部分が一意 suffix で当たっても `unique-suffix`（非 exact）なので `check` が報告し、`fix --apply` で直せる。`check` / `fix` だけ、それでも決まらないリンクに git rename を足す。使うのは stage 済みの rename（`git diff --cached`、コミット前の `git mv` を含む）とコミット済みの rename（`git log` の全履歴）で、stage 済みを優先する。移動先がもう無ければ、その後の rename を辿って今あるファイルまで進む（A→B→C なら C）。rename の一覧は 1 回の実行で最初に必要になったときに 1 回だけ取り、切れが無ければ git を呼ばない。stage していない作業ツリーだけの移動（`mv`）は git が rename として検出できないので、`git mv` するか `git add -A` してから `check` する。
 

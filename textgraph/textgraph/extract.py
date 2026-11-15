@@ -160,11 +160,15 @@ def _mask_code(text: str) -> str:
             line_start = True
             continue
         if text[i] == "`":
-            close = text.find("`", i + 1)
+            # CommonMark code span: a run of n backticks closes only at a run of
+            # exactly n. Without a closer the whole opening run is literal text.
+            width = _backtick_run(text, i)
+            close = _find_closing_run(text, i + width, width)
             if close == -1:
-                i += 1
+                i += width
                 line_start = False
                 continue
+            close += width - 1
             for pos in range(i, close + 1):
                 if chars[pos] != "\n":
                     chars[pos] = " "
@@ -177,3 +181,20 @@ def _mask_code(text: str) -> str:
             line_start = False
         i += 1
     return "".join(chars)
+
+
+def _backtick_run(text: str, start: int) -> int:
+    end = start
+    while end < len(text) and text[end] == "`":
+        end += 1
+    return end - start
+
+
+def _find_closing_run(text: str, start: int, width: int) -> int:
+    i = text.find("`", start)
+    while i != -1:
+        run = _backtick_run(text, i)
+        if run == width:
+            return i
+        i = text.find("`", i + run)
+    return -1

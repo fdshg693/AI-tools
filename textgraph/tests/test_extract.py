@@ -54,6 +54,23 @@ def test_skips_fenced_code_and_inline_backticks() -> None:
     assert _raws(text) == ["./real.md"]
 
 
+def test_skips_double_backtick_code_spans() -> None:
+    text = "Write ``[[name]]`` or ``a ` [x](./tick.md)`` then [ok](./real.md).\n"
+    assert _raws(text) == ["./real.md"]
+
+
+def test_code_span_closes_only_at_a_run_of_the_same_length() -> None:
+    # The ``` run inside does not close the `` span.
+    text = "``[a](./a.md) ``` [b](./b.md)`` [c](./c.md)\n"
+    assert _raws(text) == ["./c.md"]
+
+
+def test_unclosed_backtick_run_is_literal_text() -> None:
+    # No closing ``: the opening run is skipped whole, not reread as a single `.
+    text = "Stray `` then [a](./a.md) and `x` [b](./b.md)\n"
+    assert _raws(text) == ["./a.md", "./b.md"]
+
+
 def test_skips_user_mentions() -> None:
     assert extract_links("Thanks @user and @./README.md\n") == [
         ExtractedLink(raw="./README.md", kind="at", line=1)
