@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
-from collections.abc import Container, Iterable
+from collections import Counter
+from collections.abc import Container, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -264,6 +266,96 @@ class RenameIndex:
             if parsed is not None:
                 pairs.append(parsed)
         return pairs
+
+
+class BaselineError(ValueError):
+    """The baseline file is unreadable or not a ``check --json`` output."""
+
+
+BASELINE_KEYS = ("source", "raw", "status")
+
+
+def finding_to_dict(finding: Finding) -> dict[str, object]:
+    return {
+        "source": finding.source,
+        "line": finding.line,
+        "raw": finding.raw,
+        "kind": finding.kind,
+        "status": finding.status,
+        "confidence": finding.confidence,
+        "suggested": list(finding.suggested),
+        "replacement": finding.replacement,
+    }
+
+
+def findings_to_json(findings: Iterable[Finding], *, external: int) -> dict[str, object]:
+    return {"findings": [finding_to_dict(finding) for finding in findings], "external": external}
+
+
+def load_baseline(path: Path) -> list[tuple[str, str, str]]:
+    """Read a ``check --json`` output and return its comparison keys.
+
+    The key is ``(source, raw, status)``; line numbers shift with edits and
+    candidates change with the resolver, so neither is compared.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise BaselineError(f"failed to read baseline {path}: {exc}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise BaselineError(f"invalid baseline {path}: {exc}") from exc
+    findings = data.get("findings") if isinstance(data, dict) else None
+    if not isinstance(findings, list):
+        raise BaselineError(f"invalid baseline {path}: expected the output of `check --json`")
+    keys: list[tuple[str, str, str]] = []
+    for index, item in enumerate(findings):
+        if not isinstance(item, dict) or not all(
+            isinstance(item.get(key), str) for key in BASELINE_KEYS
+        ):
+            raise BaselineError(
+                f"invalid baseline {path}: findings[{index}] needs string "
+                + ", ".join(BASELINE_KEYS)
+            )
+        keys.append((item["source"], item["raw"], item["status"]))
+    return keys
+
+
+@dataclass(frozen=True)
+class BaselineDiff:
+    new: tuple[Finding, ...]
+    resolved: int
+
+
+def compare_baseline(
+    root: Path, findings: Sequence[Finding], baseline: Iterable[tuple[str, str, str]]
+) -> BaselineDiff:
+    """Findings that are not in the baseline, compared by count per key.
+
+    A baseline source that no longer exists is read as its current path when
+    the renames (staged or committed) lead to exactly one current file, so a
+    moved file's findings are not new. Otherwise it stays as written and its
+    findings count as resolved.
+    """
+    keys = list(baseline)
+    current = FileIndex(path.replace("\\", "/") for path in list_git_files(root))
+    renames = RenameIndex(root, current)
+    moved: dict[str, str] = {}
+    remaining: Counter[tuple[str, str, str]] = Counter()
+    for source, raw, status in keys:
+        if source not in current:
+            if source not in moved:
+                hit = renames.lookup(basename=PurePosixPath(source).name, old_path=source)
+                moved[source] = hit.exact[0] if len(hit.exact) == 1 else source
+            source = moved[source]
+        remaining[(source, raw, status)] += 1
+    new: list[Finding] = []
+    for finding in findings:
+        key = (finding.source, finding.raw, finding.status)
+        if remaining[key] > 0:
+            remaining[key] -= 1
+        else:
+            new.append(finding)
+    return BaselineDiff(new=tuple(new), resolved=sum(remaining.values()))
 
 
 def git_rename_destinations(

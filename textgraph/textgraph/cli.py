@@ -8,7 +8,17 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .config import Config, ConfigError, load_config
-from .check import EXTERNAL, Finding, apply_findings, find_broken_links, preview_hunks
+from .check import (
+    EXTERNAL,
+    BaselineError,
+    Finding,
+    apply_findings,
+    compare_baseline,
+    find_broken_links,
+    findings_to_json,
+    load_baseline,
+    preview_hunks,
+)
 from .query import (
     ImpactResult,
     collapse_paths,
@@ -71,12 +81,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "impact":
             return _cmd_impact(root, config, args.target, as_json=args.json)
         if args.command == "check":
-            return _cmd_check(root, config, scripts=args.scripts, external=args.external)
+            return _cmd_check(
+                root,
+                config,
+                scripts=args.scripts,
+                external=args.external,
+                as_json=args.json,
+                baseline=args.baseline,
+            )
         if args.command == "fix":
             return _cmd_fix(
                 root, config, apply=args.apply, scripts=args.scripts, external=args.external
             )
-    except ConfigError as exc:
+    except (ConfigError, BaselineError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     except CliError as exc:
@@ -137,6 +154,21 @@ def _build_parser() -> argparse.ArgumentParser:
     impact.add_argument("--json", action="store_true", help="write inbound/outbound as JSON")
     check = sub.add_parser("check", help="report broken outbound links")
     _add_scripts_flag(check)
+    check.add_argument(
+        "--json",
+        action="store_true",
+        help='write {"findings": [...], "external": N} as JSON',
+    )
+    check.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help=(
+            "compare with an earlier `check --json` output and list only new findings "
+            "(key: source, raw, status; renamed sources follow git renames)"
+        ),
+    )
     fix = sub.add_parser(
         "fix",
         help="rewrite unique broken links (dry-run unless --apply)",
@@ -261,13 +293,35 @@ def _split_external(
     return problems, problems
 
 
-def _cmd_check(root: Path, config: Config, *, scripts: bool, external: bool) -> int:
+def _cmd_check(
+    root: Path,
+    config: Config,
+    *,
+    scripts: bool,
+    external: bool,
+    as_json: bool = False,
+    baseline: Path | None = None,
+) -> int:
+    # Read the baseline first so a broken file fails before the scan.
+    baseline_keys = load_baseline(baseline) if baseline is not None else None
     store = _open_store(root, code=2)
     try:
         _require_fresh(root, store, config, code=2)
         findings = find_broken_links(root, store, scripts=scripts, config=config)
+        external_count = sum(1 for finding in findings if finding.status == EXTERNAL)
         listed, problems = _split_external(findings, show_external=external)
-        _print_findings(listed)
+        if baseline_keys is not None:
+            # Hidden externals are on neither side, so they are never "resolved".
+            if not external:
+                baseline_keys = [key for key in baseline_keys if key[2] != EXTERNAL]
+            diff = compare_baseline(root, listed, baseline_keys)
+            listed = list(diff.new)
+            problems = [finding for finding in listed if finding.status != EXTERNAL]
+            print(f"{diff.resolved} findings resolved since the baseline", file=sys.stderr)
+        if as_json:
+            print(json.dumps(findings_to_json(listed, external=external_count), indent=2))
+        else:
+            _print_findings(listed)
         return 0 if not problems else 1
     finally:
         store.close()

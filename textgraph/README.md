@@ -46,6 +46,8 @@ textgraph --path C:\src\project impact guide.md --json
 textgraph --path C:\src\project check
 textgraph --path C:\src\project check --scripts
 textgraph --path C:\src\project check --external
+textgraph --path C:\src\project check --json > before.json
+textgraph --path C:\src\project check --baseline before.json
 textgraph --path C:\src\project fix
 textgraph --path C:\src\project fix --apply
 textgraph --path C:\src\project fix --scripts --apply
@@ -60,6 +62,9 @@ textgraph --path C:\src\project fix --scripts --apply
   - 索引（git ファイル集合）では exact に当たらないが、書かれたパスがディスク上にファイルかディレクトリとして実在するリンクは status `external`（confidence `on-disk`）。候補探し・git rename より先に判定する。サブモジュールの中のファイル（アンブレラから見た `tools/README.md` など）、`..` でリポジトリルートの外に出るファイル（サブモジュールから見たアンブレラのファイル）、gitignore された生成物がここに入る。見る順は解決順の exact の段と同じ（ソース相対 → ルート相対、拡張子なしなら `.md` を補う）だが、OS のパスで組み立てるのでルートより上も見る。
   - `external` は既定で一覧に出さず、終了コードにも数えない。1 件以上あれば stderr に `N links point outside the index (exist on disk); use --external to list` を 1 行出す。`--external`（`fix` も同じ）で一覧に含める。その場合も終了コードには数えない。
   - Windows のファイルシステムは大小文字を区別しないので、大小文字だけ違うリンクも実在扱いで `external` になることがある（git 集合内のファイルなら先に大小文字無視の exact で拾う）。Junction を辿った先も実在扱いになる。これはリンク 1 件ごとの存在確認で、リポジトリの走査ではない。
+  - `--json` は `{"findings": [...], "external": N}` を stdout に出す。各 finding は `source`・`line`・`raw`・`kind`・`status`・`confidence`・`suggested`（配列）・`replacement`（候補が 1 件のときの書き換え後の raw、それ以外は `null`）。`external` は status `external` の件数で、`--external` を付けたときだけその finding も `findings` に入る。`version` キーは持たない（形は textgraph の版数で判断する）。非 ASCII は `files --json` と同じく `\uXXXX` にエスケープする。
+  - `--baseline <file>` は以前の `check --json` の出力と比べ、新しく増えた finding だけを表（`--json` 付きなら同じ形の JSON）で出し、解消した件数を stderr に `N findings resolved since the baseline` と 1 行出す。比較キーは `(source, raw, status)` で、`line`・`confidence`・`suggested` は比べない（行番号は編集でずれ、候補は解決の変更でも変わる）。同じキーが複数あるときは件数で比べる。baseline の `source` が今の git ファイル集合に無く、git rename（stage 済みと履歴。`check` の候補と同じ一覧）で今のファイル 1 件に辿れるときは、今のパスに読み替える（ファイルを移動しても、その中の finding は新規にならない）。辿れなければそのままで、その finding は解消扱い。`--external` なしでは baseline 側の `external` も比べない。終了コードは新しい finding（`external` を除く）があれば 1、無ければ 0。baseline が読めない・JSON でない・`findings` の各要素に文字列の `source`/`raw`/`status` が無いときは 2。
+  - 移動の手順: 移動前に `check --json > before.json`、`git mv` して `sync` したら `check --baseline before.json`。出た行が移動で増えた切れ。`--scripts`・`--external` は baseline を取ったときと揃える。
 - `fix` — 既定は dry-run。適用予定の hunk 要約だけ出す。`--apply` は一意の `unique-suffix` と `git-rename` だけ本文のリンク先パスを書き換える。リンクテキストと `@./` 構文は維持する。`unique-basename`・`git-rename-basename`（旧パスが一致せず basename だけで当たった rename）・`ambiguous` は suggested に出しても適用しない。`external` は実在するリンクなので書き換えない。元の改行（LF / CRLF / 混在）は書き換えた行も含めてそのまま保つ。`--scripts` と `--external` は `check` と同じ範囲。`--apply` 後も残り（`external` を除く）があれば 1。
 - `--version` — マニフェストの版数を1行出す。`.git` も索引も触らない。
 
@@ -110,4 +115,4 @@ scripts_exclude = ["**/tests/**"]
 - `textgraph/query.py` — `files` / `impact` の読み取り
 - `textgraph/check.py` — `check` / `fix` と git rename 候補
 - `textgraph/config.py` — `.textgraph.toml` の読み込み・検証と glob の一致
-- `tests/` — 抽出・解決・設定・init/sync/status・files/impact・check/fix
+- `tests/` — 抽出・解決・設定・init/sync/status・files/impact・check/fix・`check --baseline`

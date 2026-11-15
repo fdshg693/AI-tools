@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -805,3 +806,62 @@ def test_scripts_exclude_only_limits_the_script_scan(
     assert "missing-tool.md" in out
     # Documents under tests/ are still indexed and checked.
     assert "missing-note.md" in out
+
+
+def test_check_json_shape(git_repo: Path, write, capsys: pytest.CaptureFixture[str]) -> None:
+    # I5: findings carry every column of the table plus kind and replacement.
+    write(git_repo, "README.md", "See [a](docs/old/guide.md) and [b](./missing.md).\n")
+    write(git_repo, "docs/new/guide.md", "g\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check", "--json"]) == 1
+    data = json.loads(capsys.readouterr().out)
+    assert data["external"] == 0
+    assert [f["raw"] for f in data["findings"]] == ["./missing.md", "docs/old/guide.md"]
+    second, first = data["findings"]
+    assert set(first) == {
+        "source",
+        "line",
+        "raw",
+        "kind",
+        "status",
+        "confidence",
+        "suggested",
+        "replacement",
+    }
+    assert first["source"] == "README.md"
+    assert first["line"] == 1
+    assert first["kind"] == "markdown"
+    assert first["status"] == "suggested"
+    assert first["suggested"] == ["docs/new/guide.md"]
+    assert first["replacement"] == "docs/new/guide.md"
+    assert second["status"] == "unresolved"
+    assert second["suggested"] == []
+    assert second["replacement"] is None
+
+
+def test_check_json_counts_external_and_lists_it_with_flag(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _external_repo(git_repo, write)
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    main(["--path", str(git_repo), "check", "--json"])
+    hidden = json.loads(capsys.readouterr().out)
+    assert hidden["external"] >= 1
+    assert all(f["status"] != "external" for f in hidden["findings"])
+    main(["--path", str(git_repo), "check", "--json", "--external"])
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["external"] == hidden["external"]
+    assert sum(f["status"] == "external" for f in shown["findings"]) == shown["external"]
+
+
+def test_check_clean_repo_json_is_empty(
+    git_repo: Path, write, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(git_repo, "README.md", "See [ok](./ok.md).\n")
+    write(git_repo, "ok.md", "leaf\n")
+    assert main(["--path", str(git_repo), "init"]) == 0
+    capsys.readouterr()
+    assert main(["--path", str(git_repo), "check", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"findings": [], "external": 0}
