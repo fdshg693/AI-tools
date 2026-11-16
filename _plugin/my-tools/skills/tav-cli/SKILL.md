@@ -24,7 +24,7 @@ meta:
   requires_skills: aim-cli
   status: stable
   description: no description
-  version: 1.3.0
+  version: 1.3.1
 ---
 
 ## エントリポイント: `tav` コマンド
@@ -78,3 +78,5 @@ URL 本文の取得は `tav extract` を使い、Python などで直接 HTML を
 | `pages/` の件数が多い(目安5件以上)、または `char_count` の大きいページが複数あり、`aim --parallel` で関連箇所だけ並列抽出したい | [digest.md](digest.md)     |
 
 `pages/` のページが1〜2件、または小さいページだけなら digest.md は不要。そのまま Read する。
+
+Python コードから Tavily を呼ぶときは `tav` を subprocess で叩かず、`tools/web-research/tav-cli/docs/library.md` の `tav_core` / `run_*_request` を使う。

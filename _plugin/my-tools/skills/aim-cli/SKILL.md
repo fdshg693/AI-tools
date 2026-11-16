@@ -13,7 +13,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.10
+  version: 1.0.11
 ---
 
 # aim CLI の使い方
@@ -60,3 +60,7 @@ aim --parallel --format json --prompt "@a.py 要約して" --prompt "@b.py 要�
 ## エラー時の挙動
 
 APIキー未設定・モデルID誤り・OpenRouter側エラー（401/402/429など）が発生した場合、エラーメッセージを標準エラー出力に表示し、非ゼロで終了する。`--parallel`時の個別プロンプト失敗は全体を止めず、そのプロンプトの結果として記録される。
+
+## Python から呼ぶとき
+
+CLI を subprocess で叩かず `aim_cli` を import する。使い方は `tools/llm/aim/docs/library.md`。

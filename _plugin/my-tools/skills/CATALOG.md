@@ -16,24 +16,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.10
----
-
-- aim-lib
----
-name: aim-lib
-description: "`tools/llm/aim` のグローバルインストール済み Python 実装をライブラリとして使い、OpenRouter 経由で AI モデルへ単発リクエストを送る方法を説明する。Python コードからプロンプトを送信したい、モデル略記を解決したい、応答本文を取り出したい場合に使う。CLI コマンドを実行する場合は `aim-cli` を使う。"
-meta:
-  tag: []
-  requires_repo_tools: tools/llm/aim
-  requires_env: OPENROUTER_API_KEY
-  dependencies: aim-cli, python>=3.11
-  requires_install: tools/llm/aim (uv tool install --editable tools/llm/aim)
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.0.10
+  version: 1.0.11
 ---
 
 - aim2-cli
@@ -355,24 +338,7 @@ meta:
   requires_skills: aim-cli
   status: stable
   description: no description
-  version: 1.3.0
----
-
-- tav-lib
----
-name: tav-lib
-description: "`tools/web-research/tav-cli` のグローバルインストール済み Python 実装をライブラリとして使い、Tavily 経由で Web 検索・URL 本文抽出・サイトマップ・クロール・リサーチを行う方法を説明する。Python コードから Tavily API を呼び出したい、`--detail` プリセットを適用した結果を取り出したい場合に使う。CLI コマンドを実行する場合は `tav-cli` を使う。"
-meta:
-  tag: []
-  requires_repo_tools: tools/web-research/tav-cli
-  requires_env: TAVILY_API_KEY
-  dependencies: tav-cli, python>=3.11
-  requires_install: tools/web-research/tav-cli (uv tool install --editable tools/web-research/tav-cli)
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.0.6
+  version: 1.3.1
 ---
 
 - textgraph

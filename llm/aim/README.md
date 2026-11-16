@@ -2,10 +2,10 @@
 
 - **関連スキル**:
   - `tools\_plugin\my-tools\skills\aim-cli\SKILL.md`
-  - `tools\_plugin\my-tools\skills\aim-lib`
   - `skills\plugins\topics\skills\openrouter-docs\SKILL.md`
+- **Python ライブラリとして使う**: [docs/library.md](docs/library.md)（`aim_cli` の `create_client` / `call` / `call_async` / `get_model_cost` 等）
 
-CLIのフラグや`@path`/`--parallel`の挙動を変えたら、同じ変更で`aim --ai-help`と`aim-cli`スキルの判断節を見る。フラグ表はスキルに戻さない。
+CLIのフラグや`@path`/`--parallel`の挙動を変えたら、同じ変更で`aim --ai-help`と`aim-cli`スキルの判断節を見る。フラグ表はスキルに戻さない。`aim_cli` の公開関数（シグネチャ・戻り値・例外・ログ記録）を変えたら、同じ変更で [docs/library.md](docs/library.md) を直す。
 
 - エージェント機能は扱わず、AIモデルの単発呼び出しに集中したCLIツール
 - 複数プロバイダに対応するため [OpenRouter](https://openrouter.ai/) の Python SDK（`openrouter`）を使う

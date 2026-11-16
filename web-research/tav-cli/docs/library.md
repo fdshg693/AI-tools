@@ -1,20 +1,6 @@
----
-name: tav-lib
-description: "`tools/web-research/tav-cli` のグローバルインストール済み Python 実装をライブラリとして使い、Tavily 経由で Web 検索・URL 本文抽出・サイトマップ・クロール・リサーチを行う方法を説明する。Python コードから Tavily API を呼び出したい、`--detail` プリセットを適用した結果を取り出したい場合に使う。CLI コマンドを実行する場合は `tav-cli` を使う。"
-meta:
-  tag: []
-  requires_repo_tools: tools/web-research/tav-cli
-  requires_env: TAVILY_API_KEY
-  dependencies: tav-cli, python>=3.11
-  requires_install: tools/web-research/tav-cli (uv tool install --editable tools/web-research/tav-cli)
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.0.6
----
-
 # tav-cli を Python ライブラリとして使う
+
+Python コードから `tav_core` / 各操作モジュールを import して使う開発者・エージェント向け。CLI として叩く場合は `tav-cli` スキルを見る。`create_tavily_client` / `run_*_request` / `resolve_*_options` / `DETAIL_PRESETS` のシグネチャ・戻り値を変えたら、同じ変更でこのファイルを直す。
 
 `tools/web-research/tav-cli` は、Tavily SDK をプロジェクト固有のプリセットで固定したラッパー群である。パッケージ名は `tav-cli` で、共通実装を `tav_core` パッケージが、各操作（search / extract / map / crawl / research）のラッパーをトップレベルモジュール（`search_topic` / `extract_url_content` 等）が担う。いずれも `pyproject.toml` の `packages` / `py-modules` に含まれるため、`uv tool install --editable tools/web-research/tav-cli` 済みなら `from tav_core import ...` / `from search_topic import ...` で import できる。
 
@@ -32,7 +18,7 @@ meta:
 - `tools/web-research/tav-cli` がグローバル環境にインストール済みであること（README の前提どおり `uv tool install --editable tools/web-research/tav-cli`）
 - Python 3.11 以上を使うこと
 - `TAVILY_API_KEY` が環境変数、またはグローバル設定 `~/.config/tav/config.toml` の `api_key` に設定済みであること。`create_tavily_client()` はプロジェクト設定 `.tav.toml` から `api_key` を読まない（詳細は `tools/web-research/tav-cli/README.md` の「設定とパス解決」）。設定ファイルが不正なときも `ValueError`（`ConfigError`）を投げる
-- 未インストール・API キー未設定の場合、このスキルでインストールやキー発行を行わず、`tools/web-research/tav-cli/README.md` のセットアップ手順を案内する
+- 未インストール・API キー未設定なら [README](../README.md) のインストール・セットアップ手順に従う
 
 ## 基本パターン（同期・search）
 
@@ -173,7 +159,7 @@ except Exception as exc:
     raise RuntimeError("Tavily request failed") from exc
 ```
 
-`tav_core` は `aim_cli.AimError` のようなエラーラッパーを提供しないため、`InvalidAPIKeyError` を型安全に捕捉するには `from tavily.errors import InvalidAPIKeyError` が必要になる。これは aim-lib が「`openrouter` を直接 import しない」としているのと対照的だが、`tav-cli` の設計上、エラー型の隠蔽は `tav_core` の責務外である。`tavily-python` は `tav-cli` の依存として既に入るため、利用側パッケージの依存を追加する必要はない。型安全さを捨ててよければ `except Exception` で広く捕捉してもよい。
+`tav_core` は `aim_cli.AimError` のようなエラーラッパーを提供しないため、`InvalidAPIKeyError` を型安全に捕捉するには `from tavily.errors import InvalidAPIKeyError` が必要になる。これは aim のライブラリ利用（`tools/llm/aim/docs/library.md`）が「`openrouter` を直接 import しない」としているのと対照的だが、`tav-cli` の設計上、エラー型の隠蔽は `tav_core` の責務外である。`tavily-python` は `tav-cli` の依存として既に入るため、利用側パッケージの依存を追加する必要はない。型安全さを捨ててよければ `except Exception` で広く捕捉してもよい。
 
 ## CLI 版との違い
 

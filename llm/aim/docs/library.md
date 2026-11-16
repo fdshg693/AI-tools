@@ -1,20 +1,6 @@
----
-name: aim-lib
-description: "`tools/llm/aim` のグローバルインストール済み Python 実装をライブラリとして使い、OpenRouter 経由で AI モデルへ単発リクエストを送る方法を説明する。Python コードからプロンプトを送信したい、モデル略記を解決したい、応答本文を取り出したい場合に使う。CLI コマンドを実行する場合は `aim-cli` を使う。"
-meta:
-  tag: []
-  requires_repo_tools: tools/llm/aim
-  requires_env: OPENROUTER_API_KEY
-  dependencies: aim-cli, python>=3.11
-  requires_install: tools/llm/aim (uv tool install --editable tools/llm/aim)
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.0.10
----
-
 # aim を Python ライブラリとして使う
+
+Python コードから `aim_cli` を import して使う開発者・エージェント向け。CLI として叩く場合は `aim-cli` スキル（`aim --ai-help`）を見る。`aim_cli` の公開関数（`create_client` / `call` / `call_async` / `get_model_cost` 等）のシグネチャ・挙動を変えたら、同じ変更でこのファイルを直す。
 
 `tools/llm/aim` は現在、独立した `aim` Python パッケージではなく、`aim_cli` モジュールとして配布されている。ライブラリ利用では `aim` コマンドや `aim_cli.main()` を呼ばず、`aim_cli` が提供する薄いラッパー（`create_client` / `call` / `call_async` / `get_model_cost` / `estimate_prompt_tokens` / `prompt_cost_usd` / `AimError`）を使う。**`openrouter` を直接 import しない** — `openrouter` への依存はパッケージの依存関係にも追加しない。理由は2つ。
 
@@ -26,7 +12,7 @@ meta:
 - `tools/llm/aim` がグローバル環境にインストール済みであること（README の前提どおり `uv tool install --editable tools/llm/aim`）
 - Python 3.11 以上を使うこと
 - `OPENROUTER_API_KEY` が環境変数、または `tools/llm/aim/.env` に設定済みであること。環境変数が優先される
-- 未インストール・API キー未設定の場合、このスキルでインストールやキー発行を行わず、`tools/llm/aim/README.md` のセットアップ手順を案内する
+- 未インストール・API キー未設定なら [README](../README.md) のインストール・セットアップ手順に従う
 
 ## 基本パターン（同期）
 

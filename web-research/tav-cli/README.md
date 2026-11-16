@@ -2,6 +2,8 @@
 
 **関連スキル: `tools/_plugin/my-tools/skills/tav-cli`**
 
+**Python ライブラリとして使う**: [docs/library.md](docs/library.md)（`tav_core.create_tavily_client` と各モジュールの `run_*_request` / `resolve_*_options` / `DETAIL_PRESETS`）。これらの公開関数を変えたら、同じ変更で docs/library.md を直す。
+
 このディレクトリは、Tavily SDK を **プロジェクト固有のデフォルト引数で固定した Python ラッパー** の実体です。AI や利用者には `--detail=quick|balanced|max` のような抽象化された少数引数だけ握らせ、Tavily SDK の細かいオプションはスクリプト側のプリセットでロックします。
 
 設計意図・実装の詳細はこのファイルに、AI に読ませる判断フローや命名規約は [tools/_plugin/my-tools/skills/tav-cli/SKILL.md](../../_plugin/my-tools/skills/tav-cli/SKILL.md) にあります。このファイルは **Python コードそのものの説明** に責務を絞っています。
