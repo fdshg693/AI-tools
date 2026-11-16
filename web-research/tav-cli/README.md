@@ -179,7 +179,7 @@ content 系の `pages/index.json` が唯一の url↔ファイル対応表で、
 }
 ```
 
-`char_count` は書き出した `.md` ファイルの文字数(`len(markdown)`、`mslearn` の `index.md` が持つ文字数と同じ考え方)。後段はこれを見て、1件ずつ Read するか大きいものだけ `aim --parallel` にまとめて回すか判断する(`tav-digest` スキル参照)。
+`char_count` は書き出した `.md` ファイルの文字数(`len(markdown)`、`mslearn` の `index.md` が持つ文字数と同じ考え方)。後段はこれを見て、1件ずつ Read するか大きいものだけ `aim --parallel` にまとめて回すか判断する(`tav-cli` スキルの `digest.md` 参照)。
 
 後段で読むときは、content 系なら **`pages/index.json` を起点に各 `NNNN-<slug>.md` を辿る**(各 `.md` は `# title` + 本文)。discovery / report はファイル名が自己説明的なので `ls` で足り、そのファイルを直接読みます(report は成功時のみファイルが存在する。前景タイムアウト直後は空でも、背景ポーラの完了後に現れる場合がある)。`title` は content 系で必ず埋まる(既存タイトル保持 = `existing`、HTML 直 Fetch で補完 = `html`、URL 由来フォールバック = `url_fallback`。Tavily はタイトル取得に使わない)。トピックファイル / stdout に書く `result` は**役割ごとに投影**され調査に無関係な列(`raw_content`==None・空 `images`・取得メタ等)を落とします(生の全フィールドは監査ログに残る)。
 

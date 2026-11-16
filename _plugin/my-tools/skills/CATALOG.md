@@ -141,7 +141,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.5
+  version: 1.0.6
 ---
 
 - inspecting-python-libraries
@@ -213,53 +213,28 @@ meta:
   version: 1.2.4
 ---
 
-- ms-digest
----
-name: ms-digest
-description: Microsoft Learn/Azure公式ドキュメントを`mslearn`で検索した結果ファイルのうち、自分で1件ずつ読む代わりに`aim --parallel`で並列にAI抽出させたいものをまとめて処理し、関連する内容だけを報告させるCLI連携スキル。(a) 結果件数が多くタイトルだけでは関連性を判断しづらい場合(目安5件以上)に全件を渡して関連するものだけ絞り込ませたいとき、(b) `index.md`から読みたいファイルを選んだ後、その中に文字数が大きいファイルが複数あり個別Readせずまとめて抽出させたいとき、のいずれかで使う。1ファイルだけを抽出したい場合は`aim-cli`を直接使えばよい。
-
-# 前提条件(このスキル自体はインストール・セットアップを一切行わない):
-#   - `mslearn` コマンドが PATH 上で使えること
-#     (セットアップは tools/web-research/mslearn/README.md 参照)
-#   - `aim` コマンドが PATH 上で使え、OPENROUTER_API_KEY が設定済みであること
-#     (セットアップは tools/_plugin/my-tools/skills/aim-cli/SKILL.md 参照)
-#
-# 依存スキル: tools/_plugin/my-tools/skills/ms-learn (検索/フェッチ本体)
-#            tools/_plugin/my-tools/skills/aim-cli (並列AI抽出本体)
-# このスキルは上記2つを繋ぐ薄いオーケストレーション層で、自前のソースコードは持たない。
-meta:
-  tag: []
-  requires_repo_tools: mslearn, aim
-  requires_env: OPENROUTER_API_KEY
-  dependencies: none
-  requires_install: none
-  requires_hooks: none
-  requires_skills: ms-learn, aim-cli
-  status: stable
-  description: no description
-  version: 1.3.7
----
-
 - ms-learn
 ---
 name: ms-learn
-description: Search and fetch official Microsoft/Azure documentation (and code samples) via a self-built fastmcp CLI wrapper around the official Microsoft Learn MCP server (https://learn.microsoft.com/api/mcp). Use when you need Microsoft/Azure/.NET/M365 docs, API references, or official code samples — semantic search, full-page fetch, or code-sample lookup by language.
+description: Search and fetch official Microsoft/Azure documentation (and code samples) via a self-built fastmcp CLI wrapper around the official Microsoft Learn MCP server (https://learn.microsoft.com/api/mcp), and extract relevant parts from many result files in parallel via `aim --parallel`. Use when you need Microsoft/Azure/.NET/M365 docs, API references, or official code samples — semantic search, full-page fetch, or code-sample lookup by language.
 
 # 前提条件: `mslearn`コマンドがPATH上にインストール済み
 # (`uv tool install --editable tools/web-research/mslearn`)であること。このスキルはインストール・
 # セットアップは一切行わない。認証不要(Microsoft Learn MCP は公開エンドポイント)。
+# digest.md(結果ファイルの並列AI抽出)だけは `aim` コマンドと OPENROUTER_API_KEY も要る(aim-cli スキル参照)
+# SKILL.md は薄いエントリ。目的別の本文は同階層の queries.md / output.md / digest.md に置く
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照(人間のメンテナ向け)
 meta:
   tag: []
-  requires_repo_tools: mslearn
-  requires_env: MSLEARN_MCP_OUTPUT_DIR
+  requires_repo_tools: mslearn, aim
+  requires_env: MSLEARN_MCP_OUTPUT_DIR, OPENROUTER_API_KEY
   dependencies: none
   requires_install: none
   requires_hooks: none
-  requires_skills: none
+  requires_skills: aim-cli
   status: stable
   description: no description
-  version: 1.2.4
+  version: 1.3.0
 ---
 
 - my-agents
@@ -356,7 +331,7 @@ meta:
 - tav-cli
 ---
 name: tav-cli
-description: Guides multi-step Tavily research with this project's `tav` command, including web-wide search, multiple URLs, site maps/crawls, and topic-based result accumulation. Use when a task needs more than one known URL or a reusable research workspace; use `tav-lit` to extract one already-known URL.
+description: Guides multi-step Tavily research with this project's `tav` command, including web-wide search, multiple URLs, site maps/crawls, topic-based result accumulation, and parallel AI extraction of many collected pages via `aim --parallel`. Use when a task needs more than one known URL or a reusable research workspace; use `tav-lit` to extract one already-known URL.
 
 # 前提条件: `tav`コマンドがPATH上にインストール済み
 # (`uv tool install --editable tools/web-research/tav-cli`)であること。このスキルはインストール・
@@ -364,48 +339,23 @@ description: Guides multi-step Tavily research with this project's `tav` command
 # (実体は tools/web-research/tav-cli/ を参照)。
 # 実行前に TAVILY_API_KEY を環境変数、またはグローバル設定 ~/.config/tav/config.toml の api_key に設定していること
 # 出力先などはプロジェクト設定 .tav.toml(CWD〜git ルートで近いものが勝つ)・グローバル設定・環境変数で設定でき、TAVILY_OUTPUT_DIR(出力先ベース、未設定時は git ルート基準の temp/web)・TAVILY_WRITE_LOG(監査ログ出力トグル、未設定=true)・TAVILY_SHOW_LOG_PATH(監査ログ書き込み時の「Wrote full log to <path>」通知トグル、未設定=true。結果ファイルのパス通知は常に表示)も設定できる
+# digest.md(pages/ の並列AI抽出)だけは `aim` コマンドと OPENROUTER_API_KEY も要る(aim-cli スキル参照)
+# SKILL.md は薄いエントリ。目的別の本文は同階層の commands.md / output.md / digest.md に置く
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照(人間のメンテナ向け)
 
 # ```!```を使った動的コンテキスト埋め込みを使い、更新漏れを防止する
 # 参考: https://code.claude.com/docs/en/skills#inject-dynamic-context
 meta:
   tag: []
-  requires_repo_tools: tav
-  requires_env: TAVILY_API_KEY, TAVILY_OUTPUT_DIR, TAVILY_LOG_DIR, TAVILY_WRITE_LOG, TAVILY_SHOW_LOG_PATH
+  requires_repo_tools: tav, aim
+  requires_env: TAVILY_API_KEY, TAVILY_OUTPUT_DIR, TAVILY_LOG_DIR, TAVILY_WRITE_LOG, TAVILY_SHOW_LOG_PATH, OPENROUTER_API_KEY
   dependencies: tavily-python
   requires_install: uv tool install --editable tools/web-research/tav-cli
   requires_hooks: none
-  requires_skills: none
+  requires_skills: aim-cli
   status: stable
   description: no description
-  version: 1.2.6
----
-
-- tav-digest
----
-name: tav-digest
-description: tav`で`--topic`指定して収集した`pages/`(extract/crawl/search-extract/map-extractの取得本文)のうち、自分で1件ずつ読む代わりに`aim --parallel`で並列にAI抽出させたいものをまとめて処理し、関連する内容だけを報告させるCLI連携スキル。(a) `pages/index.json`のエントリ数が多くタイトルだけでは関連性を判断しづらい場合(目安5件以上)に全件を渡して関連するものだけ絞り込ませたいとき、(b) `index.json`から読みたいファイルを選んだ後、その中に`char_count`が大きいファイルが複数あり個別Readせずまとめて抽出させたいとき、のいずれかで使う。1ファイルだけを抽出したい場合は`aim-cli`を直接使えばよい。discovery(`search/`・`map/`)やreport(`research/`)はこのスキルの対象外(集約1ファイル、または成功時のみの単一レポートなのでそのまま読めば足りる)。
-
-# 前提条件(このスキル自体はインストール・セットアップを一切行わない):
-#   - `tav` コマンドが PATH 上で使えること
-#     (セットアップは tools/web-research/tav-cli/README.md 参照)
-#   - `aim` コマンドが PATH 上で使え、OPENROUTER_API_KEY が設定済みであること
-#     (セットアップは tools/_plugin/my-tools/skills/aim-cli/SKILL.md 参照)
-#
-# 依存スキル: tools/_plugin/my-tools/skills/tav-cli (収集本体)
-#            tools/_plugin/my-tools/skills/aim-cli (並列AI抽出本体)
-# このスキルは上記2つを繋ぐ薄いオーケストレーション層で、自前のソースコードは持たない。
-meta:
-  tag: []
-  requires_repo_tools: tav, aim
-  requires_env: OPENROUTER_API_KEY
-  dependencies: none
-  requires_install: none
-  requires_hooks: none
-  requires_skills: tav-cli, aim-cli
-  status: stable
-  description: no description
-  version: 1.0.7
+  version: 1.3.0
 ---
 
 - tav-lib

@@ -16,7 +16,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.5
+  version: 1.0.6
 ---
 
 ## エントリポイント: `grepapp` コマンド
@@ -67,7 +67,7 @@ grepapp --help
 ターミナルには **そのフォルダの `index.md` へのパスだけ** が返る(個別ファイルのパスや
 本文は返らない)。まず `index.md` を Read してタイトル一覧(各行末に個別ファイルの文字数も
 付記されている)を見て、**タイトルから読みたいファイルを選ぶ**。選んだファイルのうち
-文字数が大きいものは、そのまま Read せず `aim --parallel` で抽出させる(`ms-digest` スキルと同じ
+文字数が大きいものは、そのまま Read せず `aim --parallel` で抽出させる(`ms-learn` スキルの `digest.md` と同じ
 考え方) — 小さいものはそのまま Read してよい。
 
 ## 既知のリスク
