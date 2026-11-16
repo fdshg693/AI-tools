@@ -418,3 +418,31 @@ def test_config_show_global(
     assert "skills.global_destination: .claude/skills" in out
     assert "self_skill: cwd/SKILL.md" not in out
     assert "config.project" not in out
+
+
+def test_project_install_warns_about_a_user_wide_copy(
+    isolated_home: dict[str, Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    make_repo,
+    write_config,
+) -> None:
+    project, _ = _dirs(tmp_path)
+    source = make_repo(tmp_path / "source")
+    global_config = user_config_path()
+    global_config.parent.mkdir(parents=True)
+    write_config(global_config, source, tmp_path / "index.json")
+
+    assert main(["install-skills", "beta"], cwd=project) == 0
+    assert "user-wide" not in capsys.readouterr().err
+    assert main(["install-skills", "--global", "alpha"], cwd=project) == 0
+    assert "user-wide" not in capsys.readouterr().err
+
+    assert main(["install-skills", "--dry-run", "alpha"], cwd=project) == 0
+    assert (
+        "warning: alpha is also installed user-wide (~/.claude/skills/alpha); "
+        "agents may load both copies" in capsys.readouterr().err
+    )
+    assert main(["install-skills", "alpha"], cwd=project) == 0
+    assert "also installed user-wide" in capsys.readouterr().err
+    assert (project / ".claude" / "skills" / "alpha" / "SKILL.md").is_file()

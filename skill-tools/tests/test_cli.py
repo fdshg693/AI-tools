@@ -1145,3 +1145,28 @@ def test_search_warns_when_results_are_missing_from_the_source_catalog(
         captured.err
     )
     assert "skill-tools build-index" in captured.err
+
+
+def test_install_explains_an_unregistered_skill_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
+) -> None:
+    source = make_repo(tmp_path / "source")
+    project = tmp_path / "project"
+    project.mkdir()
+    config = write_config(tmp_path / "cfg.yaml", source, tmp_path / "index.json")
+    unregistered = "meta-plugins/skills/private/SKILL.md"
+    absolute = str(source / "meta-plugins" / "skills" / "private" / "SKILL.md")
+
+    for selector in (unregistered, absolute):
+        assert main(["install-skills", "--config", str(config), selector], cwd=project) == 2
+        assert (
+            f"({unregistered} exists in the source but is not registered in ai-tools.yaml"
+            in capsys.readouterr().err
+        )
+    # A bare name is not looked up outside the registered roots.
+    assert main(["install-skills", "--config", str(config), "private"], cwd=project) == 2
+    err = capsys.readouterr().err
+    assert "skill not found: private" in err
+    assert "not registered" not in err
+    assert main(["install-skills", "--config", str(config), "nope/SKILL.md"], cwd=project) == 2
+    assert "not registered" not in capsys.readouterr().err

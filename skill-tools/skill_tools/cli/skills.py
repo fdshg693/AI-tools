@@ -143,7 +143,7 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
     selected = tuple(
         record.bundle
         for record in select_records(
-            discover_catalog(source), selectors, source_descriptor=source.descriptor
+            discover_catalog(source), selectors, source_descriptor=source.descriptor, source=source
         )
     )
     targets = tuple(args.target.split(",")) if args.target is not None else None
@@ -174,6 +174,8 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
                 f"{action}\t{path}\t{item.bundle.canonical_id}"
                 f"\t{item.target_name}\t{relative_target}{suffix}"
             )
+    if not scope.is_global:
+        _warn_about_global_duplicates(plan)
     if mode == "link":
         for item in plan:
             store.ensure_outside(item.target.parent, "skill destination")
@@ -194,6 +196,30 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
     if unlinked:
         _forget_referrers(store, root, unlinked)
     return 0
+
+
+def _warn_about_global_duplicates(plan: Sequence[InstallPlan]) -> None:
+    """Warn when a skill going into a project is also installed user-wide by skill-tools.
+
+    Only the global manifest is read (no walk of ``~/.claude/skills``), so a copy
+    placed by hand or by a plugin is not detected.
+    """
+
+    names = {item.bundle.name for item in plan}
+    if not names:
+        return
+    scope = InstallScope.global_()
+    try:
+        entries = load_project_manifest(scope.root, state_dir=scope.state_dir)["entries"]
+    except (InstallError, OSError):
+        return
+    for entry in entries:
+        if entry["bundleName"] in names:
+            print(
+                f"warning: {entry['bundleName']} is also installed user-wide "
+                f"(~/{entry['installPath']}); agents may load both copies",
+                file=sys.stderr,
+            )
 
 
 def _resolve_install_mode(requested: str | None, configured: str, scope: InstallScope) -> str:
