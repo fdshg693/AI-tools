@@ -93,6 +93,8 @@ class SkillToolsConfig:
     install_mode: str = DEFAULT_INSTALL_MODE
     """`install-skills` placement when `--mode` is omitted: copy or link."""
     self_skill: str = DEFAULT_SELF_SKILL
+    install_skills: tuple[str, ...] = ()
+    """Skills that ``sync-skills`` converges the manifest on (``install_skills``)."""
     config_path: Path | None = None
     global_config_path: Path | None = None
     cwd_config_path: Path | None = None
@@ -463,6 +465,17 @@ def _parse_self_skill(value: object) -> str:
     return value
 
 
+def _parse_install_skills(value: object) -> tuple[str, ...]:
+    """``install_skills``: skill selectors (canonical ID, unique name, or ``self``)."""
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+        raise ConfigError(
+            "install_skills must be a list of skill selectors (canonical ID, unique name, or self)"
+        )
+    return tuple(dict.fromkeys(value))
+
+
 def _parse_hooks(data: object, filename: str) -> HooksConfig:
     if data is None:
         return HooksConfig()
@@ -593,6 +606,7 @@ def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
         "global_destination",
         "hooks",
         "self_skill",
+        "install_skills",
     }
     unknown = set(data) - allowed
     if unknown:
@@ -653,6 +667,7 @@ def _parse_config(data: dict[str, Any], path: Path | None) -> SkillToolsConfig:
         store=_parse_store(data.get("store"), path),
         install_mode=_parse_install_mode(data.get("install_mode", DEFAULT_INSTALL_MODE)),
         self_skill=_parse_self_skill(data.get("self_skill", DEFAULT_SELF_SKILL)),
+        install_skills=_parse_install_skills(data.get("install_skills")),
         config_path=path,
     )
 

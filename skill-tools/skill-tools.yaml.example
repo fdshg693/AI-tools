@@ -21,6 +21,14 @@ fb:
 # built-in default is the skill-tools-cli companion skill shown here.
 self_skill: tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md
 
+# Skills that `skill-tools sync-skills` installs (canonical ID, unique name, or self).
+# Managed skills that are not listed are removed; managed skills already listed are
+# left as they are (`update-skills` refreshes them). A project skill-tools.yaml list
+# replaces the global one (lists are not concatenated).
+# install_skills:
+#   - self
+#   - skills/plugins/coding/skills/review/SKILL.md
+
 # How install-skills places a skill when --mode is omitted: copy (default) or link.
 # link copies the skill once into the store below and puts a junction (Windows)
 # or directory symlink in the project; updating the store updates every linked

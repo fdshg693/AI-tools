@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.11
+  version: 1.2.12
 ---
 
 # skill-tools の使い方
@@ -138,6 +138,18 @@ skill-tools installed-skills --global
 - `remove-skills`はmanifest entryだけを対象にし、source・catalog・networkを必要としない。未管理directoryは検索・削除しない
 - `update-skills` / `remove-skills`はhash drift・欠落・追加file・symlinkがあれば既定で中止する。エラーの`(modified: ...; missing: ...; extra: ...)`に該当ファイルがすべて出るので、ユーザーの編集を残すべきか確かめてから`--force`を選ぶ。`--force`は対象managed directory内の変更を置換・削除し得るため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
 - install-skills/update-skills/remove-skillsはjournalで中断を記録する。process termination時は次回managed操作でrollbackを試みるが、複数pathの完全な原子性や電断・storage障害時の復旧は保証しない
+
+### `sync-skills` — 設定に書いた一覧に揃える（clone 後のセットアップ）
+
+```powershell
+skill-tools sync-skills --dry-run
+skill-tools sync-skills
+```
+
+- 入れたいスキルを設定のトップレベル`install_skills: [self, <canonical ID>, <name>, ...]`に書くと、`sync-skills`が未管理のものを入れ、manifestにあって一覧から外れたものを消す。既存の管理スキルは触らない（更新は`update-skills`）。手で置いたスキルは消さない
+- リポジトリが`skill-tools.example.yaml`のようなサンプルに一覧を持っているなら、clone後は`cp skill-tools.example.yaml skill-tools.yaml && skill-tools sync-skills`で揃える。個別に`install-skills`を打ち直さない
+- 消すスキルにdriftがある・入れる先に未管理のディレクトリがある・一覧にカタログ外の選択子がある場合は、何も変えずに止まる（`--force` / `--overwrite`は`remove-skills` / `install-skills`と同じ意味）。`install_skills`が無い・空なら終了コード`2`
+- プロジェクトの一覧はグローバルの一覧を丸ごと置き換える（連結しない）。方式は`install_mode`、配置先は`--target`なしの`install-skills`と同じ
 
 ### `--mode link` / `store` — 共有ストアへのリンクで配る
 

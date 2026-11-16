@@ -47,6 +47,7 @@ from .skills import (
     _command_installed,
     _command_list,
     _command_remove,
+    _command_sync,
     _command_update,
 )
 from .tools_cmd import (
@@ -123,6 +124,7 @@ def run(
         "installed-skills": _command_installed,
         "update-skills": _command_update,
         "remove-skills": _command_remove,
+        "sync-skills": _command_sync,
     }
     if args.command in scoped_skill_commands:
         scope = resolve_scope(args, working_directory)

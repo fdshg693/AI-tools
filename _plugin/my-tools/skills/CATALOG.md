@@ -289,7 +289,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.11
+  version: 1.2.12
 ---
 
 - task-tracker
