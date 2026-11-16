@@ -78,6 +78,27 @@ meta:
   version: 0.1.2
 ---
 
+- browser-context-tools
+---
+name: browser-context-tools
+description: Keeps browser work with `playwright-cli` from flooding the conversation by using the `pwq` wrapper (summarises / filters `snapshot` and `eval` output, 3–30% of the raw size) and the `pwdo` delegator (hands one stretch of browser steps to a cheap model and returns a short report plus a recovered script). Use when exploring an unfamiliar or large page and the raw snapshot would be big, when a browser stretch would take three or more snapshots and could be delegated, or when a `pwdo` run came back blocked by a login wall. Requires `pwq` / `pwdo` on PATH; without them use the using-playwright-cli skill alone.
+# 前提条件: `pwq`・`pwdo` が PATH にあること（tools/browser/pwq・tools/browser/pwdo。インストールは各 README）。
+#   このスキルはインストール・セットアップを一切行わない。無ければユーザーに伝え、using-playwright-cli だけで進める
+# 依存スキル: using-playwright-cli（playwright-cli のコマンド仕様の正）、認証が絡むときは sharing-browser-with-user
+# 根拠の実測: アンブレラの docs/topics/browser-automation/（delegation.md など）。本文からは張らない
+meta:
+  tag: []
+  requires_repo_tools: pwq, pwdo
+  requires_env: OPENROUTER_API_KEY
+  dependencies: none
+  requires_install: cd tools/browser/pwq && pnpm add -g ., cd tools/browser/pwdo && pnpm add -g .
+  requires_hooks: none
+  requires_skills: using-playwright-cli
+  status: experimental
+  description: pwq（出力の縮約）と pwdo（一区間の委譲）でブラウザ操作のコンテキスト消費を抑える手順
+  version: 1.0.0
+---
+
 - gdev-docs
 ---
 name: gdev-docs
