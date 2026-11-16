@@ -103,8 +103,14 @@ def test_skill_lifecycle_targets_project_dir_from_another_cwd(
     assert json.loads(capsys.readouterr().out) == []
 
     assert main(["update-skills", "--config", str(config), *scoped, "alpha"], cwd=elsewhere) == 0
-    assert "update\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha" in (
+    assert "unchanged\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha" in (
         capsys.readouterr().out
+    )
+    guide = source / "plugins" / "one" / "skills" / "alpha" / "references" / "guide.md"
+    guide.write_text("new guide\n", encoding="utf-8")
+    assert main(["update-skills", "--config", str(config), *scoped, "alpha"], cwd=elsewhere) == 0
+    assert capsys.readouterr().out.startswith(
+        "update\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha"
     )
 
     assert main(["remove-skills", *scoped, "alpha"], cwd=elsewhere) == 0
@@ -269,9 +275,16 @@ def test_global_skill_lifecycle_keeps_state_outside_home(
     assert json.loads(capsys.readouterr().out) == []
 
     assert main(["update-skills", "--global", "alpha"], cwd=elsewhere) == 0
-    assert "update\tplugins/one/skills/alpha/SKILL.md\t~/.claude/skills/alpha" in (
+    assert "unchanged\tplugins/one/skills/alpha/SKILL.md\t~/.claude/skills/alpha" in (
         capsys.readouterr().out
     )
+    guide = source / "plugins" / "one" / "skills" / "alpha" / "references" / "guide.md"
+    guide.write_text("new guide\n", encoding="utf-8")
+    assert main(["update-skills", "--global", "alpha"], cwd=elsewhere) == 0
+    assert capsys.readouterr().out.startswith(
+        "update\tplugins/one/skills/alpha/SKILL.md\t~/.claude/skills/alpha"
+    )
+    assert (installed / "references" / "guide.md").read_text(encoding="utf-8") == "new guide\n"
     assert main(["remove-skills", "--global", "alpha"], cwd=elsewhere) == 0
     assert "remove\tplugins/one/skills/alpha/SKILL.md\t~/.claude/skills/alpha" in (
         capsys.readouterr().out

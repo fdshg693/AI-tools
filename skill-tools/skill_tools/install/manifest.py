@@ -480,19 +480,43 @@ def verify_entry(project_root: Path, entry: Mapping[str, Any], *, force: bool = 
                 raise InstallError(f"managed installation contains a symlink: {child}")
         for name in files:
             actual.add((current_path / name).relative_to(target).as_posix())
+    if force:
+        return target
     expected = set(validated["files"])
-    if not force and actual - expected:
-        raise InstallError(f"managed installation contains extra files: {target}")
-    if not force and expected - actual:
-        raise InstallError(f"managed installation has missing files: {target}")
-    if not force:
-        for relative, expected_hash in validated["files"].items():
-            digest = hashlib.sha256(
-                (target / Path(*PurePosixPath(relative).parts)).read_bytes()
-            ).hexdigest()
-            if digest != expected_hash:
-                raise InstallError(f"managed installation has modified files: {target / relative}")
+    modified = sorted(
+        relative
+        for relative, expected_hash in validated["files"].items()
+        if relative in actual
+        and hashlib.sha256((target / Path(*PurePosixPath(relative).parts)).read_bytes()).hexdigest()
+        != expected_hash
+    )
+    drift = [
+        (label, paths)
+        for label, paths in (
+            ("modified", modified),
+            ("missing", sorted(expected - actual)),
+            ("extra", sorted(actual - expected)),
+        )
+        if paths
+    ]
+    if drift:
+        details = "; ".join(f"{label}: {', '.join(paths)}" for label, paths in drift)
+        raise InstallError(f"managed installation has drifted: {target} ({details})")
     return target
+
+
+def bundle_file_hashes(source, bundle: SkillBundle) -> dict[str, str]:
+    """SHA-256 of each bundle file as the source holds it (after the bundle policy).
+
+    ``bundle.files`` is already the policy-filtered set, so this compares like
+    for like with a manifest entry's ``files``.
+    """
+
+    directory = PurePosixPath(bundle.directory)
+    return {
+        relative.as_posix(): hashlib.sha256(source.read_file(directory / relative)).hexdigest()
+        for relative in bundle.files
+    }
 
 
 def write_manifest(path: Path, value: Mapping[str, Any]) -> None:

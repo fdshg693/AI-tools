@@ -20,6 +20,7 @@ from ..install.installer import (
     recover_transaction,
 )
 from ..install.manifest import (
+    bundle_file_hashes,
     link_store_root,
     verify_entry,
     verify_link_entry,
@@ -331,6 +332,12 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
     link_bundles: dict[str, SkillBundle] = {}
     link_referrers: list[Referrer] = []
     shown_links: list[tuple[dict, Path]] = []
+    store_entries = (
+        {item.store_path.casefold(): item for item in store.list_entries()}
+        if any(entry["mode"] == "link" for entry in matching)
+        else {}
+    )
+    action = "would update" if args.dry_run else "update"
     for entry in matching:
         record = records.get(entry["canonicalId"])
         if record is None:
@@ -348,6 +355,12 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
                     f"but the configured source maps it to {expected}; reinstall it with "
                     "`install-skills --overwrite`"
                 )
+            store_entry = store_entries.get(entry["store"].casefold())
+            if store_entry is not None and _unchanged(
+                source, record.bundle, store.root, store_entry.entry
+            ):
+                print(f"unchanged	{entry['canonicalId']}	{scope.display(link)}")
+                continue
             # One refresh per store entry, however many links select it.
             link_bundles.setdefault(entry["store"].casefold(), record.bundle)
             link_referrers.append(
@@ -356,6 +369,9 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
             shown_links.append((entry, link))
             continue
         target = verify_entry(root, entry, force=args.force)
+        if _unchanged(source, record.bundle, root, entry):
+            print(f"unchanged	{entry['canonicalId']}	{scope.display(target)}")
+            continue
         plan = InstallPlan(
             bundle=record.bundle,
             target=target,
@@ -364,21 +380,16 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
         )
         plans.append(plan)
         copied.append(entry)
-        action = "would update" if args.dry_run else "update"
         suffix = " (force: directory contents may be replaced)" if args.force else ""
-        print(f"{action}\t{entry['canonicalId']}\t{scope.display(target)}{suffix}")
-    if shown_links:
-        counts: dict[str, int] = {}
-        for store_entry in store.list_entries():
-            counts[store_entry.store_path.casefold()] = len(store_entry.referrers)
-        for entry, link in shown_links:
-            action = "would update" if args.dry_run else "update"
-            shared = counts.get(entry["store"].casefold(), 0)
-            suffix = " (force: store entry contents may be replaced)" if args.force else ""
-            print(
-                f"{action}\t{entry['canonicalId']}\t{scope.display(link)}"
-                f"\t(shared: store entry {entry['store']} has {shared} link(s)){suffix}"
-            )
+        print(f"{action}	{entry['canonicalId']}	{scope.display(target)}{suffix}")
+    for entry, link in shown_links:
+        store_entry = store_entries.get(entry["store"].casefold())
+        shared = len(store_entry.referrers) if store_entry is not None else 0
+        suffix = " (force: store entry contents may be replaced)" if args.force else ""
+        print(
+            f"{action}	{entry['canonicalId']}	{scope.display(link)}"
+            f"	(shared: store entry {entry['store']} has {shared} link(s)){suffix}"
+        )
     if plans and not args.dry_run:
         execute_install(
             source,
@@ -401,3 +412,20 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
             force=args.force,
         )
     return 0
+
+
+def _unchanged(source, bundle: SkillBundle, root: Path, entry: dict) -> bool:
+    """True when the source bundle equals the recorded copy and the copy has not drifted.
+
+    ``bundle.files`` is the policy-filtered set, so it is compared with the
+    manifest record rather than the raw source directory. A drifted copy (only
+    reachable here under --force) is never unchanged: --force must restore it.
+    """
+
+    if bundle_file_hashes(source, bundle) != entry["files"]:
+        return False
+    try:
+        verify_entry(root, entry)
+    except InstallError:
+        return False
+    return True

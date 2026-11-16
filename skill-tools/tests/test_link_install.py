@@ -580,3 +580,21 @@ def test_config_show_prints_install_mode_and_store_path(env, capsys) -> None:
     out = capsys.readouterr().out
     assert "install_mode: copy" in out
     assert f"store.path: {env['store'].root}" in out
+
+
+def test_update_reports_an_unchanged_store_entry_without_refreshing_it(env, capsys) -> None:
+    _link(env, env["project"], "alpha")
+    capsys.readouterr()
+
+    assert _update(env, env["project"], "alpha", "--dry-run") == 0
+    assert capsys.readouterr().out == (
+        "unchanged\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha\n"
+    )
+    assert _update(env, env["project"], "alpha") == 0
+    assert capsys.readouterr().out.startswith("unchanged\t")
+
+    _edit_source(env, "new guide\n")
+    assert _update(env, env["project"], "alpha") == 0
+    assert capsys.readouterr().out.startswith("update\t")
+    guide = _skill(env["project"]) / "references" / "guide.md"
+    assert guide.read_text(encoding="utf-8") == "new guide\n"

@@ -120,7 +120,7 @@ def test_remove_refuses_drift_unless_forced_and_never_touches_unmanaged(
     (project / ".claude" / "skills" / "alpha" / "user.txt").write_text("keep?\n", encoding="utf-8")
 
     assert main(["remove-skills", "alpha"], cwd=project) == 4
-    assert "extra files" in capsys.readouterr().err
+    assert "(extra: user.txt)" in capsys.readouterr().err
     assert main(["remove-skills", "alpha", "--force"], cwd=project) == 0
 
     capsys.readouterr()
@@ -1079,3 +1079,41 @@ def test_broken_hook_catalog_fails_hooks_list_but_not_skill_list(
 
     assert main(["list-skills", "--config", str(config)], cwd=tmp_path) == 0
     assert "\talpha\t" in capsys.readouterr().out
+
+
+def test_update_reports_unchanged_copies_and_force_restores_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
+) -> None:
+    source = make_repo(tmp_path / "source")
+    project = tmp_path / "project"
+    project.mkdir()
+    config = write_config(tmp_path / "cfg.yaml", source, tmp_path / "index.json")
+    assert main(["install-skills", "--config", str(config), "alpha", "beta"], cwd=project) == 0
+    capsys.readouterr()
+
+    assert main(["update-skills", "--config", str(config), "--dry-run"], cwd=project) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out == [
+        "unchanged\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha",
+        "unchanged\tplugins/two/beta/SKILL.md\t.claude/skills/beta",
+    ]
+
+    (source / "plugins" / "two" / "beta" / "SKILL.md").write_text(
+        "---\nname: beta\ndescription: changed\n---\n", encoding="utf-8"
+    )
+    assert main(["update-skills", "--config", str(config)], cwd=project) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out == [
+        "unchanged\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha",
+        "update\tplugins/two/beta/SKILL.md\t.claude/skills/beta",
+    ]
+    installed = project / ".claude" / "skills" / "beta" / "SKILL.md"
+    assert "changed" in installed.read_text(encoding="utf-8")
+
+    # A drifted copy with an unchanged source is still restored under --force.
+    installed.write_text("edited\n", encoding="utf-8")
+    assert main(["update-skills", "--config", str(config), "beta"], cwd=project) == 4
+    assert "(modified: SKILL.md)" in capsys.readouterr().err
+    assert main(["update-skills", "--config", str(config), "beta", "--force"], cwd=project) == 0
+    assert capsys.readouterr().out.startswith("update\t")
+    assert "changed" in installed.read_text(encoding="utf-8")

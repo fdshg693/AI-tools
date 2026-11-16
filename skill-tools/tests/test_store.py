@@ -207,7 +207,7 @@ def test_gc_stops_on_a_drifted_unused_entry(setup) -> None:
     _, source, bundles, store = setup
     (alpha,) = store.ensure(source, [bundles["alpha"]])
     (alpha.path / "extra.txt").write_text("x\n", encoding="utf-8")
-    with pytest.raises(InstallError, match="extra files"):
+    with pytest.raises(InstallError, match=r"\(extra: extra\.txt\)"):
         store.collect_garbage(grace_seconds=0)
     assert alpha.path.is_dir()
 
