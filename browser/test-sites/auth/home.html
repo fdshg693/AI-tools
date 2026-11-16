@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>マイページ</title>
+<style>body{font-family:system-ui,sans-serif;margin:1.5rem;max-width:36rem;} [hidden]{display:none!important;}</style>
+</head>
+<body>
+<main id="content" hidden>
+  <h1>マイページ</h1>
+  <p>ようこそ、<span id="who"></span> さん。ログイン済みのユーザーだけが見られるページです。</p>
+  <nav aria-label="メインナビゲーション">
+    <a href="settings.html">設定へ</a>
+    <a href="/">テストサイト一覧（トップ）へ</a>
+  </nav>
+  <button type="button" id="logout">ログアウト</button>
+</main>
+<p id="redirecting" role="status">ログインページへ移動しています…</p>
+<script>
+  const user = localStorage.getItem('demo-session');
+  if (!user) {
+    location.replace('index.html');
+  } else {
+    document.getElementById('redirecting').hidden = true;
+    document.getElementById('who').textContent = user;
+    document.getElementById('content').hidden = false;
+  }
+  document.getElementById('logout').addEventListener('click', () => {
+    localStorage.removeItem('demo-session');
+    document.cookie = 'demo-session=; path=/; max-age=0';
+    location.href = 'index.html';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>テーブル・一覧ラボ</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 56rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: .3rem .5rem; text-align: left; }
+  th button { all: unset; cursor: pointer; font-weight: bold; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>テーブル・一覧ラボ</h1>
+  <p>並び替え・絞り込み・ページネーション・重複行を持つ一覧。<code>filter()</code> / <code>nth()</code> / 行スコープのロケータ練習用。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <section aria-label="注文一覧">
+    <h2>注文一覧</h2>
+    <div>
+      <label for="filter">絞り込み（担当者名）</label>
+      <input type="text" id="filter" name="filter">
+      <button type="button" id="filter-btn">絞り込む</button>
+      <button type="button" id="reset-btn">絞り込みを解除</button>
+    </div>
+    <table>
+      <caption>注文一覧（<span id="total">0</span> 件中 <span id="range">0</span> 件を表示）</caption>
+      <thead>
+        <tr>
+          <th scope="col"><button type="button" data-sort="id">注文番号</button></th>
+          <th scope="col"><button type="button" data-sort="owner">担当者</button></th>
+          <th scope="col"><button type="button" data-sort="amount">金額</button></th>
+          <th scope="col"><button type="button" data-sort="status">状態</button></th>
+          <th scope="col">操作</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <nav aria-label="ページ送り">
+      <button type="button" id="prev">前のページ</button>
+      <span>ページ <span id="page">1</span> / <span id="pages">1</span></span>
+      <button type="button" id="next">次のページ</button>
+    </nav>
+    <p id="row-status" role="status">操作は行われていません</p>
+  </section>
+
+  <section aria-label="重複した項目">
+    <h2>重複した項目</h2>
+    <p>同じアクセシブルネームのリンクが複数ある（ロケータ一意性・<code>nth</code>・親スコープの練習用）。</p>
+    <ul>
+      <li>プランA <a href="#a">詳細を見る</a></li>
+      <li>プランB <a href="#b">詳細を見る</a></li>
+      <li>プランC <a href="#c">詳細を見る</a></li>
+    </ul>
+  </section>
+</main>
+<script>
+  const OWNERS = ['田中', '鈴木', '佐藤', '高橋', '伊藤'];
+  const STATUS = ['受付中', '発送済み', 'キャンセル'];
+  const DATA = Array.from({ length: 43 }, (_, i) => ({
+    id: 'ORD-' + String(1001 + i),
+    owner: OWNERS[i % OWNERS.length],
+    amount: ((i * 137) % 900 + 100) * 10,
+    status: STATUS[i % STATUS.length],
+  }));
+
+  const PER_PAGE = 10;
+  let page = 1, sortKey = 'id', asc = true, filter = '';
+
+  function view() {
+    let rows = DATA.filter(r => !filter || r.owner.includes(filter));
+    rows = rows.slice().sort((a, b) => {
+      const x = a[sortKey], y = b[sortKey];
+      const c = typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'ja');
+      return asc ? c : -c;
+    });
+    return rows;
+  }
+
+  function render() {
+    const rows = view();
+    const pages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+    page = Math.min(page, pages);
+    const slice = rows.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+    document.getElementById('rows').innerHTML = slice.map(r => `
+      <tr>
+        <th scope="row">${r.id}</th>
+        <td>${r.owner}</td>
+        <td>${r.amount.toLocaleString('ja-JP')} 円</td>
+        <td>${r.status}</td>
+        <td><button type="button" class="row-action" data-id="${r.id}">編集</button></td>
+      </tr>`).join('');
+    document.getElementById('total').textContent = String(rows.length);
+    document.getElementById('range').textContent = String(slice.length);
+    document.getElementById('page').textContent = String(page);
+    document.getElementById('pages').textContent = String(pages);
+    document.getElementById('prev').disabled = page <= 1;
+    document.getElementById('next').disabled = page >= pages;
+  }
+
+  document.querySelectorAll('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
+    const key = b.dataset.sort;
+    asc = key === sortKey ? !asc : true;
+    sortKey = key;
+    render();
+  }));
+  document.getElementById('filter-btn').addEventListener('click', () => {
+    filter = document.getElementById('filter').value.trim();
+    page = 1;
+    render();
+  });
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    filter = '';
+    document.getElementById('filter').value = '';
+    page = 1;
+    render();
+  });
+  document.getElementById('prev').addEventListener('click', () => { page--; render(); });
+  document.getElementById('next').addEventListener('click', () => { page++; render(); });
+  document.getElementById('rows').addEventListener('click', e => {
+    const btn = e.target.closest('.row-action');
+    if (btn) document.getElementById('row-status').textContent = btn.dataset.id + ' を編集します';
+  });
+  render();
+</script>
+</body>
+</html>

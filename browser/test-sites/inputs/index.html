@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>入力デバイス・ラボ</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 48rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; }
+  #drop-zone { border: 2px dashed #888; padding: 1rem; }
+  #drag-item { display: inline-block; border: 1px solid #333; padding: .3rem .6rem; cursor: grab; }
+  canvas { border: 1px solid #333; touch-action: none; }
+  [contenteditable] { border: 1px solid #999; padding: .4rem; min-height: 2.5rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>入力デバイス・ラボ</h1>
+  <p>ファイル添付・ドラッグ＆ドロップ・特殊 input・contenteditable・キャンバス描画・キーボードショートカット・クリップボード。
+     <code>setInputFiles</code> / <code>dragTo</code> / <code>mouse</code> / <code>keyboard</code> の練習用。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <section aria-label="ファイル添付">
+    <h2>ファイル添付</h2>
+    <div>
+      <label for="single-file">添付ファイル</label>
+      <input type="file" id="single-file" name="single-file">
+    </div>
+    <div>
+      <label for="multi-file">添付ファイル（複数可）</label>
+      <input type="file" id="multi-file" name="multi-file" multiple>
+    </div>
+    <p id="file-result" role="status">ファイルは選択されていません</p>
+  </section>
+
+  <section aria-label="ドラッグアンドドロップ">
+    <h2>ドラッグ＆ドロップ</h2>
+    <p id="drag-item" draggable="true">ドラッグする項目</p>
+    <div id="drop-zone" aria-label="ドロップ先">ここにドロップ</div>
+    <p id="drop-result" role="status">まだドロップされていません</p>
+  </section>
+
+  <section aria-label="特殊な入力欄">
+    <h2>特殊な入力欄</h2>
+    <div><label for="date">日付</label> <input type="date" id="date" name="date"></div>
+    <div><label for="time">時刻</label> <input type="time" id="time" name="time"></div>
+    <div><label for="color">テーマ色</label> <input type="color" id="color" name="color" value="#3366cc"></div>
+    <div><label for="volume">音量</label> <input type="range" id="volume" name="volume" min="0" max="100" value="50"></div>
+    <div><label for="quantity">数量</label> <input type="number" id="quantity" name="quantity" min="1" max="99" value="1"></div>
+    <div>
+      <label for="tags">タグ（候補つき）</label>
+      <input type="text" id="tags" name="tags" list="tag-list">
+      <datalist id="tag-list"><option value="緊急"><option value="要確認"><option value="完了"></datalist>
+    </div>
+  </section>
+
+  <section aria-label="リッチテキスト">
+    <h2>contenteditable</h2>
+    <div id="rich" contenteditable="true" role="textbox" aria-label="本文"></div>
+    <p>文字数: <span id="rich-count">0</span></p>
+  </section>
+
+  <section aria-label="キャンバス描画">
+    <h2>キャンバス描画</h2>
+    <canvas id="pad" width="320" height="120" aria-label="手書きパッド"></canvas>
+    <button type="button" id="clear-pad">消去する</button>
+    <p>描画した点の数: <span id="stroke-count">0</span></p>
+  </section>
+
+  <section aria-label="キーボードショートカット">
+    <h2>キーボードショートカット</h2>
+    <p><kbd>Ctrl</kbd>+<kbd>S</kbd> で保存、<kbd>Escape</kbd> で取り消し（ページ全体で受け付ける）。</p>
+    <p id="shortcut-result" role="status">ショートカットは押されていません</p>
+  </section>
+
+  <section aria-label="クリップボード">
+    <h2>クリップボード</h2>
+    <p id="copy-source">コピー対象のテキスト</p>
+    <button type="button" id="copy-btn">コピーする</button>
+    <div>
+      <label for="paste-target">貼り付け先</label>
+      <input type="text" id="paste-target" name="paste-target">
+    </div>
+    <p id="copy-result" role="status">コピーされていません</p>
+  </section>
+</main>
+<script>
+  function names(input) {
+    return Array.from(input.files).map(f => f.name).join('、');
+  }
+  document.getElementById('single-file').addEventListener('change', e => {
+    document.getElementById('file-result').textContent = '選択されたファイル: ' + (names(e.target) || 'なし');
+  });
+  document.getElementById('multi-file').addEventListener('change', e => {
+    document.getElementById('file-result').textContent = '選択されたファイル: ' + (names(e.target) || 'なし');
+  });
+
+  const item = document.getElementById('drag-item');
+  const zone = document.getElementById('drop-zone');
+  item.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', item.textContent));
+  zone.addEventListener('dragover', e => e.preventDefault());
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    document.getElementById('drop-result').textContent = 'ドロップされました: ' + e.dataTransfer.getData('text/plain');
+  });
+
+  const rich = document.getElementById('rich');
+  rich.addEventListener('input', () => {
+    document.getElementById('rich-count').textContent = String(rich.textContent.length);
+  });
+
+  const pad = document.getElementById('pad');
+  const ctx = pad.getContext('2d');
+  let drawing = false, strokes = 0;
+  pad.addEventListener('pointerdown', e => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); });
+  pad.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    ctx.lineTo(e.offsetX, e.offsetY);
+    ctx.stroke();
+    document.getElementById('stroke-count').textContent = String(++strokes);
+  });
+  window.addEventListener('pointerup', () => { drawing = false; });
+  document.getElementById('clear-pad').addEventListener('click', () => {
+    ctx.clearRect(0, 0, pad.width, pad.height);
+    strokes = 0;
+    document.getElementById('stroke-count').textContent = '0';
+  });
+
+  document.addEventListener('keydown', e => {
+    const out = document.getElementById('shortcut-result');
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      out.textContent = '保存しました';
+    } else if (e.key === 'Escape') {
+      out.textContent = '取り消しました';
+    }
+  });
+
+  document.getElementById('copy-btn').addEventListener('click', async () => {
+    const text = document.getElementById('copy-source').textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      document.getElementById('copy-result').textContent = 'コピーしました';
+    } catch {
+      document.getElementById('copy-result').textContent = 'コピーできませんでした（権限なし）';
+    }
+  });
+</script>
+</body>
+</html>

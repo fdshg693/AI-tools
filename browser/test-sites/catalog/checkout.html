@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>デモショップ - お届け先とお支払い</title>
+<style>body{font-family:system-ui,sans-serif;margin:1.5rem;max-width:40rem;} [hidden]{display:none!important;}</style>
+</head>
+<body>
+<header>
+  <h1>お届け先とお支払い</h1>
+  <nav aria-label="メインナビゲーション"><a href="cart.html">カートへ戻る</a></nav>
+</header>
+<main>
+  <p>お支払い合計: <strong id="total">0 円</strong></p>
+  <form id="checkout-form">
+    <div><label for="name">お名前</label> <input type="text" id="name" name="name" required></div>
+    <div><label for="postal-code">郵便番号</label> <input type="text" id="postal-code" name="postal-code" required></div>
+    <div><label for="address">ご住所</label> <input type="text" id="address" name="address" required></div>
+    <fieldset>
+      <legend>お支払い方法</legend>
+      <div><input type="radio" id="pay-card" name="payment" value="card"> <label for="pay-card">クレジットカード</label></div>
+      <div><input type="radio" id="pay-cod" name="payment" value="cod"> <label for="pay-cod">代金引換</label></div>
+    </fieldset>
+    <div><input type="checkbox" id="agree" name="agree"> <label for="agree">利用規約に同意する</label></div>
+    <button type="submit">注文を確定する</button>
+    <p id="error" role="alert" hidden>未入力の項目があります（お支払い方法の選択と規約への同意が必要です）</p>
+  </form>
+</main>
+<script src="shop.js"></script>
+<script>
+  document.getElementById('total').textContent = yen(cart.total());
+  document.getElementById('checkout-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const payment = document.querySelector('input[name="payment"]:checked');
+    const agreed = document.getElementById('agree').checked;
+    if (!payment || !agreed) {
+      document.getElementById('error').hidden = false;
+      return;
+    }
+    cart.clear();
+    location.href = 'complete.html';
+  });
+</script>
+</body>
+</html>

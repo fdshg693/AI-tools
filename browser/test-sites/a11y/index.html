@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>アクセシビリティ・ロケータ罠</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 48rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .offscreen { position: absolute; left: -9999px; }
+  [hidden] { display: none !important; }
+  [role="tab"][aria-selected="true"] { font-weight: bold; }
+</style>
+</head>
+<body>
+<header>
+  <h1>アクセシビリティ・ロケータ罠</h1>
+  <p>role / アクセシブルネームの付き方がさまざまな要素を集めたページ。
+     <code>getByRole</code>・aria snapshot・「見えているが取れない／取れるが見えない」の切り分け練習用。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <section aria-label="名前の付き方いろいろ">
+    <h2>名前の付き方いろいろ</h2>
+    <button type="button">テキストが名前になるボタン</button>
+    <button type="button" aria-label="aria-label が名前になるボタン">✕</button>
+    <button type="button" aria-labelledby="external-label">別要素が名前になるボタン</button>
+    <span id="external-label">aria-labelledby で付けた名前</span>
+    <button type="button" title="title が名前になるボタン">🔍</button>
+    <button type="button"><span class="visually-hidden">視覚的に隠した名前のボタン</span>★</button>
+  </section>
+
+  <section aria-label="見え方の違い">
+    <h2>見え方の違い</h2>
+    <p hidden>display:none のテキスト（アクセシビリティツリーに出ない）</p>
+    <p style="visibility: hidden;">visibility:hidden のテキスト</p>
+    <p class="offscreen">画面外にあるテキスト（DOM にはあり、hidden でもない）</p>
+    <p aria-hidden="true">aria-hidden のテキスト（見えるがツリーには出ない）</p>
+    <p style="opacity: 0;">opacity:0 のテキスト</p>
+  </section>
+
+  <section aria-label="タブ">
+    <h2>タブ（ARIA パターン）</h2>
+    <div role="tablist" aria-label="設定タブ">
+      <button role="tab" id="tab-1" aria-selected="true" aria-controls="panel-1">一般</button>
+      <button role="tab" id="tab-2" aria-selected="false" aria-controls="panel-2">通知</button>
+    </div>
+    <div role="tabpanel" id="panel-1" aria-labelledby="tab-1">一般設定の内容</div>
+    <div role="tabpanel" id="panel-2" aria-labelledby="tab-2" hidden>通知設定の内容</div>
+  </section>
+
+  <section aria-label="モーダル">
+    <h2>モーダルダイアログ</h2>
+    <button type="button" id="open-modal">規約を開く</button>
+    <div role="dialog" aria-modal="true" aria-labelledby="modal-title" id="modal" hidden>
+      <h3 id="modal-title">利用規約</h3>
+      <p>規約の本文です。</p>
+      <button type="button" id="accept">同意する</button>
+      <button type="button" id="close-modal">閉じる</button>
+    </div>
+    <p id="modal-result" role="status">未同意</p>
+  </section>
+
+  <section aria-label="ライブリージョン">
+    <h2>ライブリージョン</h2>
+    <button type="button" id="notify">在庫を確認する</button>
+    <p aria-live="polite" id="live">在庫は確認されていません</p>
+  </section>
+
+  <section aria-label="バリデーション">
+    <h2>入力エラー</h2>
+    <form id="validated">
+      <label for="email">メールアドレス</label>
+      <input type="email" id="email" name="email" required aria-describedby="email-error" aria-invalid="false">
+      <p id="email-error" role="alert" hidden>正しいメールアドレスを入力してください</p>
+      <button type="submit">登録する</button>
+    </form>
+  </section>
+</main>
+<script>
+  document.querySelectorAll('[role="tab"]').forEach(tab => tab.addEventListener('click', () => {
+    document.querySelectorAll('[role="tab"]').forEach(t => {
+      const selected = t === tab;
+      t.setAttribute('aria-selected', String(selected));
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !selected;
+    });
+  }));
+
+  const modal = document.getElementById('modal');
+  document.getElementById('open-modal').addEventListener('click', () => { modal.hidden = false; });
+  document.getElementById('close-modal').addEventListener('click', () => { modal.hidden = true; });
+  document.getElementById('accept').addEventListener('click', () => {
+    modal.hidden = true;
+    document.getElementById('modal-result').textContent = '同意済み';
+  });
+
+  document.getElementById('notify').addEventListener('click', () => {
+    document.getElementById('live').textContent = '在庫あり（残り 3 点）';
+  });
+
+  document.getElementById('validated').addEventListener('submit', e => {
+    e.preventDefault();
+    const email = document.getElementById('email');
+    const invalid = !email.value.includes('@');
+    email.setAttribute('aria-invalid', String(invalid));
+    document.getElementById('email-error').hidden = !invalid;
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "default": "flash-lite",
+  "models": {
+    "flash-lite": {
+      "enable": true,
+      "provider": "openrouter",
+      "id": "google/gemini-2.5-flash-lite",
+      "description": "既定。$0.10/M 入力・1M コンテキスト。長い snapshot を安く読ませる用途向け。"
+    },
+    "flash": {
+      "enable": true,
+      "provider": "openrouter",
+      "id": "google/gemini-2.5-flash",
+      "description": "flash-lite で読み落とすときの一段上（$0.30/M 入力・1M コンテキスト）。"
+    },
+    "glm-flash": {
+      "enable": true,
+      "provider": "openrouter",
+      "id": "z-ai/glm-5.3-flash",
+      "description": "aim2 の既定と同じモデル。1.3M コンテキスト。"
+    },
+    "nano": {
+      "enable": true,
+      "provider": "openrouter",
+      "id": "openai/gpt-5-nano",
+      "description": "最安クラス（$0.05/M 入力・400k コンテキスト）。短いページの定型要約向け。"
+    },
+    "gpt-5-mini": {
+      "enable": false,
+      "provider": "openrouter",
+      "id": "openai/gpt-5-mini",
+      "description": "難しいページを読み解くとき用。既定では無効（$0.25/M 入力）。"
+    }
+  }
+}

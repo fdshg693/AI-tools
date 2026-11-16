@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>スクリーンショット・ラボ</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 48rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; }
+  .card { width: 12rem; height: 6rem; display: flex; align-items: center; justify-content: center; border: 1px solid #333; }
+  #stable { background: #eef4ff; }
+  #random { color: #fff; }
+  #spin { width: 3rem; height: 3rem; border: 4px solid #ccc; border-top-color: #333; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tall { height: 150vh; background: linear-gradient(#fff, #dde); padding: 1rem; }
+  .sticky { position: sticky; top: 0; background: #ffd; border-bottom: 1px solid #aa0; padding: .3rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>スクリーンショット・ラボ</h1>
+  <p>安定した要素と、毎回変わる要素（時刻・乱数・アニメーション）を並べたページ。
+     <code>toHaveScreenshot</code> の <code>mask</code> / <code>animations: 'disabled'</code>、
+     要素単位スクショ、フルページスクショの挙動差を確かめる。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <section aria-label="安定した要素">
+    <h2>安定した要素</h2>
+    <div class="card" id="stable">いつも同じ見た目</div>
+  </section>
+
+  <section aria-label="毎回変わる要素">
+    <h2>毎回変わる要素（マスク対象）</h2>
+    <p>現在時刻: <span id="clock" data-testid="clock">--:--:--</span></p>
+    <div class="card" id="random" data-testid="random-card">乱数で色が変わる</div>
+  </section>
+
+  <section aria-label="アニメーション">
+    <h2>アニメーション</h2>
+    <div id="spin" role="img" aria-label="回転するスピナー"></div>
+  </section>
+
+  <section aria-label="長いページ">
+    <h2>長いページ</h2>
+    <div class="tall">
+      <p class="sticky">スクロールしても残るヘッダー</p>
+      <p>ここから下に長いコンテンツが続く（フルページスクショの確認用）。</p>
+      <p id="bottom-marker" style="margin-top: 120vh;">最下部のマーカー</p>
+    </div>
+  </section>
+</main>
+<script>
+  function tick() {
+    document.getElementById('clock').textContent = new Date().toLocaleTimeString('ja-JP');
+  }
+  tick();
+  setInterval(tick, 1000);
+  const hue = Math.floor(Math.random() * 360);
+  document.getElementById('random').style.backgroundColor = 'hsl(' + hue + ' 60% 45%)';
+</script>
+</body>
+</html>

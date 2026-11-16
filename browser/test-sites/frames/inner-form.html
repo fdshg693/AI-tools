@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8"><title>フレーム内フォーム</title></head>
+<body>
+<h1>フレーム内フォーム</h1>
+<form>
+  <div>
+    <label for="message">フレーム内メッセージ</label>
+    <input type="text" id="message" name="message">
+  </div>
+  <button type="button" id="frame-submit" onclick="document.getElementById('frame-status').hidden = false;">フレーム内で送信</button>
+  <p id="frame-status" role="status" hidden>フレーム内で送信しました</p>
+</form>
+</body>
+</html>

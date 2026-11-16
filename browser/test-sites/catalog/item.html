@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>デモショップ - 商品詳細</title>
+<style>body{font-family:system-ui,sans-serif;margin:1.5rem;max-width:40rem;} [hidden]{display:none!important;}</style>
+</head>
+<body>
+<header>
+  <h1 id="name">商品詳細</h1>
+  <nav aria-label="メインナビゲーション">
+    <a href="index.html">商品一覧へ戻る</a>
+    <a href="cart.html">カート（<span id="cart-count">0</span>）</a>
+  </nav>
+</header>
+<main id="detail" hidden>
+  <p id="price"></p>
+  <p id="stock"></p>
+  <div>
+    <label for="qty">数量</label>
+    <input type="number" id="qty" name="qty" min="1" max="10" value="1">
+  </div>
+  <button type="button" id="add">カートに入れる</button>
+  <p id="status" role="status">まだカートに入れていません</p>
+</main>
+<p id="not-found" hidden>商品が見つかりませんでした</p>
+<script src="shop.js"></script>
+<script>
+  const id = new URLSearchParams(location.search).get('id');
+  const product = PRODUCTS.find(p => p.id === id);
+  if (!product) {
+    document.getElementById('not-found').hidden = false;
+  } else {
+    document.title = 'デモショップ - ' + product.name;
+    document.getElementById('name').textContent = product.name;
+    document.getElementById('price').textContent = '価格: ' + yen(product.price);
+    document.getElementById('stock').textContent = product.stock > 0 ? '在庫: ' + product.stock + ' 点' : '在庫切れ';
+    document.getElementById('detail').hidden = false;
+    document.getElementById('add').disabled = product.stock === 0;
+    document.getElementById('add').addEventListener('click', () => {
+      cart.add(product.id, Number(document.getElementById('qty').value));
+      document.getElementById('status').textContent = 'カートに入れました';
+      renderCartBadge();
+    });
+  }
+  renderCartBadge();
+</script>
+</body>
+</html>

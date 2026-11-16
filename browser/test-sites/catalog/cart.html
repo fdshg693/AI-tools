@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>デモショップ - カート</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 44rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: .3rem .5rem; text-align: left; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>カート</h1>
+  <nav aria-label="メインナビゲーション"><a href="index.html">買い物を続ける</a></nav>
+</header>
+<main>
+  <table id="cart-table">
+    <caption>カートの中身</caption>
+    <thead><tr><th scope="col">商品</th><th scope="col">数量</th><th scope="col">小計</th><th scope="col">操作</th></tr></thead>
+    <tbody id="lines"></tbody>
+  </table>
+  <p id="empty" hidden>カートは空です</p>
+  <p>合計: <strong id="total">0 円</strong></p>
+  <a href="checkout.html" id="to-checkout">レジに進む</a>
+</main>
+<script src="shop.js"></script>
+<script>
+  function render() {
+    const lines = cart.lines();
+    document.getElementById('lines').innerHTML = lines.map(l => `
+      <tr>
+        <th scope="row">${l.name}</th>
+        <td>${l.qty}</td>
+        <td>${yen(l.subtotal)}</td>
+        <td><button type="button" data-remove="${l.id}">削除</button></td>
+      </tr>`).join('');
+    document.getElementById('empty').hidden = lines.length > 0;
+    document.getElementById('cart-table').hidden = lines.length === 0;
+    document.getElementById('to-checkout').hidden = lines.length === 0;
+    document.getElementById('total').textContent = yen(cart.total());
+  }
+  document.getElementById('lines').addEventListener('click', e => {
+    const btn = e.target.closest('[data-remove]');
+    if (btn) { cart.remove(btn.dataset.remove); render(); }
+  });
+  render();
+</script>
+</body>
+</html>
