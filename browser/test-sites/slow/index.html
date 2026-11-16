@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>巨大DOM・重いページ</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 52rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; }
+  #grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; max-height: 20rem; overflow: auto; }
+  #grid div { border: 1px solid #ddd; padding: .2rem; font-size: .8rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>巨大DOM・重いページ</h1>
+  <p>アクセシビリティスナップショットが膨らむ状況を再現するページ。
+     スナップショットのサイズ削減（要素スコープを絞る・<code>ref</code> を使う）や、
+     タイムアウト・描画待ちの挙動を確かめる。件数は <code>?rows=</code> で変えられる（既定 500、最大 5000）。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <section aria-label="生成の設定">
+    <h2>生成の設定</h2>
+    <p>現在の件数: <span id="count">0</span> 件</p>
+    <button type="button" id="regen-500">500 件で描き直す</button>
+    <button type="button" id="regen-2000">2000 件で描き直す</button>
+  </section>
+
+  <section aria-label="重い一覧">
+    <h2>重い一覧</h2>
+    <div id="grid" aria-label="項目グリッド"></div>
+  </section>
+
+  <section aria-label="目的の要素">
+    <h2>探しにくい要素</h2>
+    <p>大量の似た項目のなかに 1 つだけ違うボタンがある（<code>getByRole</code> の一意性・スコープ練習用）。</p>
+    <button type="button" id="needle">この中で唯一の「確定」ボタン</button>
+    <p id="needle-result" role="status" hidden>唯一のボタンを押しました</p>
+  </section>
+
+  <section aria-label="遅延読み込み画像">
+    <h2>遅延読み込み画像</h2>
+    <p>スクロールしてはじめて読み込まれる要素（<code>loading="lazy"</code> 相当を JS で再現）。</p>
+    <div id="lazy-slot" style="min-height: 4rem;">まだ読み込まれていません</div>
+  </section>
+</main>
+<script>
+  function build(n) {
+    const grid = document.getElementById('grid');
+    const frag = document.createDocumentFragment();
+    for (let i = 1; i <= n; i++) {
+      const cell = document.createElement('div');
+      cell.textContent = '項目 ' + i;
+      frag.appendChild(cell);
+    }
+    grid.replaceChildren(frag);
+    document.getElementById('count').textContent = String(n);
+  }
+  const params = new URLSearchParams(location.search);
+  build(Math.min(5000, Math.max(1, Number(params.get('rows')) || 500)));
+  document.getElementById('regen-500').addEventListener('click', () => build(500));
+  document.getElementById('regen-2000').addEventListener('click', () => build(2000));
+  document.getElementById('needle').addEventListener('click', () => {
+    document.getElementById('needle-result').hidden = false;
+  });
+
+  const slot = document.getElementById('lazy-slot');
+  new IntersectionObserver((entries, obs) => {
+    if (entries.some(e => e.isIntersecting)) {
+      setTimeout(() => { slot.textContent = '遅延読み込みが完了しました'; }, 800);
+      obs.disconnect();
+    }
+  }).observe(slot);
+</script>
+</body>
+</html>

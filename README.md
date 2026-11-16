@@ -36,6 +36,12 @@
 
 - [openrouter](openrouter/README.md) — [model-list](openrouter/model-list/README.md)、[model-select](openrouter/model-select/README.md)
 
+### browser/ — playwright-cli によるブラウザ操作の補助
+
+- [pwq](browser/pwq/README.md) — `playwright-cli` の出力を縮めるコンテキスト節約ラッパー
+- [pwdo](browser/pwdo/README.md) — ブラウザ操作の一区間を安いモデルへ委譲する
+- [test-sites](browser/test-sites/README.md) — 実測・練習用のローカル静的サイト集（CLI ではない。`repo-tools.yaml` 未登録）
+
 ## カテゴリに入れていないツール
 
 - [interactive-cli-wrapper](interactive-cli-wrapper/README.md) — `repo-tools.yaml` のキーは `icw`
@@ -45,7 +51,7 @@
 - [textgraph](textgraph/README.md)
 - [vscode-profiles](vscode-profiles/README.md)
 
-`ai-usage`・`openrouter` 以外は [`repo-tools.yaml`](../registry/repo-tools.yaml) に登録済み。
+`ai-usage`・`openrouter`・`browser/test-sites` 以外は [`repo-tools.yaml`](../registry/repo-tools.yaml) に登録済み。
 
 ## 他の置き場所
 

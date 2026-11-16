@@ -372,7 +372,7 @@ def write_content_pages(
     ``pages/index.json`` is the only url<->file<->title<->source map. Each entry
     also carries ``char_count`` (``len(markdown)``, the exact ``.md`` file length)
     so a caller can decide, per page, whether to Read it directly or route it
-    through ``aim --parallel`` instead (``tav-digest`` skill) — no aggregate is computed.
+    through ``aim --parallel`` instead (``digest.md`` in the ``tav-cli`` skill) — no aggregate is computed.
     """
     items: list[dict[str, Any]] = [item for item in (result or []) if isinstance(item, dict)]
     titles = ensure_item_titles(items)

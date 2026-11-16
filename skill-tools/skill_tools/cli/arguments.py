@@ -91,6 +91,19 @@ def _source_description(source) -> str:
     return f"local {source.root}"
 
 
+def _manifest_source_label(source: Mapping[str, Any], root: Path) -> str:
+    """A manifest source for display; a project-relative local path is shown absolute.
+
+    The manifest keeps the relative form (it moves with the project); the
+    display resolves it so the same source reads the same in every listing.
+    """
+
+    if source.get("type") != "local":
+        return f"github {source.get('owner')}/{source.get('repository')}@{source.get('ref')}"
+    path = Path(str(source.get("path")))
+    return f"local {path if path.is_absolute() else (root / path).resolve()}"
+
+
 def _configured_source_description(config) -> str:
     identity = source_identity(config)
     if identity["type"] == "local":

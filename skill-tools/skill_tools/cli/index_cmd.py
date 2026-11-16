@@ -23,7 +23,7 @@ from ..index.build import (
 )
 from ..index.embedding import EMBEDDING_MODEL, missing_api_key_message, resolve_api_key
 from ..index.search import search_index
-from ..models import CatalogError, EmbeddingError, IndexError, SearchResult
+from ..models import CatalogError, EmbeddingError, IndexError, SearchResult, SourceError
 from .arguments import (
     _add_runtime_arguments,
     _configured_source_description,
@@ -94,6 +94,33 @@ def _read_search_index(config):
     return index
 
 
+def _warn_about_unknown_results(config, results: Sequence[SearchResult]) -> None:
+    """Warn when results name skills the configured local source no longer registers.
+
+    The index is matched on source identity, not content, so it can still list
+    skills that were moved or unregistered since it was built; installing such an
+    ID fails with ``skill not found``. Results are shown as stored either way.
+    Only a local source is checked: a GitHub source must not touch the network here.
+    """
+
+    if config.source.type != "local" or not results:
+        return
+    try:
+        known = {record.canonical_id for record in discover_catalog(create_source(config))}
+    except (CatalogError, SourceError) as exc:
+        print(
+            f"warning: could not check results against the source catalog: {exc}", file=sys.stderr
+        )
+        return
+    unknown = sum(1 for result in results if result.canonical_id not in known)
+    if unknown:
+        print(
+            f"warning: {unknown} of {len(results)} result(s) are not in the source's current "
+            "catalog (the index is out of sync with the source); run `skill-tools build-index`",
+            file=sys.stderr,
+        )
+
+
 def _result_payload(result: SearchResult) -> dict[str, Any]:
     return {
         "path": result.path,
@@ -147,6 +174,7 @@ def _command_search(
     api_key = _resolve_api_key_or_raise(embedder)
     index = _read_search_index(config)
     results = search_index(args.query, index, top_k=args.top, embedder=embedder, api_key=api_key)
+    _warn_about_unknown_results(config, results)
     if args.json:
         print(json.dumps([_result_payload(result) for result in results], indent=2))
     else:

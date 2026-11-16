@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>エッジケース確認</title>
+</head>
+<body>
+<header>
+  <h1>エッジケース確認</h1>
+  <p>Step6着手前のベースライン記録用フィクスチャ。意図的失敗・非対応操作の確認専用ページで、通常の導線からはリンクしない。</p>
+</header>
+<main>
+  <section aria-label="無効化されたボタンの確認">
+    <h2>無効化されたボタン</h2>
+    <button type="button" disabled>送信する</button>
+  </section>
+
+  <section aria-label="範囲入力の確認">
+    <h2>範囲入力</h2>
+    <label for="volume">音量</label>
+    <input type="range" id="volume" name="volume" min="0" max="100" value="50">
+  </section>
+
+  <section aria-label="商品一覧">
+    <h2>商品一覧</h2>
+    <article>
+      <h3>商品A</h3>
+      <button type="button">詳細</button>
+    </article>
+    <article>
+      <h3>商品B</h3>
+      <button type="button">詳細</button>
+    </article>
+  </section>
+
+  <section aria-label="未対応操作の確認">
+    <h2>未対応操作</h2>
+    <div>
+      <label for="upload">添付ファイル</label>
+      <input type="file" id="upload" name="upload">
+    </div>
+    <ul aria-label="並び替え可能なリスト">
+      <li draggable="true">項目1</li>
+      <li draggable="true">項目2</li>
+      <li draggable="true">項目3</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

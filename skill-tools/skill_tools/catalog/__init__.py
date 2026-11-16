@@ -280,13 +280,50 @@ def _record_by_display_path(
     return displayed.get(normalized)
 
 
+def _unregistered_skill_path(source: CatalogSource, selector: str) -> str | None:
+    """The canonical path of a SKILL.md the selector names but ai-tools.yaml does not register.
+
+    Only path selectors are checked (a canonical ID, or a local absolute path);
+    a bare name is not searched for outside the registered roots, which would
+    mean walking the whole source and guessing between same-named files.
+    """
+
+    candidate: PurePosixPath | None = None
+    if isinstance(source, LocalSource):
+        path = Path(selector).expanduser()
+        if path.is_absolute():
+            try:
+                candidate = PurePosixPath(path.resolve().relative_to(source.root).as_posix())
+            except (OSError, RuntimeError, ValueError):
+                return None
+    if candidate is None and "\\" not in selector and ":" not in selector:
+        candidate = PurePosixPath(selector)
+    if (
+        candidate is None
+        or candidate.name != "SKILL.md"
+        or candidate.is_absolute()
+        or {".", ".."} & set(candidate.parts)
+    ):
+        return None
+    try:
+        listed = source.list_files((candidate.parent,))
+    except SourceError:
+        return None
+    return candidate.as_posix() if candidate in listed else None
+
+
 def select_records(
     records: Iterable[SkillRecord],
     selectors: Iterable[str],
     *,
     source_descriptor: Mapping[str, str] | None = None,
+    source: CatalogSource | None = None,
 ) -> tuple[SkillRecord, ...]:
-    """Resolve canonical IDs, display paths, or a unique frontmatter / directory skill name."""
+    """Resolve canonical IDs, display paths, or a unique frontmatter / directory skill name.
+
+    With ``source``, a path selector naming an existing but unregistered
+    SKILL.md gets an error saying so instead of a bare ``skill not found``.
+    """
 
     catalog = tuple(records)
     records_by_id = {record.canonical_id: record for record in catalog}
@@ -300,6 +337,14 @@ def select_records(
             if not matches:
                 matches = [item for item in records_by_id.values() if item.bundle.name == selector]
             if not matches:
+                unregistered = (
+                    _unregistered_skill_path(source, selector) if source is not None else None
+                )
+                if unregistered is not None:
+                    raise CatalogError(
+                        f"skill not found: {selector} ({unregistered} exists in the source but "
+                        "is not registered in ai-tools.yaml, so skill-tools does not handle it)"
+                    )
                 raise CatalogError(f"skill not found: {selector}")
             if len(matches) > 1:
                 options = ", ".join(

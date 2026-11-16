@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>フレーム・ダイアログ・別タブ</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 48rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; }
+  iframe { width: 100%; height: 9rem; border: 1px solid #999; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>フレーム・ダイアログ・別タブ</h1>
+  <p>iframe（入れ子あり）・Shadow DOM・ネイティブダイアログ・新規タブ／ポップアップを 1 ページに集約。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <section aria-label="単一フレーム">
+    <h2>単一フレーム</h2>
+    <iframe title="お問い合わせフレーム" src="inner-form.html"></iframe>
+  </section>
+
+  <section aria-label="入れ子フレーム">
+    <h2>入れ子フレーム</h2>
+    <p>外側フレームの中にさらにフレームがある（<code>frameLocator</code> の連鎖確認用）。</p>
+    <iframe title="外側フレーム" src="outer-frame.html"></iframe>
+  </section>
+
+  <section aria-label="Shadow DOM">
+    <h2>Shadow DOM</h2>
+    <p>open な shadow root の中のボタン（Playwright のロケータは shadow を貫通する）。</p>
+    <div id="shadow-host"></div>
+  </section>
+
+  <section aria-label="ネイティブダイアログ">
+    <h2>ネイティブダイアログ</h2>
+    <button type="button" id="alert-btn">通知を出す</button>
+    <button type="button" id="confirm-btn">削除する</button>
+    <button type="button" id="prompt-btn">名前を尋ねる</button>
+    <p id="dialog-result" role="status">結果: なし</p>
+  </section>
+
+  <section aria-label="別タブとポップアップ">
+    <h2>別タブとポップアップ</h2>
+    <a href="popup.html" target="_blank" rel="noopener">新しいタブで開く</a>
+    <button type="button" id="popup-btn">ポップアップを開く</button>
+  </section>
+</main>
+<script>
+  const host = document.getElementById('shadow-host');
+  const root = host.attachShadow({ mode: 'open' });
+  root.innerHTML = '<button type="button" id="shadow-btn">シャドウ内のボタン</button><p id="shadow-result" hidden>シャドウ内のボタンを押しました</p>';
+  root.getElementById('shadow-btn').addEventListener('click', () => {
+    root.getElementById('shadow-result').hidden = false;
+  });
+
+  const out = document.getElementById('dialog-result');
+  document.getElementById('alert-btn').addEventListener('click', () => {
+    alert('処理が完了しました');
+    out.textContent = '結果: 通知を閉じました';
+  });
+  document.getElementById('confirm-btn').addEventListener('click', () => {
+    out.textContent = confirm('本当に削除しますか？') ? '結果: 削除しました' : '結果: 削除を取り消しました';
+  });
+  document.getElementById('prompt-btn').addEventListener('click', () => {
+    const name = prompt('お名前を入力してください');
+    out.textContent = '結果: ' + (name === null ? '入力を取り消しました' : 'こんにちは ' + name);
+  });
+  document.getElementById('popup-btn').addEventListener('click', () => {
+    window.open('popup.html', '_blank', 'width=400,height=300');
+  });
+</script>
+</body>
+</html>

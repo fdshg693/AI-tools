@@ -1,0 +1,28 @@
+{
+  "name": "pwq",
+  "version": "0.1.0",
+  "description": "Context-saving wrapper around playwright-cli: keeps snapshots and large results in a local store and prints a deterministic digest",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=26"
+  },
+  "bin": {
+    "pwq": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "tsup": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@openrouter/ai-sdk-provider": "^3.0.0",
+    "ai": "^7.0.99"
+  }
+}

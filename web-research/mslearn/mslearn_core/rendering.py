@@ -63,7 +63,7 @@ def render_code_item(item: dict[str, Any]) -> tuple[str, str, str]:
 def _with_source_url(markdown: str, url: str) -> str:
     """Insert `URL: <url>` after the leading H1 so fetch files match search files.
 
-    `aim --parallel` prompts in the `ms-digest` skill look for a `URL:` line near the
+    `aim --parallel` prompts in the `ms-learn` skill's digest.md look for a `URL:` line near the
     top. Search results already had one; fetch used to write the MCP markdown
     unchanged, so digesting a fetch folder dropped the source URL.
     """

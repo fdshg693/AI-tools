@@ -1,4 +1,4 @@
-"""Skill list-skills, install-skills, installed-skills, update-skills, remove-skills commands."""
+"""Skill list-skills, install-skills, installed-skills, update-skills, remove-skills, sync-skills commands."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from ..install.installer import (
     recover_transaction,
 )
 from ..install.manifest import (
+    bundle_file_hashes,
     link_store_root,
     verify_entry,
     verify_link_entry,
@@ -35,6 +36,7 @@ from ..install.scope import (
     ensure_project_root_allowed,
 )
 from .arguments import (
+    _manifest_source_label,
     _add_runtime_arguments,
     _add_scope_arguments,
     _entry_matches_source,
@@ -105,6 +107,25 @@ def _add_managed_commands(commands) -> None:
     )
     update.add_argument("--force", action="store_true", help="replace drifted managed directories")
 
+    sync = commands.add_parser(
+        "sync-skills",
+        help="make the managed skills match install_skills in the config: install the listed "
+        "skills that are missing and remove managed skills that are no longer listed",
+    )
+    _add_runtime_arguments(sync)
+    _add_scope_arguments(sync, global_option=True)
+    sync.add_argument("--dry-run", action="store_true", help="show changes without applying")
+    sync.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace unmanaged directories that already exist at a new skill's destination",
+    )
+    sync.add_argument(
+        "--force",
+        action="store_true",
+        help="delete drifted managed directories of unlisted skills",
+    )
+
     remove = commands.add_parser(
         "remove-skills", help="remove skills recorded in this project's manifest"
     )
@@ -138,26 +159,54 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
     mode = _resolve_install_mode(args.mode, config.install_mode, scope)
     ensure_outside_store(scope, config.store.path)
     source = create_source(config)
-    selectors = [config.self_skill if token == SELF_SELECTOR else token for token in args.skills]
-    selected = tuple(
+    selected = _select_bundles(source, config, args.skills)
+    targets = tuple(args.target.split(",")) if args.target is not None else None
+    plan = _plan_install(
+        scope, config, source, selected, mode, args.overwrite, args.dry_run, targets=targets
+    )
+    if not args.dry_run:
+        _apply_install(scope, config, source, plan, mode, args.overwrite)
+    return 0
+
+
+def _select_bundles(source, config, tokens: Sequence[str]) -> tuple[SkillBundle, ...]:
+    """Resolve selectors (``self`` expands to ``self_skill``) to catalog bundles."""
+
+    selectors = [config.self_skill if token == SELF_SELECTOR else token for token in tokens]
+    return tuple(
         record.bundle
         for record in select_records(
-            discover_catalog(source), selectors, source_descriptor=source.descriptor
+            discover_catalog(source), selectors, source_descriptor=source.descriptor, source=source
         )
     )
-    targets = tuple(args.target.split(",")) if args.target is not None else None
+
+
+def _plan_install(
+    scope: InstallScope,
+    config,
+    source,
+    selected: Sequence[SkillBundle],
+    mode: str,
+    overwrite: bool,
+    dry_run: bool,
+    *,
+    targets: tuple[str, ...] | None = None,
+) -> tuple[InstallPlan, ...]:
+    """Validate and print the install plan; nothing is written."""
+
+    root = scope.root
     plan = build_plan(
         root,
-        selected,
+        tuple(selected),
         config,
-        args.overwrite,
+        overwrite,
         targets=targets,
-        state_dir=state_dir,
+        state_dir=scope.state_dir,
         global_scope=scope.is_global,
     )
     store = Store.from_config(config)
     for item in plan:
-        action = "would install" if args.dry_run else "install"
+        action = "would install" if dry_run else "install"
         path = display_skill_path(item.bundle.canonical_id, source.descriptor)
         # Copies keep the historical columns; a link adds the store copy it points at.
         suffix = ""
@@ -173,16 +222,29 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
                 f"{action}\t{path}\t{item.bundle.canonical_id}"
                 f"\t{item.target_name}\t{relative_target}{suffix}"
             )
+    if not scope.is_global:
+        _warn_about_global_duplicates(plan)
     if mode == "link":
         for item in plan:
             store.ensure_outside(item.target.parent, "skill destination")
-    if args.dry_run:
-        return 0
+    return plan
+
+
+def _apply_install(
+    scope: InstallScope,
+    config,
+    source,
+    plan: tuple[InstallPlan, ...],
+    mode: str,
+    overwrite: bool,
+) -> None:
+    root, state_dir = scope.root, scope.state_dir
+    store = Store.from_config(config)
     previous = {entry["installPath"].casefold(): entry for entry in _managed_entries(scope)}
     if mode == "link":
-        install_links(store, source, plan, root, overwrite=args.overwrite, state_dir=state_dir)
-        return 0
-    execute_install(source, plan, root, overwrite=args.overwrite, state_dir=state_dir)
+        install_links(store, source, plan, root, overwrite=overwrite, state_dir=state_dir)
+        return
+    execute_install(source, plan, root, overwrite=overwrite, state_dir=state_dir)
     # Copies replaced links: their store entries lose these referrers.
     unlinked = [
         entry["installPath"]
@@ -192,7 +254,30 @@ def _command_install(args: argparse.Namespace, cwd: Path, scope: InstallScope) -
     ]
     if unlinked:
         _forget_referrers(store, root, unlinked)
-    return 0
+
+
+def _warn_about_global_duplicates(plan: Sequence[InstallPlan]) -> None:
+    """Warn when a skill going into a project is also installed user-wide by skill-tools.
+
+    Only the global manifest is read (no walk of ``~/.claude/skills``), so a copy
+    placed by hand or by a plugin is not detected.
+    """
+
+    names = {item.bundle.name for item in plan}
+    if not names:
+        return
+    scope = InstallScope.global_()
+    try:
+        entries = load_project_manifest(scope.root, state_dir=scope.state_dir)["entries"]
+    except (InstallError, OSError):
+        return
+    for entry in entries:
+        if entry["bundleName"] in names:
+            print(
+                f"warning: {entry['bundleName']} is also installed user-wide "
+                f"(~/{entry['installPath']}); agents may load both copies",
+                file=sys.stderr,
+            )
 
 
 def _resolve_install_mode(requested: str | None, configured: str, scope: InstallScope) -> str:
@@ -260,11 +345,7 @@ def _command_installed(args: argparse.Namespace, cwd: Path, scope: InstallScope)
         print("canonical_id\ttarget\tinstall_path\tsource\tmode")
         for entry in entries:
             source = entry["source"]
-            source_label = (
-                f"local {source.get('path')}"
-                if source.get("type") == "local"
-                else f"github {source.get('owner')}/{source.get('repository')}@{source.get('ref')}"
-            )
+            source_label = _manifest_source_label(source, scope.root)
             print(
                 f"{entry['canonicalId']}\t{entry['target'] or '(default)'}\t"
                 f"{entry['installPath']}\t{source_label}\t{entry['mode']}"
@@ -273,29 +354,86 @@ def _command_installed(args: argparse.Namespace, cwd: Path, scope: InstallScope)
 
 
 def _command_remove(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
-    root = scope.root
     ensure_not_store_state(scope)
     entries = _managed_entries(scope)
     selected = _select_managed_entries(entries, args.skills)
     if not selected:
         print("(no managed skills)")
         return 0
+    stores = _plan_remove(scope, selected, args.force, args.dry_run)
+    if not args.dry_run:
+        _apply_remove(scope, selected, stores, args.force)
+    return 0
+
+
+def _plan_remove(
+    scope: InstallScope, selected: Sequence[dict], force: bool, dry_run: bool
+) -> dict[Path, list[str]]:
+    """Check drift and print the removals; returns the store referrers to forget."""
+
     stores: dict[Path, list[str]] = {}
     for entry in selected:
-        path = verify_managed_entry(root, entry, force=args.force)
-        action = "would remove" if args.dry_run else "remove"
+        path = verify_managed_entry(scope.root, entry, force=force)
+        action = "would remove" if dry_run else "remove"
         if entry["mode"] == "link":
             suffix = " (link only; the shared store entry is kept)"
             store_root = link_store_root(path, entry)
             if store_root is not None:
                 stores.setdefault(store_root, []).append(entry["installPath"])
         else:
-            suffix = " (force: directory contents may be deleted)" if args.force else ""
+            suffix = " (force: directory contents may be deleted)" if force else ""
         print(f"{action}\t{entry['canonicalId']}\t{scope.display(path)}{suffix}")
+    return stores
+
+
+def _apply_remove(
+    scope: InstallScope, selected: Sequence[dict], stores: dict[Path, list[str]], force: bool
+) -> None:
+    execute_remove(scope.root, tuple(selected), force=force, state_dir=scope.state_dir)
+    for store_root, paths in stores.items():
+        _forget_referrers(Store(store_root), scope.root, paths)
+
+
+def _command_sync(args: argparse.Namespace, cwd: Path, scope: InstallScope) -> int:
+    """Converge the managed skills on ``install_skills``; managed skills are kept as is.
+
+    Every check (drift of the skills to remove, conflicts of the skills to
+    install) runs before anything changes. Removals then run before installs.
+    """
+
+    ensure_project_root_allowed(scope, "sync-skills")
+    with _project_install_lock(scope.root, state_dir=scope.state_dir):
+        recover_transaction(scope.root, state_dir=scope.state_dir)
+    config = _load_runtime_config(args, cwd, scope=scope)
+    if not config.install_skills:
+        where = config.config_path or "skill-tools.yaml"
+        raise ConfigError(
+            f"install_skills is empty in {where}; list the skills to install "
+            "(canonical ID, unique name, or self)"
+        )
+    mode = _resolve_install_mode(None, config.install_mode, scope)
+    ensure_outside_store(scope, config.store.path)
+    source = create_source(config)
+    wanted = _select_bundles(source, config, config.install_skills)
+    wanted_ids = {bundle.canonical_id for bundle in wanted}
+    managed = _managed_entries(scope)
+    managed_ids = {entry["canonicalId"] for entry in managed}
+    removals = [entry for entry in managed if entry["canonicalId"] not in wanted_ids]
+    missing = [bundle for bundle in wanted if bundle.canonical_id not in managed_ids]
+    if not removals and not missing:
+        print("(no changes)")
+        print(f"source: {_source_description(source)}", file=sys.stderr)
+        return 0
+    stores = _plan_remove(scope, removals, args.force, args.dry_run)
+    plan: tuple[InstallPlan, ...] = ()
+    if missing:
+        plan = _plan_install(scope, config, source, missing, mode, args.overwrite, args.dry_run)
     if not args.dry_run:
-        execute_remove(root, selected, force=args.force, state_dir=scope.state_dir)
-        for store_root, paths in stores.items():
-            _forget_referrers(Store(store_root), root, paths)
+        if removals:
+            _apply_remove(scope, removals, stores, args.force)
+        if plan:
+            _apply_install(scope, config, source, plan, mode, args.overwrite)
+    print(f"source: {_source_description(source)}", file=sys.stderr)
     return 0
 
 
@@ -331,6 +469,12 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
     link_bundles: dict[str, SkillBundle] = {}
     link_referrers: list[Referrer] = []
     shown_links: list[tuple[dict, Path]] = []
+    store_entries = (
+        {item.store_path.casefold(): item for item in store.list_entries()}
+        if any(entry["mode"] == "link" for entry in matching)
+        else {}
+    )
+    action = "would update" if args.dry_run else "update"
     for entry in matching:
         record = records.get(entry["canonicalId"])
         if record is None:
@@ -348,6 +492,12 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
                     f"but the configured source maps it to {expected}; reinstall it with "
                     "`install-skills --overwrite`"
                 )
+            store_entry = store_entries.get(entry["store"].casefold())
+            if store_entry is not None and _unchanged(
+                source, record.bundle, store.root, store_entry.entry
+            ):
+                print(f"unchanged	{entry['canonicalId']}	{scope.display(link)}")
+                continue
             # One refresh per store entry, however many links select it.
             link_bundles.setdefault(entry["store"].casefold(), record.bundle)
             link_referrers.append(
@@ -356,6 +506,9 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
             shown_links.append((entry, link))
             continue
         target = verify_entry(root, entry, force=args.force)
+        if _unchanged(source, record.bundle, root, entry):
+            print(f"unchanged	{entry['canonicalId']}	{scope.display(target)}")
+            continue
         plan = InstallPlan(
             bundle=record.bundle,
             target=target,
@@ -364,21 +517,16 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
         )
         plans.append(plan)
         copied.append(entry)
-        action = "would update" if args.dry_run else "update"
         suffix = " (force: directory contents may be replaced)" if args.force else ""
-        print(f"{action}\t{entry['canonicalId']}\t{scope.display(target)}{suffix}")
-    if shown_links:
-        counts: dict[str, int] = {}
-        for store_entry in store.list_entries():
-            counts[store_entry.store_path.casefold()] = len(store_entry.referrers)
-        for entry, link in shown_links:
-            action = "would update" if args.dry_run else "update"
-            shared = counts.get(entry["store"].casefold(), 0)
-            suffix = " (force: store entry contents may be replaced)" if args.force else ""
-            print(
-                f"{action}\t{entry['canonicalId']}\t{scope.display(link)}"
-                f"\t(shared: store entry {entry['store']} has {shared} link(s)){suffix}"
-            )
+        print(f"{action}	{entry['canonicalId']}	{scope.display(target)}{suffix}")
+    for entry, link in shown_links:
+        store_entry = store_entries.get(entry["store"].casefold())
+        shared = len(store_entry.referrers) if store_entry is not None else 0
+        suffix = " (force: store entry contents may be replaced)" if args.force else ""
+        print(
+            f"{action}	{entry['canonicalId']}	{scope.display(link)}"
+            f"	(shared: store entry {entry['store']} has {shared} link(s)){suffix}"
+        )
     if plans and not args.dry_run:
         execute_install(
             source,
@@ -401,3 +549,20 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
             force=args.force,
         )
     return 0
+
+
+def _unchanged(source, bundle: SkillBundle, root: Path, entry: dict) -> bool:
+    """True when the source bundle equals the recorded copy and the copy has not drifted.
+
+    ``bundle.files`` is the policy-filtered set, so it is compared with the
+    manifest record rather than the raw source directory. A drifted copy (only
+    reachable here under --force) is never unchanged: --force must restore it.
+    """
+
+    if bundle_file_hashes(source, bundle) != entry["files"]:
+        return False
+    try:
+        verify_entry(root, entry)
+    except InstallError:
+        return False
+    return True

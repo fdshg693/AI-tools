@@ -357,3 +357,38 @@ def test_verify_link_entry_drift(tmp_path: Path) -> None:
     with pytest.raises(InstallError, match="real directory"):
         verify_link_entry(project, entry, force=True)
     assert (link / "SKILL.md").read_text(encoding="utf-8") == "mine\n"
+
+
+def test_verify_entry_lists_every_drifted_file_at_once(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    target = root / ".claude" / "skills" / "alpha"
+    (target / "references").mkdir(parents=True)
+    (target / "SKILL.md").write_text("original\n", encoding="utf-8")
+    (target / "references" / "guide.md").write_text("guide\n", encoding="utf-8")
+    (target / "gone.md").write_text("gone\n", encoding="utf-8")
+    files = tuple(PurePosixPath(p) for p in ("SKILL.md", "gone.md", "references/guide.md"))
+    entry = make_entry(
+        canonical_id="plugins/alpha/SKILL.md",
+        bundle_name="alpha",
+        target_name=None,
+        destination=".claude/skills",
+        install_path=target,
+        project_root=root,
+        source_descriptor={"type": "local", "path": str(tmp_path / "source")},
+        bundle=SkillBundle(
+            canonical_id="plugins/alpha/SKILL.md",
+            name="alpha",
+            directory=PurePosixPath("plugins/alpha"),
+            files=files,
+        ),
+    )
+    (target / "SKILL.md").write_text("edited\n", encoding="utf-8")
+    (target / "references" / "guide.md").write_text("edited\n", encoding="utf-8")
+    (target / "gone.md").unlink()
+    (target / "extra.txt").write_text("extra\n", encoding="utf-8")
+
+    with pytest.raises(InstallError) as caught:
+        verify_entry(root, entry)
+    assert str(caught.value).endswith(
+        "(modified: SKILL.md, references/guide.md; missing: gone.md; extra: extra.txt)"
+    )

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>設定</title>
+<style>body{font-family:system-ui,sans-serif;margin:1.5rem;max-width:36rem;} [hidden]{display:none!important;}</style>
+</head>
+<body>
+<main id="content" hidden>
+  <h1>設定</h1>
+  <nav aria-label="メインナビゲーション"><a href="home.html">マイページへ戻る</a></nav>
+  <div>
+    <label for="display-name">表示名</label>
+    <input type="text" id="display-name" name="display-name">
+  </div>
+  <button type="button" id="save">保存する</button>
+  <p id="saved" role="status" hidden>保存しました</p>
+</main>
+<p id="redirecting" role="status">ログインページへ移動しています…</p>
+<script>
+  if (!localStorage.getItem('demo-session')) {
+    location.replace('index.html');
+  } else {
+    document.getElementById('redirecting').hidden = true;
+    document.getElementById('content').hidden = false;
+  }
+  document.getElementById('save').addEventListener('click', () => {
+    document.getElementById('saved').hidden = false;
+  });
+</script>
+</body>
+</html>

@@ -27,6 +27,7 @@ from ..install.installer import (
 from ..models import ConfigError, InstallError
 from ..install.scope import InstallScope, ensure_outside_store, ensure_project_root_allowed
 from .arguments import (
+    _manifest_source_label,
     _add_runtime_arguments,
     _add_scope_arguments,
     _entry_matches_source,
@@ -220,11 +221,7 @@ def _command_hooks_installed(args: argparse.Namespace, cwd: Path, scope: Install
         print("hook_id\tagent\tinstall_dir\tregistered_in\tsource")
         for entry in entries:
             source = entry["source"]
-            source_label = (
-                f"local {source.get('path')}"
-                if source.get("type") == "local"
-                else f"github {source.get('owner')}/{source.get('repository')}@{source.get('ref')}"
-            )
+            source_label = _manifest_source_label(source, scope.root)
             files = sorted({item["file"] for item in entry["registrations"]}) or [
                 "(placement only)"
             ]

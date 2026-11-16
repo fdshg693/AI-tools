@@ -103,8 +103,14 @@ def test_skill_lifecycle_targets_project_dir_from_another_cwd(
     assert json.loads(capsys.readouterr().out) == []
 
     assert main(["update-skills", "--config", str(config), *scoped, "alpha"], cwd=elsewhere) == 0
-    assert "update\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha" in (
+    assert "unchanged\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha" in (
         capsys.readouterr().out
+    )
+    guide = source / "plugins" / "one" / "skills" / "alpha" / "references" / "guide.md"
+    guide.write_text("new guide\n", encoding="utf-8")
+    assert main(["update-skills", "--config", str(config), *scoped, "alpha"], cwd=elsewhere) == 0
+    assert capsys.readouterr().out.startswith(
+        "update\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha"
     )
 
     assert main(["remove-skills", *scoped, "alpha"], cwd=elsewhere) == 0
@@ -269,9 +275,16 @@ def test_global_skill_lifecycle_keeps_state_outside_home(
     assert json.loads(capsys.readouterr().out) == []
 
     assert main(["update-skills", "--global", "alpha"], cwd=elsewhere) == 0
-    assert "update\tplugins/one/skills/alpha/SKILL.md\t~/.claude/skills/alpha" in (
+    assert "unchanged\tplugins/one/skills/alpha/SKILL.md\t~/.claude/skills/alpha" in (
         capsys.readouterr().out
     )
+    guide = source / "plugins" / "one" / "skills" / "alpha" / "references" / "guide.md"
+    guide.write_text("new guide\n", encoding="utf-8")
+    assert main(["update-skills", "--global", "alpha"], cwd=elsewhere) == 0
+    assert capsys.readouterr().out.startswith(
+        "update\tplugins/one/skills/alpha/SKILL.md\t~/.claude/skills/alpha"
+    )
+    assert (installed / "references" / "guide.md").read_text(encoding="utf-8") == "new guide\n"
     assert main(["remove-skills", "--global", "alpha"], cwd=elsewhere) == 0
     assert "remove\tplugins/one/skills/alpha/SKILL.md\t~/.claude/skills/alpha" in (
         capsys.readouterr().out
@@ -405,3 +418,31 @@ def test_config_show_global(
     assert "skills.global_destination: .claude/skills" in out
     assert "self_skill: cwd/SKILL.md" not in out
     assert "config.project" not in out
+
+
+def test_project_install_warns_about_a_user_wide_copy(
+    isolated_home: dict[str, Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    make_repo,
+    write_config,
+) -> None:
+    project, _ = _dirs(tmp_path)
+    source = make_repo(tmp_path / "source")
+    global_config = user_config_path()
+    global_config.parent.mkdir(parents=True)
+    write_config(global_config, source, tmp_path / "index.json")
+
+    assert main(["install-skills", "beta"], cwd=project) == 0
+    assert "user-wide" not in capsys.readouterr().err
+    assert main(["install-skills", "--global", "alpha"], cwd=project) == 0
+    assert "user-wide" not in capsys.readouterr().err
+
+    assert main(["install-skills", "--dry-run", "alpha"], cwd=project) == 0
+    assert (
+        "warning: alpha is also installed user-wide (~/.claude/skills/alpha); "
+        "agents may load both copies" in capsys.readouterr().err
+    )
+    assert main(["install-skills", "alpha"], cwd=project) == 0
+    assert "also installed user-wide" in capsys.readouterr().err
+    assert (project / ".claude" / "skills" / "alpha" / "SKILL.md").is_file()

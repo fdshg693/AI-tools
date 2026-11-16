@@ -2,6 +2,8 @@
 
 **関連スキル: `tools/_plugin/my-tools/skills/tav-cli`**
 
+**Python ライブラリとして使う**: [docs/library.md](docs/library.md)（`tav_core.create_tavily_client` と各モジュールの `run_*_request` / `resolve_*_options` / `DETAIL_PRESETS`）。これらの公開関数を変えたら、同じ変更で docs/library.md を直す。
+
 このディレクトリは、Tavily SDK を **プロジェクト固有のデフォルト引数で固定した Python ラッパー** の実体です。AI や利用者には `--detail=quick|balanced|max` のような抽象化された少数引数だけ握らせ、Tavily SDK の細かいオプションはスクリプト側のプリセットでロックします。
 
 設計意図・実装の詳細はこのファイルに、AI に読ませる判断フローや命名規約は [tools/_plugin/my-tools/skills/tav-cli/SKILL.md](../../_plugin/my-tools/skills/tav-cli/SKILL.md) にあります。このファイルは **Python コードそのものの説明** に責務を絞っています。
@@ -179,7 +181,7 @@ content 系の `pages/index.json` が唯一の url↔ファイル対応表で、
 }
 ```
 
-`char_count` は書き出した `.md` ファイルの文字数(`len(markdown)`、`mslearn` の `index.md` が持つ文字数と同じ考え方)。後段はこれを見て、1件ずつ Read するか大きいものだけ `aim --parallel` にまとめて回すか判断する(`tav-digest` スキル参照)。
+`char_count` は書き出した `.md` ファイルの文字数(`len(markdown)`、`mslearn` の `index.md` が持つ文字数と同じ考え方)。後段はこれを見て、1件ずつ Read するか大きいものだけ `aim --parallel` にまとめて回すか判断する(`tav-cli` スキルの `digest.md` 参照)。
 
 後段で読むときは、content 系なら **`pages/index.json` を起点に各 `NNNN-<slug>.md` を辿る**(各 `.md` は `# title` + 本文)。discovery / report はファイル名が自己説明的なので `ls` で足り、そのファイルを直接読みます(report は成功時のみファイルが存在する。前景タイムアウト直後は空でも、背景ポーラの完了後に現れる場合がある)。`title` は content 系で必ず埋まる(既存タイトル保持 = `existing`、HTML 直 Fetch で補完 = `html`、URL 由来フォールバック = `url_fallback`。Tavily はタイトル取得に使わない)。トピックファイル / stdout に書く `result` は**役割ごとに投影**され調査に無関係な列(`raw_content`==None・空 `images`・取得メタ等)を落とします(生の全フィールドは監査ログに残る)。
 

@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.10
+  version: 1.2.12
 ---
 
 # skill-tools の使い方
@@ -31,7 +31,7 @@ meta:
 
 このCLIが判断を誤りやすいのは、次の2点を暗黙に推測**しない**設計だからである。
 
-- **対象は`ai-tools.yaml`登録分だけ。** `maintenance/plugin/`配下（`meta`・`discovering-skills`等）は未登録なので`list-skills`にも`search`結果にも出ない。「あるはずのスキルが出ない」ときはまずここを疑う。仕様どおりなので修正しない。
+- **対象は`ai-tools.yaml`登録分だけ。** `maintenance/plugin/`配下（`meta`・`discovering-skills`等）は未登録なので`list-skills`にも`search`結果にも出ない。「あるはずのスキルが出ない」ときはまずここを疑う。仕様どおりなので修正しない。未登録の`SKILL.md`をパス（canonical ID・絶対パス）で`install-skills`に渡すと、`skill not found`に`... is not registered in ai-tools.yaml`が付く。名前で渡したときは付かない
 - **sourceは実行時のCWDから推測しない。** 「今いるリポジトリのスキル」が対象になるわけではない。source（`local`のclone パス、または`github`のowner/repo/ref）とindexの位置は設定ファイルで決まる。CWDは「どのプロジェクトへ配置するか」にしか使わない。
 
 結果が想定と違うときは、何をやり直すより先に解決結果を出す。
@@ -111,7 +111,7 @@ skill-tools install-skills --global alpha --dry-run
 
 - 選択子は **source path / リポジトリ相対の canonical ID（`skills/plugins/.../SKILL.md`） / 一意なskill名** のいずれか。名前が一意でないときは canonical ID か source path を使う
 - 配置先はプロジェクトのルート基準（既定はCWD）。既定は`.claude/skills/<skill-name>/`。`.agents/skills/`等へ変えるなら`skill-tools.yaml`の`skills:`に canonical ID ごとの`destination`を書く
-- **配置先の切り替え（スコープ）:** 別のプロジェクトへ入れるなら`--project-dir <path>`（CWDではなくそのプロジェクトの`skill-tools.yaml`を重ねる）。**全プロジェクト共通で使いたいスキルは`--global`**（ホーム配下、既定は`~/.claude/skills/`。どこから実行してもプロジェクトの`skill-tools.yaml`は読まない）。2つは同時に付けられない。`installed-skills` / `update-skills` / `remove-skills`にも入れたときと同じスコープを付ける（グローバルの manifest は`SKILL_TOOLS_HOME/global`か`%LOCALAPPDATA%\skill-tools\global`等の別領域にある）
+- **配置先の切り替え（スコープ）:** 別のプロジェクトへ入れるなら`--project-dir <path>`（CWDではなくそのプロジェクトの`skill-tools.yaml`を重ねる）。**全プロジェクト共通で使いたいスキルは`--global`**（ホーム配下、既定は`~/.claude/skills/`。どこから実行してもプロジェクトの`skill-tools.yaml`は読まない）。2つは同時に付けられない。プロジェクトへ入れるスキルが`--global`にも入っていると`warning: <name> is also installed user-wide`が出る（続行する）。エージェントが両方読むので、どちらか一方でよいかユーザーに確認する。`installed-skills` / `update-skills` / `remove-skills`にも入れたときと同じスコープを付ける（グローバルの manifest は`SKILL_TOOLS_HOME/global`か`%LOCALAPPDATA%\skill-tools\global`等の別領域にある）
 - `--global`の配置先は`targets.<name>.global_destination` → `targets.<name>.destination` → トップレベル`global_destination` → `.claude/skills`の順で決まる。Antigravity（`~/.gemini/config/skills`）のようにプロジェクトとユーザーで相対パスが違うtargetだけ`global_destination`を書く。`skills.<id>.destination(s)`はプロジェクト専用で`--global`では使わない
 - **ホーム（またはその親）をプロジェクトのルートにした`install-skills` / `update-skills`は終了コード`2`で止まる。** ユーザーには`--global`を案内する。以前ホームで入れたものは、ホームで`remove-skills`してから`--global`で入れ直す（`installed-skills` / `remove-skills`はホームでも動く）
 - `--target name[,name...]`を指定すると、同じbundleを複数targetへ配置する。`targets.<name>.destination`がtargetの既定配置先で、`skills.<canonical-id>.destinations.<target>`がskill単位の上書き。target指定時の優先順位はskill target override → target既定 → legacy `skills.<id>.destination` → `.claude/skills`。`--target`未指定時はこれまでのdestination設定・既定値を維持する
@@ -134,10 +134,22 @@ skill-tools installed-skills --global
 ```
 
 - `installed-skills`はmanifestだけを読み、sourceやnetworkを参照しない
-- `update-skills`はmanifestを起点に同じsource identityのentryだけを扱う。GitHubは記録されたrefを再解決し、別repo/refへの暗黙切替は拒否する。catalogから消えたskillは削除せず警告する
+- `update-skills`はmanifestを起点に同じsource identityのentryだけを扱う。GitHubは記録されたrefを再解決し、別repo/refへの暗黙切替は拒否する。catalogから消えたskillは削除せず警告する。sourceの中身が記録と同じentryは`unchanged`と出して書き換えない（`--dry-run`も同じ）ので、`update` / `would update`の行だけが実際に変わるもの
 - `remove-skills`はmanifest entryだけを対象にし、source・catalog・networkを必要としない。未管理directoryは検索・削除しない
-- `update-skills` / `remove-skills`はhash drift・欠落・追加file・symlinkがあれば既定で中止する。`--force`は対象managed directory内の変更を置換・削除し得るため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
+- `update-skills` / `remove-skills`はhash drift・欠落・追加file・symlinkがあれば既定で中止する。エラーの`(modified: ...; missing: ...; extra: ...)`に該当ファイルがすべて出るので、ユーザーの編集を残すべきか確かめてから`--force`を選ぶ。`--force`は対象managed directory内の変更を置換・削除し得るため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
 - install-skills/update-skills/remove-skillsはjournalで中断を記録する。process termination時は次回managed操作でrollbackを試みるが、複数pathの完全な原子性や電断・storage障害時の復旧は保証しない
+
+### `sync-skills` — 設定に書いた一覧に揃える（clone 後のセットアップ）
+
+```powershell
+skill-tools sync-skills --dry-run
+skill-tools sync-skills
+```
+
+- 入れたいスキルを設定のトップレベル`install_skills: [self, <canonical ID>, <name>, ...]`に書くと、`sync-skills`が未管理のものを入れ、manifestにあって一覧から外れたものを消す。既存の管理スキルは触らない（更新は`update-skills`）。手で置いたスキルは消さない
+- リポジトリが`skill-tools.example.yaml`のようなサンプルに一覧を持っているなら、clone後は`cp skill-tools.example.yaml skill-tools.yaml && skill-tools sync-skills`で揃える。個別に`install-skills`を打ち直さない
+- 消すスキルにdriftがある・入れる先に未管理のディレクトリがある・一覧にカタログ外の選択子がある場合は、何も変えずに止まる（`--force` / `--overwrite`は`remove-skills` / `install-skills`と同じ意味）。`install_skills`が無い・空なら終了コード`2`
+- プロジェクトの一覧はグローバルの一覧を丸ごと置き換える（連結しない）。方式は`install_mode`、配置先は`--target`なしの`install-skills`と同じ
 
 ### `--mode link` / `store` — 共有ストアへのリンクで配る
 
@@ -228,7 +240,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 - **indexは既定で7日間キャッシュされる。** ただし各`build-index`実行時に登録スキルの本文hashと埋め込みmetadata hashを確認するため、変更は期間内でも反映される。変更が無く7日以内なら`Index is up to date: ...`を出し終了コード`0`で終わる。スキル追加・本文変更・metadata変更を反映するために`--force`は不要（日数を変えるなら`--max-age-days N`、`0`は常に再生成）
 - 再生成が走っても全件を埋め込み直すわけではない。埋め込み対象は各スキルの`name`と`description`だけで、本文は埋め込みAPIへ送られず、name/descriptionが変わっていない行は前回のベクトルを再利用する。本文は指定index pathのローカルcacheにだけ保持される。本文サイズが1 MiBを超えるスキルは語彙検索対象外になりstderrに警告する。本文をcacheから破棄するにはindexファイルを削除する
 - `search`はpure-Python BM25のUnicode語彙検索と既存の意味検索をRRFで統合する。JSONは`canonicalId`と一致語周辺の最大240文字の`snippet`を含み、tableにも`canonical_id`と`snippet`を表示する。本文全文やsnippetをrun logに記録しない。旧index schemaは`build-index`で再構築する
-- **index未作成・APIキー未設定・別sourceのindexは非ゼロ終了**であり、空結果として扱わない。一方、fingerprint不一致とindexの古さはstderrの警告にとどまり検索は成功するので、警告だけを理由に`build-index`をやり直さない
+- **index未作成・APIキー未設定・別sourceのindexは非ゼロ終了**であり、空結果として扱わない。一方、fingerprint不一致とindexの古さはstderrの警告にとどまり検索は成功するので、警告だけを理由に`build-index`をやり直さない。ただし`warning: N of M result(s) are not in the source's current catalog`（local sourceだけ）が出たら、その結果のIDは`install-skills`で`skill not found`になるので、`build-index`してから検索し直す
 - `--json`は`score` / `canonicalId` / `path` / `name` / `description` / `tool` / `plugin` / `status` / `snippet`を返す。`path`はlocalなら絶対パス、GitHubならblob URL、`canonicalId`はsource repo相対の`SKILL.md` path。table表示も`score` / `canonical_id` / `path` / `name` / `snippet`を含む。snippetは語彙一致がある場合だけ出る
 - local sourceのファイル列挙は`git ls-files`（チェックアウト済みのサブモジュールの中も列挙する）。git管理下でないディレクトリではディレクトリ走査へフォールバックし、gitignoreを解釈しないぶん`config show`のfingerprint計算が遅くなる。install時のコピー対象はこの列挙に加えてバンドルコピーの除外/包含ポリシー（`tools/skill-tools/.gitignore`と`.skill-tools`）で絞られる
 

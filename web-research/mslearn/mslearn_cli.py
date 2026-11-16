@@ -18,7 +18,7 @@ the building blocks in ``mslearn_core``:
 context isn't spent on page bodies it didn't ask to see yet. Each line in
 ``index.md`` carries its file's char count, so a caller can pick which
 results to Read by title and, among those, route only the large ones through
-`aim --parallel` instead (see the `ms-digest` skill) -- there is no whole-run
+`aim --parallel` instead (see `digest.md` in the `ms-learn` skill) -- there is no whole-run
 aggregate, since that number isn't actionable on its own. ``--json``
 switches to a single JSON object on stdout with the full content inline and
 skips file writing entirely, for piping into `jq` or another CLI.
