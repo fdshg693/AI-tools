@@ -1117,3 +1117,31 @@ def test_update_reports_unchanged_copies_and_force_restores_drift(
     assert main(["update-skills", "--config", str(config), "beta", "--force"], cwd=project) == 0
     assert capsys.readouterr().out.startswith("update\t")
     assert "changed" in installed.read_text(encoding="utf-8")
+
+
+def test_search_warns_when_results_are_missing_from_the_source_catalog(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config, embedder
+) -> None:
+    source = make_repo(tmp_path / "source")
+    index_path = tmp_path / "index.json"
+    config = write_config(tmp_path / "cfg.yaml", source, index_path)
+    assert main(["build-index", "--config", str(config)], cwd=tmp_path, embedder=embedder) == 0
+    capsys.readouterr()
+
+    assert main(["search", "--config", str(config), "--query", "alpha"], embedder=embedder) == 0
+    assert "out of sync" not in capsys.readouterr().err
+
+    # A fresh index whose IDs no longer exist: age alone would not warn.
+    old = source / "plugins" / "one" / "skills" / "alpha"
+    old.rename(source / "plugins" / "one" / "skills" / "alpha-moved")
+    assert (
+        main(["search", "--config", str(config), "--query", "alpha", "--json"], embedder=embedder)
+        == 0
+    )
+    captured = capsys.readouterr()
+    ids = [item["canonicalId"] for item in json.loads(captured.out)]
+    assert "plugins/one/skills/alpha/SKILL.md" in ids
+    assert f"warning: 1 of {len(ids)} result(s) are not in the source's current catalog" in (
+        captured.err
+    )
+    assert "skill-tools build-index" in captured.err
