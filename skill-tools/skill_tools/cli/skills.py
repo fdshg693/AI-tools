@@ -36,6 +36,7 @@ from ..install.scope import (
     ensure_project_root_allowed,
 )
 from .arguments import (
+    _manifest_source_label,
     _add_runtime_arguments,
     _add_scope_arguments,
     _entry_matches_source,
@@ -287,11 +288,7 @@ def _command_installed(args: argparse.Namespace, cwd: Path, scope: InstallScope)
         print("canonical_id\ttarget\tinstall_path\tsource\tmode")
         for entry in entries:
             source = entry["source"]
-            source_label = (
-                f"local {source.get('path')}"
-                if source.get("type") == "local"
-                else f"github {source.get('owner')}/{source.get('repository')}@{source.get('ref')}"
-            )
+            source_label = _manifest_source_label(source, scope.root)
             print(
                 f"{entry['canonicalId']}\t{entry['target'] or '(default)'}\t"
                 f"{entry['installPath']}\t{source_label}\t{entry['mode']}"

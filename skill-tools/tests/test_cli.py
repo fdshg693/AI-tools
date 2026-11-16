@@ -1170,3 +1170,21 @@ def test_install_explains_an_unregistered_skill_path(
     assert "not registered" not in err
     assert main(["install-skills", "--config", str(config), "nope/SKILL.md"], cwd=project) == 2
     assert "not registered" not in capsys.readouterr().err
+
+
+def test_installed_skills_shows_a_project_relative_source_as_absolute(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    source = make_repo(project / "source")
+    config = write_config(tmp_path / "cfg.yaml", source, tmp_path / "index.json")
+    assert main(["install-skills", "--config", str(config), "alpha"], cwd=project) == 0
+    capsys.readouterr()
+
+    assert main(["installed-skills", "--json"], cwd=project) == 0
+    assert json.loads(capsys.readouterr().out)[0]["source"]["path"] == "source"
+    assert main(["installed-skills"], cwd=project) == 0
+    row = capsys.readouterr().out.splitlines()[1].split("\t")
+    assert row[1] == "(default)"
+    assert row[3] == f"local {source.resolve()}"
