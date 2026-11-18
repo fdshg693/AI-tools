@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from vscode_profiles.errors import CliError
+from vscode_profiles.keys import check_selectors, select_keys
 from vscode_profiles.paths import resolve_user_data_dir
 from vscode_profiles.profiles import Profile, load_profiles, read_own_settings
 
@@ -78,13 +79,11 @@ def run_apply(
     destinations: Sequence[str],
     keys: Sequence[str],
     prefix: str | None,
+    exclude: Sequence[str] = (),
     write: bool,
     force: bool,
 ) -> int:
-    if prefix == "":
-        raise CliError("prefix must not be empty", code=2)
-    if any(key == "" for key in keys):
-        raise CliError("key must not be empty", code=2)
+    check_selectors(keys, prefix, exclude)
     if not keys and prefix is None:
         raise CliError("apply requires --key or --prefix", code=2)
 
@@ -101,7 +100,7 @@ def run_apply(
     for key in keys:
         if key not in source_values:
             raise CliError(f"key {key!r} is not in source profile {source_profile.name!r}")
-    selected = _selected_keys(source_values, keys, prefix)
+    selected = select_keys(source_values, keys, prefix, exclude)
     if not selected:
         raise CliError("no keys matched")
 
@@ -163,22 +162,6 @@ def _destinations(
     order = {profile.name: index for index, profile in enumerate(profiles)}
     chosen.sort(key=lambda profile: order[profile.name])
     return chosen, skips
-
-
-def _selected_keys(
-    source_values: Mapping[str, object],
-    keys: Sequence[str],
-    prefix: str | None,
-) -> list[str]:
-    wanted = set(keys)
-    found: list[str] = []
-    for key in sorted(source_values):
-        if wanted and key not in wanted:
-            continue
-        if prefix is not None and not key.startswith(prefix):
-            continue
-        found.append(key)
-    return found
 
 
 def _plan_destination(

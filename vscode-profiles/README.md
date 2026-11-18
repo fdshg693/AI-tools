@@ -29,6 +29,7 @@ vscode-profiles diff
 vscode-profiles diff --key editor.fontSize
 vscode-profiles diff --key editor.fontSize --key editor.tabSize
 vscode-profiles diff --prefix claudeCode.
+vscode-profiles diff --prefix claudeCode. --exclude-key claudeCode.environmentVariables
 vscode-profiles apply --from Default --to Python --key editor.fontSize
 vscode-profiles apply --from Default --to all --prefix claudeCode. --write
 vscode-profiles --user-data-dir D:\Code list
@@ -38,6 +39,7 @@ vscode-profiles --user-data-dir D:\Code list
 - `list` — プロファイル名、設定を継承しているか、独自設定のトップレベルキー数。設定値は出さない。
 - `diff` — 独自設定を持つプロファイルだけを比べる。キー名と状態だけ出す。
 - `--key` / `--prefix` — `diff` では付けたときだけ、そのキーの値も出す。`--key` は繰り返せる。両方付けたときは、名前が一致し、かつプレフィックスで始まるキーだけ。
+- `--exclude-key` — `diff` と `apply` で、選んだキーから外すトップレベルキー。繰り返せる。`--key` / `--prefix` が無い `diff` でも効く。
 - `apply` — ソースの指定キーを宛先へ上書きする。既定は変更予告だけで、`--write` のときだけファイルを変える。
 
 プロファイル名は台帳の `name`。デフォルトは `Default`。フォルダ id は、同名が複数あるときの失敗メッセージ以外には出さない。同名なら location を出して終了コード 1 で止まる。デフォルトの location 表示は `(default)`。
@@ -63,11 +65,11 @@ java	inherit	0
 
 比較している独自設定の和集合について、各キーを次のどれか一つにする。
 
-| 状態 | 意味 |
-| --- | --- |
-| `same` | 比較中の全員がそのキーを持ち、値が同じ |
-| `missing` | 一部に無く、持っているプロファイルの値は同じ |
-| `different` | 持っているプロファイル同士で値が違う |
+| 状態        | 意味                                         |
+| ----------- | -------------------------------------------- |
+| `same`      | 比較中の全員がそのキーを持ち、値が同じ       |
+| `missing`   | 一部に無く、持っているプロファイルの値は同じ |
+| `different` | 持っているプロファイル同士で値が違う         |
 
 キーも `--prefix` も無いときは `キー<TAB>状態` だけ。
 
@@ -84,7 +86,7 @@ editor.fontSize	same	{"Default": 14, "Python": 14}
 
 `--prefix` はトップレベルキーの前方一致。`claudeCode.` は `claudeCode.selectedModel` に一致し、`claudeCodeExtra` には一致しない。
 
-一致が0件のときは何も出さず終了コード 0。空の `--key` や `--prefix` は終了コード 2。
+一致が0件のときは何も出さず終了コード 0。空の `--key`・`--prefix`・`--exclude-key` は終了コード 2。
 
 ### `apply`
 
@@ -92,7 +94,7 @@ editor.fontSize	same	{"Default": 14, "Python": 14}
 
 `--to` は繰り返す。`--to all` は、独自設定を持つプロファイルのうちソース以外。継承プロファイルは含めず、`skip<TAB>名前` を出す。
 
-`--key` を繰り返すか、`--prefix` でソースに実在するトップレベルキーを選ぶ。前方一致は `diff` と同じ。宛先にしか無いキーは含めない。`--key` のどれかがソースに無ければ、宛先はどれも変えない。`--prefix` の一致が 0 件なら何も書かず失敗する。`--key` と `--prefix` を両方付けたときは、名前が一致し、かつプレフィックスで始まるキーだけ。キーもプレフィックスも無いときは終了コード 2。
+`--key` を繰り返すか、`--prefix` でソースに実在するトップレベルキーを選ぶ。前方一致は `diff` と同じ。宛先にしか無いキーは含めない。`--key` のどれかがソースに無ければ、宛先はどれも変えない。`--prefix` の一致が 0 件なら何も書かず失敗する。`--key` と `--prefix` を両方付けたときは、名前が一致し、かつプレフィックスで始まるキーだけ。`--exclude-key` に挙げたキーは最後に外す。外した結果 0 件なら何も書かず失敗する。キーもプレフィックスも無いときは終了コード 2。
 
 オブジェクトと配列は、そのトップレベルキーごと入れ替える。深いマージはしない。宛先の値が同じキーは `same` として数え、ファイルには書き戻さない。`true` と `1` は別の値。オブジェクトのキー順の違いだけでは `same`。
 
@@ -115,11 +117,11 @@ Python	files.eol	same	"\n"
 
 ## 終了コード
 
-| コード | 意味 |
-| --- | --- |
-| 0 | 成功 |
-| 1 | 台帳や設定を読めない、同名プロファイル、location がプロファイルディレクトリの外、`apply` のソース不足・継承の指定・編集不能・起動中の VS Code |
-| 2 | 使い方 |
+| コード | 意味                                                                                                                                          |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0      | 成功                                                                                                                                          |
+| 1      | 台帳や設定を読めない、同名プロファイル、location がプロファイルディレクトリの外、`apply` のソース不足・継承の指定・編集不能・起動中の VS Code |
+| 2      | 使い方                                                                                                                                        |
 
 ## ファイル構成
 
@@ -128,4 +130,5 @@ Python	files.eol	same	"\n"
 - `vscode_profiles/profiles.py` — ユーザーデータディレクトリ、台帳、設定パス
 - `vscode_profiles/jsonc.py` — JSONC の読み取り
 - `vscode_profiles/diff.py` — キーの状態
+- `vscode_profiles/keys.py` — `--key` / `--prefix` / `--exclude-key` によるキーの選択
 - `tests/` — 一時ディレクトリだけを使う

@@ -9,6 +9,7 @@ from pathlib import Path
 from vscode_profiles.apply import run_apply
 from vscode_profiles.diff import status_for, values_json
 from vscode_profiles.errors import CliError
+from vscode_profiles.keys import check_selectors, select_keys
 from vscode_profiles.paths import resolve_user_data_dir
 from vscode_profiles.profiles import load_profiles, read_own_settings
 
@@ -40,7 +41,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "list":
             return _cmd_list(args.user_data_dir)
         if args.command == "diff":
-            return _cmd_diff(args.user_data_dir, keys=args.key, prefix=args.prefix)
+            return _cmd_diff(
+                args.user_data_dir,
+                keys=args.key,
+                prefix=args.prefix,
+                exclude=args.exclude_key,
+            )
         if args.command == "apply":
             return run_apply(
                 args.user_data_dir,
@@ -48,6 +54,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 destinations=args.to,
                 keys=args.key,
                 prefix=args.prefix,
+                exclude=args.exclude_key,
                 write=args.write,
                 force=args.force,
             )
@@ -71,18 +78,20 @@ def _cmd_list(user_data_dir: Path | None) -> int:
     return 0
 
 
-def _cmd_diff(user_data_dir: Path | None, keys: list[str], prefix: str | None) -> int:
-    if prefix == "":
-        raise CliError("prefix must not be empty", code=2)
-    if any(key == "" for key in keys):
-        raise CliError("key must not be empty", code=2)
+def _cmd_diff(
+    user_data_dir: Path | None,
+    keys: list[str],
+    prefix: str | None,
+    exclude: list[str],
+) -> int:
+    check_selectors(keys, prefix, exclude)
     profiles = load_profiles(resolve_user_data_dir(user_data_dir))
     loaded = [
         (profile.name, read_own_settings(profile))
         for profile in profiles
         if not profile.inherits_settings
     ]
-    selected = _selected_keys(loaded, keys, prefix)
+    selected = select_keys({name for _, values in loaded for name in values}, keys, prefix, exclude)
     show_values = bool(keys) or prefix is not None
     for key in selected:
         status = status_for(loaded, key)
@@ -91,22 +100,6 @@ def _cmd_diff(user_data_dir: Path | None, keys: list[str], prefix: str | None) -
         else:
             print(f"{key}\t{status}")
     return 0
-
-
-def _selected_keys(
-    loaded: list[tuple[str, dict[str, object]]],
-    keys: list[str],
-    prefix: str | None,
-) -> list[str]:
-    wanted = set(keys)
-    found: list[str] = []
-    for key in sorted({name for _, values in loaded for name in values}):
-        if wanted and key not in wanted:
-            continue
-        if prefix is not None and not key.startswith(prefix):
-            continue
-        found.append(key)
-    return found
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -134,6 +127,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="top-level keys that start with this prefix; also prints values",
     )
+    _add_exclude(diff)
     apply = sub.add_parser("apply", help="overwrite selected keys from a source profile")
     apply.add_argument("--from", dest="source", required=True, help="profile that supplies values")
     apply.add_argument(
@@ -151,6 +145,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="top-level source keys that start with this prefix",
     )
+    _add_exclude(apply)
     apply.add_argument("--write", action="store_true", help="write destination settings.json files")
     apply.add_argument(
         "--force",
@@ -158,3 +153,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="write even if VS Code stable (Code) is running",
     )
     return parser
+
+
+def _add_exclude(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--exclude-key",
+        action="append",
+        default=[],
+        help="top-level key to leave out of the selection; repeatable",
+    )
