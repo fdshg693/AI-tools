@@ -12,6 +12,7 @@ from vscode_profiles.errors import CliError
 from vscode_profiles.keys import check_selectors, select_keys
 from vscode_profiles.paths import resolve_user_data_dir
 from vscode_profiles.profiles import Profile, load_profiles, read_own_settings
+from vscode_profiles.script import EmitScript
 from vscode_profiles.wsl import wsl_machine_profile
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -64,6 +65,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 write=args.write,
                 force=args.force,
                 machines=machines,
+                emit=_emit_script(args),
             )
         if args.command == "remove":
             return run_remove(
@@ -76,6 +78,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 write=args.write,
                 force=args.force,
                 machines=machines,
+                emit=_emit_script(args),
             )
     except CliError as exc:
         print(str(exc), file=sys.stderr)
@@ -210,12 +213,55 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _emit_script(args: argparse.Namespace) -> EmitScript | None:
+    if args.emit_ps1 is None:
+        return None
+    command = _write_command(args)
+    comment = " ".join(command[3:])
+    return EmitScript(path=args.emit_ps1.resolve(), command=tuple(command), comment=comment)
+
+
+def _write_command(args: argparse.Namespace) -> list[str]:
+    """The same apply/remove run with --write, runnable without uv from any directory."""
+    command = [sys.executable, "-m", "vscode_profiles"]
+    if args.user_data_dir is not None:
+        command += ["--user-data-dir", str(args.user_data_dir.resolve())]
+    for distro in args.wsl:
+        command += ["--wsl", distro]
+    command.append(args.command)
+    if args.command == "apply":
+        command += ["--from", args.source]
+        for name in args.to:
+            command += ["--to", name]
+    else:
+        for name in args.profile:
+            command += ["--profile", name]
+    for key in args.key:
+        command += ["--key", key]
+    if args.prefix is not None:
+        command += ["--prefix", args.prefix]
+    for key in args.exclude_key:
+        command += ["--exclude-key", key]
+    if args.mask:
+        command.append("--mask")
+    command.append("--write")
+    return command
+
+
 def _add_write(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--write", action="store_true", help="write the settings.json files")
     parser.add_argument(
         "--force",
         action="store_true",
         help="write even if VS Code stable (Code) is running",
+    )
+    parser.add_argument(
+        "--emit-ps1",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="append the same run with --write to a PowerShell script for an external "
+        "terminal (only when something would change)",
     )
 
 

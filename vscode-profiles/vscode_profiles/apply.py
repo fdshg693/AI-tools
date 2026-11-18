@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import subprocess
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +15,7 @@ from vscode_profiles.diff import mask_value
 from vscode_profiles.errors import CliError
 from vscode_profiles.keys import check_selectors, select_keys
 from vscode_profiles.paths import resolve_user_data_dir
+from vscode_profiles.script import EmitScript, append_command
 from vscode_profiles.profiles import Profile, load_profiles, read_own_settings
 
 
@@ -85,6 +87,7 @@ def run_apply(
     write: bool,
     force: bool,
     machines: Sequence[Profile] = (),
+    emit: EmitScript | None = None,
 ) -> int:
     check_selectors(keys, prefix, exclude)
     if not keys and prefix is None:
@@ -110,7 +113,7 @@ def run_apply(
     planned: list[_Planned] = []
     for profile in chosen:
         planned.append(_plan_destination(profile, selected, source_values, mask=mask))
-    return _finish(planned, skips, write=write, force=force)
+    return _finish(planned, skips, write=write, force=force, emit=emit)
 
 
 def run_remove(
@@ -124,6 +127,7 @@ def run_remove(
     write: bool,
     force: bool,
     machines: Sequence[Profile] = (),
+    emit: EmitScript | None = None,
 ) -> int:
     check_selectors(keys, prefix, exclude)
     if not keys and prefix is None:
@@ -155,12 +159,19 @@ def run_remove(
         except CliError as exc:
             raise CliError(f"cannot edit settings for profile {profile.name!r}: {exc}") from exc
         planned.append(_Planned(profile, original, new_text, tuple(lines)))
-    return _finish(planned, skips, write=write, force=force)
+    return _finish(planned, skips, write=write, force=force, emit=emit)
 
 
 def _finish(
-    planned: Sequence[_Planned], skips: Sequence[Profile], *, write: bool, force: bool
+    planned: Sequence[_Planned],
+    skips: Sequence[Profile],
+    *,
+    write: bool,
+    force: bool,
+    emit: EmitScript | None = None,
 ) -> int:
+    if write and emit is not None:
+        raise CliError("--emit-ps1 cannot be combined with --write", code=2)
     pending = [item for item in planned if item.new_text != item.original]
     if write and pending and not force and code_process_running():
         raise CliError("VS Code stable (Code) is running; pass --force to write")
@@ -172,6 +183,12 @@ def _finish(
             print(line)
     if write and pending:
         _write_all(pending)
+    if emit is not None:
+        if pending:
+            append_command(emit.path, emit.command, emit.comment)
+            print(f"script	{emit.path}")
+        else:
+            print("nothing to write; script not changed", file=sys.stderr)
     return 0
 
 

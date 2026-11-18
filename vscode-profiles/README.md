@@ -167,6 +167,22 @@ azure	claudeCode.environmentVariables	remove	[{"name": "***", "value": "***"}]
 
 キーの行ごと消し、前後のコメントと他のキーは残す。最後のキーを消して直前のキーに末尾カンマだけが残るときは、そのカンマも消す（元から末尾カンマの書き方なら残す）。バックアップ・置換・失敗時の復元・起動中の VS Code の扱いは `apply --write` と同じ。
 
+### 外部ターミナル用のスクリプト（`--emit-ps1`）
+
+`--write` は VS Code を閉じないと失敗するので、VS Code の拡張の中で動くエージェントからは書けない。`apply` / `remove` に `--emit-ps1 <パス>` を付けると、いつもの予告を出したうえで、同じ指定に `--write` を足したコマンドを PowerShell スクリプトに追記する。VS Code を閉じてから外部ターミナルで `pwsh -File <パス>` を実行する。
+
+```powershell
+vscode-profiles apply --from Default --to all --prefix claudeCode. --exclude-key claudeCode.environmentVariables --emit-ps1 apply.ps1
+vscode-profiles remove --profile azure --key claudeCode.environmentVariables --mask --emit-ps1 apply.ps1
+```
+
+- ファイルが無ければ、`Code.exe` が動いていたら止める行を先頭に置いて作る（UTF-8 BOM 付き・CRLF）。あれば末尾にコマンドを足すので、複数の操作を 1 本にまとめられる
+- 変える宛先が無い（全部 `same` / `absent`）ときは書かず、標準エラーに `nothing to write` を出す。書いたときは標準出力の最後に `script<TAB>パス` を出す
+- コマンドは今の Python（`sys.executable`）で `-m vscode_profiles` を呼ぶ。`uv` も `vscode-profiles` の global インストールも要らず、どのディレクトリからでも動く。`--user-data-dir` は絶対パスにする
+- `--force` は入れない。各コマンドが失敗したらスクリプトもそこで止まる
+- `--write` と一緒には使えない（終了コード 2）
+- スクリプトには値は入らない（キー名・プロファイル名だけ）。書き込む値は実行時にソースから読む
+
 `storage.json`、キーバインド、スニペットは読んでも書かない。コメント、触らないキー、キー順、末尾カンマは残す。足すキーはトップレベルの末尾に置く。
 
 ## 終了コード
@@ -185,5 +201,6 @@ azure	claudeCode.environmentVariables	remove	[{"name": "***", "value": "***"}]
 - `vscode_profiles/jsonc.py` — JSONC の読み取り
 - `vscode_profiles/diff.py` — キーの状態、値の伏せ字
 - `vscode_profiles/wsl.py` — `--wsl` の Machine 設定のパス解決
+- `vscode_profiles/script.py` — `--emit-ps1` の PowerShell スクリプト
 - `vscode_profiles/keys.py` — `--key` / `--prefix` / `--exclude-key` によるキーの選択
 - `tests/` — 一時ディレクトリだけを使う
