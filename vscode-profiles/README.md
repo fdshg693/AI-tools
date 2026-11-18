@@ -31,6 +31,7 @@ vscode-profiles diff --key editor.fontSize --key editor.tabSize
 vscode-profiles diff --prefix claudeCode.
 vscode-profiles diff --prefix claudeCode. --exclude-key claudeCode.environmentVariables
 vscode-profiles diff --key claudeCode.environmentVariables --mask
+vscode-profiles diff --prefix claudeCode. --by-profile
 vscode-profiles apply --from Default --to Python --key editor.fontSize
 vscode-profiles apply --from Default --to all --prefix claudeCode. --write
 vscode-profiles --user-data-dir D:\Code list
@@ -91,6 +92,14 @@ editor.fontSize	same	{"Default": 14, "Python": 14}
 ```text
 claudeCode.environmentVariables	missing	{"Default": [{"name": "***", "value": "***"}], "Python": null}
 ```
+
+`--by-profile` を付けると、3列目は値の代わりに、プロファイル名から「値のグループ番号」への JSON オブジェクトになる。同じ値のプロファイルは同じ番号（並び順で先に現れた値から 1, 2, …）、キーが無いプロファイルは `null`。値は一切出さないので、秘密を含むキーでも `apply` の宛先を決められる。`--key` / `--prefix` / `--mask` と一緒に付けても値は出さない。
+
+```text
+claudeCode.selectedModel	different	{"Default": 1, "Node": null, "Python": 2, "azure": 1}
+```
+
+値の比較は JSON として行う。`true` と `1` は別の値で、オブジェクトのキー順の違いだけなら同じ値（`apply` と同じ）。
 
 `--prefix` はトップレベルキーの前方一致。`claudeCode.` は `claudeCode.selectedModel` に一致し、`claudeCodeExtra` には一致しない。
 

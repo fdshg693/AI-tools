@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from vscode_profiles.apply import run_apply
-from vscode_profiles.diff import status_for, values_json
+from vscode_profiles.diff import groups_json, status_for, values_json
 from vscode_profiles.errors import CliError
 from vscode_profiles.keys import check_selectors, select_keys
 from vscode_profiles.paths import resolve_user_data_dir
@@ -47,6 +47,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 prefix=args.prefix,
                 exclude=args.exclude_key,
                 mask=args.mask,
+                by_profile=args.by_profile,
             )
         if args.command == "apply":
             return run_apply(
@@ -86,6 +87,7 @@ def _cmd_diff(
     prefix: str | None,
     exclude: list[str],
     mask: bool,
+    by_profile: bool = False,
 ) -> int:
     check_selectors(keys, prefix, exclude)
     profiles = load_profiles(resolve_user_data_dir(user_data_dir))
@@ -98,7 +100,9 @@ def _cmd_diff(
     show_values = bool(keys) or prefix is not None
     for key in selected:
         status = status_for(loaded, key)
-        if show_values:
+        if by_profile:
+            print(f"{key}\t{status}\t{groups_json(loaded, key)}")
+        elif show_values:
             print(f"{key}\t{status}\t{values_json(loaded, key, mask=mask)}")
         else:
             print(f"{key}\t{status}")
@@ -132,6 +136,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_exclude(diff)
     _add_mask(diff)
+    diff.add_argument(
+        "--by-profile",
+        action="store_true",
+        help="print which profiles have each key as value-group numbers, never the values",
+    )
     apply = sub.add_parser("apply", help="overwrite selected keys from a source profile")
     apply.add_argument("--from", dest="source", required=True, help="profile that supplies values")
     apply.add_argument(

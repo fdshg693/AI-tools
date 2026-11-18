@@ -32,6 +32,21 @@ def values_json(
     return "{" + ", ".join(parts) + "}"
 
 
+def groups_json(loaded: Sequence[tuple[str, Mapping[str, object]]], key: str) -> str:
+    """Map each profile to a value-group number (1, 2, ... by first appearance) or null."""
+    groups: dict[str, int] = {}
+    parts: list[str] = []
+    for name, values in loaded:
+        encoded_name = json.dumps(name, ensure_ascii=False)
+        if key not in values:
+            parts.append(f"{encoded_name}: null")
+            continue
+        canonical = _canonical(values[key])
+        number = groups.setdefault(canonical, len(groups) + 1)
+        parts.append(f"{encoded_name}: {number}")
+    return "{" + ", ".join(parts) + "}"
+
+
 def mask_value(value: object) -> object:
     """Hide strings but keep the shape: object keys, array lengths, numbers, booleans, null."""
     if isinstance(value, str):
@@ -43,5 +58,12 @@ def mask_value(value: object) -> object:
     return value
 
 
+def _canonical(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
 def _values_differ(values: list[object]) -> bool:
-    return any(value != values[0] for value in values[1:])
+    if not values:
+        return False
+    first = _canonical(values[0])
+    return any(_canonical(value) != first for value in values[1:])
