@@ -1,6 +1,6 @@
 # vscode-profiles
 
-VS Code stable のユーザープロファイルごとに、`settings.json` のトップレベルキーの有無と差を見る。指定したキーは、ソースのプロファイルの値で宛先へ上書きできる。
+VS Code stable のユーザープロファイルごとに、`settings.json` のトップレベルキーの有無と差を見る。指定したキーは、ソースのプロファイルの値で宛先へ上書きしたり、プロファイルから消したりできる。WSL の VS Code Server の Machine 設定も疑似プロファイルとして並べられる。
 
 ワークスペースの `.vscode/settings.json`、拡張機能の有効化、キーバインド、Cursor、Insiders は対象外。
 
@@ -11,6 +11,10 @@ VS Code stable のユーザープロファイルごとに、`settings.json` の�
 ```powershell
 uv tool install --editable tools/vscode-profiles
 ```
+
+global インストールをしていなくても、アンブレラの uv workspace に入っているので、リポジトリ内なら `uv run vscode-profiles ...` で動く。外部ターミナルで `--write` するときは、`--emit-ps1` が出すスクリプトを使えばどちらも要らない。
+
+Windows では PowerShell から実行する。Git Bash（MSYS）は引数の `\\wsl$\...` のような UNC パスの先頭の `\\` を `\` に潰すので、`--user-data-dir` に UNC パスを渡すと別のパスを読んで `storage.json is missing` などで失敗する。WSL の Machine 設定は UNC パスを書かずに `--wsl <名前>` で指定する。
 
 テストはリポジトリルートから実行する。一時ディレクトリのフィクスチャだけを使い、実在のユーザーデータは開かない。
 
