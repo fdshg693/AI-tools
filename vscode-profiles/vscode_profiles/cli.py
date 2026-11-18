@@ -6,7 +6,7 @@ import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
-from vscode_profiles.apply import run_apply
+from vscode_profiles.apply import run_apply, run_remove
 from vscode_profiles.diff import groups_json, status_for, values_json
 from vscode_profiles.errors import CliError
 from vscode_profiles.keys import check_selectors, select_keys
@@ -54,6 +54,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.user_data_dir,
                 source=args.source,
                 destinations=args.to,
+                keys=args.key,
+                prefix=args.prefix,
+                exclude=args.exclude_key,
+                mask=args.mask,
+                write=args.write,
+                force=args.force,
+            )
+        if args.command == "remove":
+            return run_remove(
+                args.user_data_dir,
+                targets=args.profile,
                 keys=args.key,
                 prefix=args.prefix,
                 exclude=args.exclude_key,
@@ -160,13 +171,35 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_exclude(apply)
     _add_mask(apply)
-    apply.add_argument("--write", action="store_true", help="write destination settings.json files")
-    apply.add_argument(
+    _add_write(apply)
+    remove = sub.add_parser("remove", help="delete selected top-level keys from profiles")
+    remove.add_argument(
+        "--profile",
+        action="append",
+        required=True,
+        help="profile to edit; repeat, or pass all for every own profile",
+    )
+    remove.add_argument(
+        "--key", action="append", default=[], help="top-level key to delete; repeatable"
+    )
+    remove.add_argument(
+        "--prefix",
+        default=None,
+        help="top-level keys that start with this prefix",
+    )
+    _add_exclude(remove)
+    _add_mask(remove)
+    _add_write(remove)
+    return parser
+
+
+def _add_write(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--write", action="store_true", help="write the settings.json files")
+    parser.add_argument(
         "--force",
         action="store_true",
         help="write even if VS Code stable (Code) is running",
     )
-    return parser
 
 
 def _add_exclude(parser: argparse.ArgumentParser) -> None:

@@ -44,6 +44,7 @@ vscode-profiles --user-data-dir D:\Code list
 - `--exclude-key` — `diff` と `apply` で、選んだキーから外すトップレベルキー。繰り返せる。`--key` / `--prefix` が無い `diff` でも効く。
 - `--mask` — `diff` と `apply` で、出力する値の中の文字列を `"***"` に置き換える。オブジェクトのキー名、配列の長さ、数値・真偽値・`null` は残す。状態（`same` など）の判定は伏せる前の値で行う。トークンを含みうる `claudeCode.environmentVariables` のようなキーを見るときに付ける。
 - `apply` — ソースの指定キーを宛先へ上書きする。既定は変更予告だけで、`--write` のときだけファイルを変える。
+- `remove` — 指定キーをプロファイルから消す。予告と `--write` は `apply` と同じ。
 
 プロファイル名は台帳の `name`。デフォルトは `Default`。フォルダ id は、同名が複数あるときの失敗メッセージ以外には出さない。同名なら location を出して終了コード 1 で止まる。デフォルトの location 表示は `(default)`。
 
@@ -130,20 +131,41 @@ Python	files.eol	same	"\n"
 
 `--write` は VS Code stable（Windows では `Code.exe`、それ以外ではプロセス名 `Code` または `code`）が動いていて、実際に変えるキーがあるとき失敗する。`--force` のときだけ続行する。同じ値しか無い実行はプロセスを見ない。
 
+### `remove`
+
+指定したトップレベルキーをプロファイルの独自 `settings.json` から消す。既定は予告だけで、`--write` のときだけファイルを変える。
+
+```powershell
+vscode-profiles remove --profile azure --key claudeCode.environmentVariables --mask
+vscode-profiles remove --profile all --key claudeCode.environmentVariables --write
+```
+
+`--profile` は繰り返す。`--profile all` は独自設定を持つ全プロファイルで、継承プロファイルは `skip<TAB>名前` を出す。継承プロファイルを名指しすると失敗する。キーの選び方（`--key` / `--prefix` / `--exclude-key`）は `apply` と同じで、候補は対象プロファイルが持つキーの和集合。一致が 0 件なら失敗する。
+
+```text
+skip	java
+Default	claudeCode.environmentVariables	absent
+azure	claudeCode.environmentVariables	remove	[{"name": "***", "value": "***"}]
+```
+
+列は `プロファイル`、`キー`、`remove` / `absent`、`remove` のときだけ今の値（JSON。`--mask` で文字列を伏せる）。`absent` はそのプロファイルに無いキーで、何もしない。全員 `absent` なら書き込みもプロセス確認もせず終了コード 0。
+
+キーの行ごと消し、前後のコメントと他のキーは残す。最後のキーを消して直前のキーに末尾カンマだけが残るときは、そのカンマも消す（元から末尾カンマの書き方なら残す）。バックアップ・置換・失敗時の復元・起動中の VS Code の扱いは `apply --write` と同じ。
+
 `storage.json`、キーバインド、スニペットは読んでも書かない。コメント、触らないキー、キー順、末尾カンマは残す。足すキーはトップレベルの末尾に置く。
 
 ## 終了コード
 
-| コード | 意味                                                                                                                                          |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0      | 成功                                                                                                                                          |
-| 1      | 台帳や設定を読めない、同名プロファイル、location がプロファイルディレクトリの外、`apply` のソース不足・継承の指定・編集不能・起動中の VS Code |
-| 2      | 使い方                                                                                                                                        |
+| コード | 意味                                                                                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0      | 成功                                                                                                                                                                |
+| 1      | 台帳や設定を読めない、同名プロファイル、location がプロファイルディレクトリの外、`apply` / `remove` のソース不足・継承の指定・一致 0 件・編集不能・起動中の VS Code |
+| 2      | 使い方                                                                                                                                                              |
 
 ## ファイル構成
 
-- `vscode_profiles/cli.py` — `list` / `diff` / `apply` / `--version`
-- `vscode_profiles/apply.py` — キーの上書き、JSONC を保持した編集、バックアップ
+- `vscode_profiles/cli.py` — `list` / `diff` / `apply` / `remove` / `--version`
+- `vscode_profiles/apply.py` — キーの上書きと削除、JSONC を保持した編集、バックアップ
 - `vscode_profiles/profiles.py` — ユーザーデータディレクトリ、台帳、設定パス
 - `vscode_profiles/jsonc.py` — JSONC の読み取り
 - `vscode_profiles/diff.py` — キーの状態、値の伏せ字

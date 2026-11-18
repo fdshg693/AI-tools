@@ -109,7 +109,56 @@ def run_apply(
     planned: list[_Planned] = []
     for profile in chosen:
         planned.append(_plan_destination(profile, selected, source_values, mask=mask))
+    return _finish(planned, skips, write=write, force=force)
 
+
+def run_remove(
+    user_data_dir: Path | None,
+    *,
+    targets: Sequence[str],
+    keys: Sequence[str],
+    prefix: str | None,
+    exclude: Sequence[str] = (),
+    mask: bool = False,
+    write: bool,
+    force: bool,
+) -> int:
+    check_selectors(keys, prefix, exclude)
+    if not keys and prefix is None:
+        raise CliError("remove requires --key or --prefix", code=2)
+
+    profiles = load_profiles(resolve_user_data_dir(user_data_dir))
+    chosen, skips = _destinations(profiles, None, targets)
+    current = {profile.name: read_own_settings(profile) for profile in chosen}
+    candidates = {key for values in current.values() for key in values} | set(keys)
+    selected = select_keys(candidates, keys, prefix, exclude)
+    if not selected:
+        raise CliError("no keys matched")
+
+    planned: list[_Planned] = []
+    for profile in chosen:
+        values = current[profile.name]
+        original = _read_settings_text(profile)
+        lines: list[str] = []
+        removing: list[str] = []
+        for key in selected:
+            if key not in values:
+                lines.append(f"{profile.name}\t{key}\tabsent")
+                continue
+            shown = mask_value(values[key]) if mask else values[key]
+            lines.append(f"{profile.name}\t{key}\tremove\t{_dumps(shown)}")
+            removing.append(key)
+        try:
+            new_text = remove_settings_keys(original, removing)
+        except CliError as exc:
+            raise CliError(f"cannot edit settings for profile {profile.name!r}: {exc}") from exc
+        planned.append(_Planned(profile, original, new_text, tuple(lines)))
+    return _finish(planned, skips, write=write, force=force)
+
+
+def _finish(
+    planned: Sequence[_Planned], skips: Sequence[Profile], *, write: bool, force: bool
+) -> int:
     pending = [item for item in planned if item.new_text != item.original]
     if write and pending and not force and code_process_running():
         raise CliError("VS Code stable (Code) is running; pass --force to write")
@@ -134,7 +183,7 @@ class _Planned:
 
 def _destinations(
     profiles: Sequence[Profile],
-    source_name: str,
+    source_name: str | None,
     names: Sequence[str],
 ) -> tuple[list[Profile], list[Profile]]:
     by_name = {profile.name: profile for profile in profiles}
@@ -280,6 +329,48 @@ class _Document:
     order: tuple[str, ...]
     close: int
     indent: str
+    key_starts: dict[str, int]
+
+
+def remove_settings_keys(text: str, removing: Sequence[str]) -> str:
+    """Remove top-level keys, keeping comments, other keys, and the comma style."""
+    for key in removing:
+        text = _remove_one(text, key)
+    return text
+
+
+def _remove_one(text: str, key: str) -> str:
+    document = _scan(text)
+    if key not in document.keys:
+        raise CliError(f"could not locate top-level key {key!r}")
+    index = document.order.index(key)
+    start = document.key_starts[key]
+    value_end = document.keys[key][1]
+    after = _Scanner(text)
+    after.i = value_end
+    after.skip_ws_and_comments()
+    if after.peek() == ",":
+        end = after.i + 1
+    else:
+        end = value_end
+        if index > 0:
+            # Last key without a trailing comma: drop the comma that preceded it.
+            previous_end = document.keys[document.order[index - 1]][1]
+            before = _Scanner(text)
+            before.i = previous_end
+            before.skip_ws_and_comments()
+            if before.peek() == "," and before.i < start:
+                comma = before.i
+                text = text[:comma] + text[comma + 1 :]
+                start -= 1
+                end -= 1
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    rest = text[end:] if line_end == -1 else text[end:line_end]
+    if text[line_start:start].strip(" \t") == "" and rest.strip(" \t\r") == "":
+        start = line_start
+        end = len(text) if line_end == -1 else line_end + 1
+    return text[:start] + text[end:]
 
 
 def edit_settings(text: str, changes: Mapping[str, object], replacing: set[str]) -> str:
@@ -359,6 +450,7 @@ def _scan(text: str) -> _Document:
         raise CliError("could not locate the top-level object")
     scanner.i += 1
     keys: dict[str, tuple[int, int]] = {}
+    key_starts: dict[str, int] = {}
     order: list[str] = []
     while True:
         scanner.skip_ws_and_comments()
@@ -369,6 +461,7 @@ def _scan(text: str) -> _Document:
             break
         if scanner.peek() != '"':
             raise CliError("could not locate a top-level key")
+        key_start = scanner.i
         key = scanner.read_string()
         if key in keys:
             raise CliError(f"duplicate top-level key {key!r}")
@@ -378,11 +471,12 @@ def _scan(text: str) -> _Document:
         scanner.i += 1
         start, end = scanner.read_value_span()
         keys[key] = (start, end)
+        key_starts[key] = key_start
         order.append(key)
         scanner.skip_ws_and_comments()
         if scanner.peek() == ",":
             scanner.i += 1
-    return _Document(keys, tuple(order), close, _detect_indent(text))
+    return _Document(keys, tuple(order), close, _detect_indent(text), key_starts)
 
 
 class _Scanner:
