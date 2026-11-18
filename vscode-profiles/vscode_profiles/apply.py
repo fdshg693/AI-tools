@@ -84,12 +84,13 @@ def run_apply(
     mask: bool = False,
     write: bool,
     force: bool,
+    machines: Sequence[Profile] = (),
 ) -> int:
     check_selectors(keys, prefix, exclude)
     if not keys and prefix is None:
         raise CliError("apply requires --key or --prefix", code=2)
 
-    profiles = load_profiles(resolve_user_data_dir(user_data_dir))
+    profiles = load_profiles(resolve_user_data_dir(user_data_dir), machines)
     by_name = {profile.name: profile for profile in profiles}
     source_profile = by_name.get(source)
     if source_profile is None:
@@ -122,12 +123,13 @@ def run_remove(
     mask: bool = False,
     write: bool,
     force: bool,
+    machines: Sequence[Profile] = (),
 ) -> int:
     check_selectors(keys, prefix, exclude)
     if not keys and prefix is None:
         raise CliError("remove requires --key or --prefix", code=2)
 
-    profiles = load_profiles(resolve_user_data_dir(user_data_dir))
+    profiles = load_profiles(resolve_user_data_dir(user_data_dir), machines)
     chosen, skips = _destinations(profiles, None, targets)
     current = {profile.name: read_own_settings(profile) for profile in chosen}
     candidates = {key for values in current.values() for key in values} | set(keys)
@@ -272,6 +274,8 @@ def _dumps(value: object, *, sort_keys: bool = False) -> str:
 
 def _read_settings_text(profile: Profile) -> str:
     path = profile.settings_path
+    if profile.machine and not path.exists():
+        return "{}\n"
     try:
         return path.read_bytes().decode("utf-8")
     except OSError as exc:
@@ -285,8 +289,7 @@ def _write_all(pending: Sequence[_Planned]) -> None:
     root = user_cache_dir() / "backups" / stamp
     staged: list[tuple[_Planned, Path]] = []
     for item in pending:
-        folder = "Default" if item.profile.location is None else item.profile.location
-        backup = root / folder / "settings.json"
+        backup = root / item.profile.backup_folder / "settings.json"
         try:
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_bytes(item.original.encode("utf-8"))

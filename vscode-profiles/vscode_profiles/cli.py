@@ -11,7 +11,8 @@ from vscode_profiles.diff import groups_json, status_for, values_json
 from vscode_profiles.errors import CliError
 from vscode_profiles.keys import check_selectors, select_keys
 from vscode_profiles.paths import resolve_user_data_dir
-from vscode_profiles.profiles import load_profiles, read_own_settings
+from vscode_profiles.profiles import Profile, load_profiles, read_own_settings
+from vscode_profiles.wsl import wsl_machine_profile
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
@@ -38,8 +39,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_usage(sys.stderr)
         return 2
     try:
+        machines = [wsl_machine_profile(distro) for distro in args.wsl]
         if args.command == "list":
-            return _cmd_list(args.user_data_dir)
+            return _cmd_list(args.user_data_dir, machines)
         if args.command == "diff":
             return _cmd_diff(
                 args.user_data_dir,
@@ -48,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 exclude=args.exclude_key,
                 mask=args.mask,
                 by_profile=args.by_profile,
+                machines=machines,
             )
         if args.command == "apply":
             return run_apply(
@@ -60,6 +63,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 mask=args.mask,
                 write=args.write,
                 force=args.force,
+                machines=machines,
             )
         if args.command == "remove":
             return run_remove(
@@ -71,6 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 mask=args.mask,
                 write=args.write,
                 force=args.force,
+                machines=machines,
             )
     except CliError as exc:
         print(str(exc), file=sys.stderr)
@@ -79,10 +84,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 2
 
 
-def _cmd_list(user_data_dir: Path | None) -> int:
-    profiles = load_profiles(resolve_user_data_dir(user_data_dir))
+def _cmd_list(user_data_dir: Path | None, machines: Sequence[Profile] = ()) -> int:
+    profiles = load_profiles(resolve_user_data_dir(user_data_dir), machines)
     for profile in profiles:
-        if profile.inherits_settings:
+        if profile.machine:
+            kind = "machine"
+            count = len(read_own_settings(profile))
+        elif profile.inherits_settings:
             kind = "inherit"
             count = 0
         else:
@@ -99,9 +107,10 @@ def _cmd_diff(
     exclude: list[str],
     mask: bool,
     by_profile: bool = False,
+    machines: Sequence[Profile] = (),
 ) -> int:
     check_selectors(keys, prefix, exclude)
-    profiles = load_profiles(resolve_user_data_dir(user_data_dir))
+    profiles = load_profiles(resolve_user_data_dir(user_data_dir), machines)
     loaded = [
         (profile.name, read_own_settings(profile))
         for profile in profiles
@@ -130,6 +139,14 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="VS Code stable user data directory (default: the platform Code directory)",
+    )
+    parser.add_argument(
+        "--wsl",
+        action="append",
+        default=[],
+        metavar="DISTRO",
+        help="also handle the VS Code Server Machine settings in this WSL distribution "
+        "as profile WSL:<DISTRO>; repeatable (Windows only)",
     )
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("list", help="show profile name, inheritance, and own key count")

@@ -52,6 +52,21 @@ vscode-profiles --user-data-dir D:\Code list
 
 設定の実体は、デフォルトが `User/settings.json`、名前付きが `User/profiles/<location>/settings.json`。`location` は `builtin/agents` のように `/` を含み得る。解決後のパスが `User/profiles` の外になる location は拒否する。
 
+### WSL の Machine 設定（`--wsl`）
+
+Windows で `--wsl <ディストリビューション名>` を付けると、その WSL の VS Code Server の Machine 設定（`~/.vscode-server/data/Machine/settings.json`）を疑似プロファイル `WSL:<名前>` として末尾に足す。`list` / `diff` / `apply` / `remove` のどれでも使え、`--from` / `--to` / `--profile` に `WSL:<名前>` と書ける。`--to all` / `--profile all` にも入る。繰り返せる。
+
+```powershell
+vscode-profiles --wsl Ubuntu-24.04 diff --prefix claudeCode. --by-profile
+vscode-profiles --wsl Ubuntu-24.04 apply --from Default --to WSL:Ubuntu-24.04 --prefix claudeCode. --exclude-key claudeCode.environmentVariables
+```
+
+- パスは `wsl.exe -d <名前>` で WSL 側の `$HOME` を聞き、`\\wsl.localhost\<名前>\...` に組み立てる。WSL を起動するので少し待つ。Windows 以外と、名前に英数字・`.`・`_`・`-` 以外を含むときは終了コード 2
+- Machine 設定は台帳もプロファイルも持たない 1 ファイル。`list` の 2 列目は `machine`。ファイルが無ければキー 0 個として扱い、`apply --write` で作る（`Machine` フォルダが無いと失敗する）
+- 書き込みは他のプロファイルと同じ（一時ファイル→入れ替え、改行コードは元のまま）。バックアップは `backups/<時刻>/_machine/WSL_<名前>/settings.json`
+- 起動中チェックは Windows の `Code.exe` だけを見る。VS Code Server は Remote 接続中にしか動かず、Machine 設定を書き換えるのは設定 UI で編集したときだけなので、Windows 側の VS Code を閉じれば足りる
+- VS Code Server のデータディレクトリを `--user-data-dir` に渡しても使えない。そこには台帳はあるが `User/settings.json` が無く、ユーザー設定は Windows 側にある
+
 `settings.json` は JSONC（コメントと末尾カンマ）として読む。キーはトップレベルだけ。`[typescript]` もその1キー。
 
 ### `list` の列
@@ -63,7 +78,7 @@ Default	own	56
 java	inherit	0
 ```
 
-`own` は独自の `settings.json` を持つ。`inherit` は設定をデフォルトから継承している。
+`own` は独自の `settings.json` を持つ。`inherit` は設定をデフォルトから継承している。`machine` は `--wsl` で足した Machine 設定。
 
 ### `diff` の状態
 
@@ -169,5 +184,6 @@ azure	claudeCode.environmentVariables	remove	[{"name": "***", "value": "***"}]
 - `vscode_profiles/profiles.py` — ユーザーデータディレクトリ、台帳、設定パス
 - `vscode_profiles/jsonc.py` — JSONC の読み取り
 - `vscode_profiles/diff.py` — キーの状態、値の伏せ字
+- `vscode_profiles/wsl.py` — `--wsl` の Machine 設定のパス解決
 - `vscode_profiles/keys.py` — `--key` / `--prefix` / `--exclude-key` によるキーの選択
 - `tests/` — 一時ディレクトリだけを使う
