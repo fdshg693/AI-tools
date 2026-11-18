@@ -46,6 +46,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 keys=args.key,
                 prefix=args.prefix,
                 exclude=args.exclude_key,
+                mask=args.mask,
             )
         if args.command == "apply":
             return run_apply(
@@ -55,6 +56,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 keys=args.key,
                 prefix=args.prefix,
                 exclude=args.exclude_key,
+                mask=args.mask,
                 write=args.write,
                 force=args.force,
             )
@@ -83,6 +85,7 @@ def _cmd_diff(
     keys: list[str],
     prefix: str | None,
     exclude: list[str],
+    mask: bool,
 ) -> int:
     check_selectors(keys, prefix, exclude)
     profiles = load_profiles(resolve_user_data_dir(user_data_dir))
@@ -96,7 +99,7 @@ def _cmd_diff(
     for key in selected:
         status = status_for(loaded, key)
         if show_values:
-            print(f"{key}\t{status}\t{values_json(loaded, key)}")
+            print(f"{key}\t{status}\t{values_json(loaded, key, mask=mask)}")
         else:
             print(f"{key}\t{status}")
     return 0
@@ -128,6 +131,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="top-level keys that start with this prefix; also prints values",
     )
     _add_exclude(diff)
+    _add_mask(diff)
     apply = sub.add_parser("apply", help="overwrite selected keys from a source profile")
     apply.add_argument("--from", dest="source", required=True, help="profile that supplies values")
     apply.add_argument(
@@ -146,6 +150,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="top-level source keys that start with this prefix",
     )
     _add_exclude(apply)
+    _add_mask(apply)
     apply.add_argument("--write", action="store_true", help="write destination settings.json files")
     apply.add_argument(
         "--force",
@@ -161,4 +166,12 @@ def _add_exclude(parser: argparse.ArgumentParser) -> None:
         action="append",
         default=[],
         help="top-level key to leave out of the selection; repeatable",
+    )
+
+
+def _add_mask(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--mask",
+        action="store_true",
+        help="print strings inside values as *** (object keys and other types stay)",
     )

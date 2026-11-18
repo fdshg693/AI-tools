@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from vscode_profiles.diff import mask_value
 from vscode_profiles.errors import CliError
 from vscode_profiles.keys import check_selectors, select_keys
 from vscode_profiles.paths import resolve_user_data_dir
@@ -80,6 +81,7 @@ def run_apply(
     keys: Sequence[str],
     prefix: str | None,
     exclude: Sequence[str] = (),
+    mask: bool = False,
     write: bool,
     force: bool,
 ) -> int:
@@ -106,7 +108,7 @@ def run_apply(
 
     planned: list[_Planned] = []
     for profile in chosen:
-        planned.append(_plan_destination(profile, selected, source_values))
+        planned.append(_plan_destination(profile, selected, source_values, mask=mask))
 
     pending = [item for item in planned if item.new_text != item.original]
     if write and pending and not force and code_process_running():
@@ -168,11 +170,14 @@ def _plan_destination(
     profile: Profile,
     selected: Sequence[str],
     source_values: Mapping[str, object],
+    *,
+    mask: bool,
 ) -> _Planned:
     dest_values = read_own_settings(profile)
     original = _read_settings_text(profile)
     lines = tuple(
-        _operation_line(profile.name, key, source_values, dest_values) for key in selected
+        _operation_line(profile.name, key, source_values, dest_values, mask=mask)
+        for key in selected
     )
     changes = {
         key: source_values[key]
@@ -194,13 +199,18 @@ def _operation_line(
     key: str,
     source_values: Mapping[str, object],
     dest_values: Mapping[str, object],
+    *,
+    mask: bool,
 ) -> str:
-    encoded = _dumps(source_values[key])
+    def render(value: object) -> str:
+        return _dumps(mask_value(value) if mask else value)
+
+    encoded = render(source_values[key])
     if key not in dest_values:
         return f"{name}\t{key}\tadd\t{encoded}"
     if _same_value(dest_values[key], source_values[key]):
         return f"{name}\t{key}\tsame\t{encoded}"
-    return f"{name}\t{key}\treplace\t{encoded}\t{_dumps(dest_values[key])}"
+    return f"{name}\t{key}\treplace\t{encoded}\t{render(dest_values[key])}"
 
 
 def _same_value(left: object, right: object) -> bool:

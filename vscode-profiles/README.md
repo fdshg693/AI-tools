@@ -30,6 +30,7 @@ vscode-profiles diff --key editor.fontSize
 vscode-profiles diff --key editor.fontSize --key editor.tabSize
 vscode-profiles diff --prefix claudeCode.
 vscode-profiles diff --prefix claudeCode. --exclude-key claudeCode.environmentVariables
+vscode-profiles diff --key claudeCode.environmentVariables --mask
 vscode-profiles apply --from Default --to Python --key editor.fontSize
 vscode-profiles apply --from Default --to all --prefix claudeCode. --write
 vscode-profiles --user-data-dir D:\Code list
@@ -40,6 +41,7 @@ vscode-profiles --user-data-dir D:\Code list
 - `diff` — 独自設定を持つプロファイルだけを比べる。キー名と状態だけ出す。
 - `--key` / `--prefix` — `diff` では付けたときだけ、そのキーの値も出す。`--key` は繰り返せる。両方付けたときは、名前が一致し、かつプレフィックスで始まるキーだけ。
 - `--exclude-key` — `diff` と `apply` で、選んだキーから外すトップレベルキー。繰り返せる。`--key` / `--prefix` が無い `diff` でも効く。
+- `--mask` — `diff` と `apply` で、出力する値の中の文字列を `"***"` に置き換える。オブジェクトのキー名、配列の長さ、数値・真偽値・`null` は残す。状態（`same` など）の判定は伏せる前の値で行う。トークンを含みうる `claudeCode.environmentVariables` のようなキーを見るときに付ける。
 - `apply` — ソースの指定キーを宛先へ上書きする。既定は変更予告だけで、`--write` のときだけファイルを変える。
 
 プロファイル名は台帳の `name`。デフォルトは `Default`。フォルダ id は、同名が複数あるときの失敗メッセージ以外には出さない。同名なら location を出して終了コード 1 で止まる。デフォルトの location 表示は `(default)`。
@@ -84,6 +86,12 @@ python.defaultInterpreterPath	different
 editor.fontSize	same	{"Default": 14, "Python": 14}
 ```
 
+`--mask` を付けると、値の中の文字列が `"***"` になる。
+
+```text
+claudeCode.environmentVariables	missing	{"Default": [{"name": "***", "value": "***"}], "Python": null}
+```
+
 `--prefix` はトップレベルキーの前方一致。`claudeCode.` は `claudeCode.selectedModel` に一致し、`claudeCodeExtra` には一致しない。
 
 一致が0件のときは何も出さず終了コード 0。空の `--key`・`--prefix`・`--exclude-key` は終了コード 2。
@@ -107,7 +115,7 @@ Python	editor.tabSize	add	4
 Python	files.eol	same	"\n"
 ```
 
-列は `宛先`、`キー`、`add` / `replace` / `same`、ソースの値。`replace` のときだけ、最後に宛先の今の値を足す。値は JSON。
+列は `宛先`、`キー`、`add` / `replace` / `same`、ソースの値。`replace` のときだけ、最後に宛先の今の値を足す。値は JSON。`--mask` のときは `diff` と同じく文字列を伏せる（書き込む値は伏せない）。
 
 `--write` は、全宛先の新しい内容をメモリ上で作ってからバックアップを取り、その後に置換する。編集箇所を特定できないファイル（トップレベルキーの重複など）は、どの宛先も変えない。バックアップはプロファイルディレクトリの外、OS のユーザーキャッシュ配下の `vscode-profiles/backups/` に取る。変わった宛先ごとに `backup<TAB>名前<TAB>パス` を出す。置換は一時ファイルへ書いてから入れ替える。途中の宛先で失敗したら、そのファイルをバックアップから戻し、残りの宛先は置換しない。`restore<TAB>名前<TAB>ok` または `failed` を出す。
 
@@ -129,6 +137,6 @@ Python	files.eol	same	"\n"
 - `vscode_profiles/apply.py` — キーの上書き、JSONC を保持した編集、バックアップ
 - `vscode_profiles/profiles.py` — ユーザーデータディレクトリ、台帳、設定パス
 - `vscode_profiles/jsonc.py` — JSONC の読み取り
-- `vscode_profiles/diff.py` — キーの状態
+- `vscode_profiles/diff.py` — キーの状態、値の伏せ字
 - `vscode_profiles/keys.py` — `--key` / `--prefix` / `--exclude-key` によるキーの選択
 - `tests/` — 一時ディレクトリだけを使う

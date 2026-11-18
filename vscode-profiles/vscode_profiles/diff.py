@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 
+MASK = "***"
+
 
 def status_for(loaded: Sequence[tuple[str, Mapping[str, object]]], key: str) -> str:
     present = [values[key] for _, values in loaded if key in values]
@@ -15,16 +17,30 @@ def status_for(loaded: Sequence[tuple[str, Mapping[str, object]]], key: str) -> 
     return "same"
 
 
-def values_json(loaded: Sequence[tuple[str, Mapping[str, object]]], key: str) -> str:
+def values_json(
+    loaded: Sequence[tuple[str, Mapping[str, object]]], key: str, *, mask: bool = False
+) -> str:
     parts: list[str] = []
     for name, values in loaded:
         encoded_name = json.dumps(name, ensure_ascii=False)
         if key not in values:
             parts.append(f"{encoded_name}: null")
         else:
-            encoded = json.dumps(values[key], ensure_ascii=False, sort_keys=True)
+            value = mask_value(values[key]) if mask else values[key]
+            encoded = json.dumps(value, ensure_ascii=False, sort_keys=True)
             parts.append(f"{encoded_name}: {encoded}")
     return "{" + ", ".join(parts) + "}"
+
+
+def mask_value(value: object) -> object:
+    """Hide strings but keep the shape: object keys, array lengths, numbers, booleans, null."""
+    if isinstance(value, str):
+        return MASK
+    if isinstance(value, dict):
+        return {key: mask_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [mask_value(item) for item in value]
+    return value
 
 
 def _values_differ(values: list[object]) -> bool:
