@@ -223,7 +223,7 @@ def _plan_install(
                 f"\t{item.target_name}\t{relative_target}{suffix}"
             )
     if not scope.is_global:
-        _warn_about_global_duplicates(plan)
+        _warn_about_global_duplicates(config, plan)
     if mode == "link":
         for item in plan:
             store.ensure_outside(item.target.parent, "skill destination")
@@ -256,11 +256,13 @@ def _apply_install(
         _forget_referrers(store, root, unlinked)
 
 
-def _warn_about_global_duplicates(plan: Sequence[InstallPlan]) -> None:
-    """Warn when a skill going into a project is also installed user-wide by skill-tools.
+def _warn_about_global_duplicates(config, plan: Sequence[InstallPlan]) -> None:
+    """Warn when a skill going into a project also exists user-wide.
 
-    Only the global manifest is read (no walk of ``~/.claude/skills``), so a copy
-    placed by hand or by a plugin is not detected.
+    Copies recorded in the global manifest are reported first. Then each target's
+    user-wide destination (``config.global_destination_for``) is checked for a
+    same-named directory holding ``SKILL.md`` that skill-tools does not manage
+    (placed by hand or by an older version). Plugin-provided skills are not checked.
     """
 
     names = {item.bundle.name for item in plan}
@@ -270,12 +272,32 @@ def _warn_about_global_duplicates(plan: Sequence[InstallPlan]) -> None:
     try:
         entries = load_project_manifest(scope.root, state_dir=scope.state_dir)["entries"]
     except (InstallError, OSError):
-        return
+        entries = []
+    managed: set[str] = set()
     for entry in entries:
+        managed.add(entry["installPath"].casefold())
         if entry["bundleName"] in names:
             print(
                 f"warning: {entry['bundleName']} is also installed user-wide "
                 f"(~/{entry['installPath']}); agents may load both copies",
+                file=sys.stderr,
+            )
+    reported: set[str] = set()
+    for item in plan:
+        relative = f"{config.global_destination_for(item.target_name)}/{item.bundle.name}"
+        relative = Path(relative).as_posix()
+        key = relative.casefold()
+        if key in managed or key in reported:
+            continue
+        try:
+            found = (scope.root / relative / "SKILL.md").is_file()
+        except OSError:
+            found = False
+        if found:
+            reported.add(key)
+            print(
+                f"warning: {item.bundle.name} also exists user-wide, not managed by "
+                f"skill-tools (~/{relative}); agents may load both copies",
                 file=sys.stderr,
             )
 

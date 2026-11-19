@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.12
+  version: 1.2.13
 ---
 
 # skill-tools の使い方
@@ -111,7 +111,7 @@ skill-tools install-skills --global alpha --dry-run
 
 - 選択子は **source path / リポジトリ相対の canonical ID（`skills/plugins/.../SKILL.md`） / 一意なskill名** のいずれか。名前が一意でないときは canonical ID か source path を使う
 - 配置先はプロジェクトのルート基準（既定はCWD）。既定は`.claude/skills/<skill-name>/`。`.agents/skills/`等へ変えるなら`skill-tools.yaml`の`skills:`に canonical ID ごとの`destination`を書く
-- **配置先の切り替え（スコープ）:** 別のプロジェクトへ入れるなら`--project-dir <path>`（CWDではなくそのプロジェクトの`skill-tools.yaml`を重ねる）。**全プロジェクト共通で使いたいスキルは`--global`**（ホーム配下、既定は`~/.claude/skills/`。どこから実行してもプロジェクトの`skill-tools.yaml`は読まない）。2つは同時に付けられない。プロジェクトへ入れるスキルが`--global`にも入っていると`warning: <name> is also installed user-wide`が出る（続行する）。エージェントが両方読むので、どちらか一方でよいかユーザーに確認する。`installed-skills` / `update-skills` / `remove-skills`にも入れたときと同じスコープを付ける（グローバルの manifest は`SKILL_TOOLS_HOME/global`か`%LOCALAPPDATA%\skill-tools\global`等の別領域にある）
+- **配置先の切り替え（スコープ）:** 別のプロジェクトへ入れるなら`--project-dir <path>`（CWDではなくそのプロジェクトの`skill-tools.yaml`を重ねる）。**全プロジェクト共通で使いたいスキルは`--global`**（ホーム配下、既定は`~/.claude/skills/`。どこから実行してもプロジェクトの`skill-tools.yaml`は読まない）。2つは同時に付けられない。プロジェクトへ入れるスキルが`--global`にも入っていると`warning: <name> is also installed user-wide`が、skill-tools管理外の同名コピー（手置き・旧版）がユーザー全体の配置先にあると`warning: <name> also exists user-wide, not managed by skill-tools`が出る（どちらも続行する）。エージェントが両方読むので、どちらか一方でよいかユーザーに確認する。管理外のコピーは`remove-skills --global`では消せないので、消すならユーザーに手で消してもらう。`installed-skills` / `update-skills` / `remove-skills`にも入れたときと同じスコープを付ける（グローバルの manifest は`SKILL_TOOLS_HOME/global`か`%LOCALAPPDATA%\skill-tools\global`等の別領域にある）
 - `--global`の配置先は`targets.<name>.global_destination` → `targets.<name>.destination` → トップレベル`global_destination` → `.claude/skills`の順で決まる。Antigravity（`~/.gemini/config/skills`）のようにプロジェクトとユーザーで相対パスが違うtargetだけ`global_destination`を書く。`skills.<id>.destination(s)`はプロジェクト専用で`--global`では使わない
 - **ホーム（またはその親）をプロジェクトのルートにした`install-skills` / `update-skills`は終了コード`2`で止まる。** ユーザーには`--global`を案内する。以前ホームで入れたものは、ホームで`remove-skills`してから`--global`で入れ直す（`installed-skills` / `remove-skills`はホームでも動く）
 - `--target name[,name...]`を指定すると、同じbundleを複数targetへ配置する。`targets.<name>.destination`がtargetの既定配置先で、`skills.<canonical-id>.destinations.<target>`がskill単位の上書き。target指定時の優先順位はskill target override → target既定 → legacy `skills.<id>.destination` → `.claude/skills`。`--target`未指定時はこれまでのdestination設定・既定値を維持する
