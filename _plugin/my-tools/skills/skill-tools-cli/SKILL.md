@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.14
+  version: 1.2.15
 ---
 
 # skill-tools の使い方
@@ -136,7 +136,7 @@ skill-tools installed-skills --global
 - `installed-skills`はmanifestだけを読み、sourceやnetworkを参照しない
 - `update-skills`はmanifestを起点に同じsource identityのentryだけを扱う。GitHubは記録されたrefを再解決し、別repo/refへの暗黙切替は拒否する。catalogから消えたskillは削除せず警告する。sourceの中身が記録と同じentryは`unchanged`と出して書き換えない（`--dry-run`も同じ）ので、`update` / `would update`の行だけが実際に変わるもの
 - `remove-skills`はmanifest entryだけを対象にし、source・catalog・networkを必要としない。未管理directoryは検索・削除しない
-- `update-skills` / `remove-skills`はhash drift・欠落・追加file・symlinkがあれば既定で中止する。エラーの`(modified: ...; missing: ...; extra: ...)`に該当ファイルがすべて出るので、ユーザーの編集を残すべきか確かめてから`--force`を選ぶ。`--force`は対象managed directory内の変更を置換・削除し得るため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
+- `update-skills` / `remove-skills`はmanifestに記録したファイルのhash drift・欠落・symlinkがあれば既定で中止する（`.venv/`などmanifest外のファイルはdriftにせず、ディレクトリごと消える旨を`note:`で出す）。エラーの`(modified: ...; missing: ...)`に該当ファイルがすべて出るので、ユーザーの編集を残すべきか確かめてから`--force`を選ぶ。`--force`は対象managed directory内の変更を置換・削除し得るため、先に`--dry-run`で対象を確認する。symlinkやproject外pathの拒否はforceでも無効化しない
 - install-skills/update-skills/remove-skillsはjournalで中断を記録する。process termination時は次回managed操作でrollbackを試みるが、複数pathの完全な原子性や電断・storage障害時の復旧は保証しない
 
 ### `sync-skills` — 設定に書いた一覧に揃える（clone 後のセットアップ）

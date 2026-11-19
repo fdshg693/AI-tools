@@ -206,8 +206,8 @@ def test_gc_keeps_a_fresh_referrer_whose_link_is_not_created_yet(setup, tmp_path
 def test_gc_stops_on_a_drifted_unused_entry(setup) -> None:
     _, source, bundles, store = setup
     (alpha,) = store.ensure(source, [bundles["alpha"]])
-    (alpha.path / "extra.txt").write_text("x\n", encoding="utf-8")
-    with pytest.raises(InstallError, match=r"\(extra: extra\.txt\)"):
+    (alpha.path / "SKILL.md").write_text("edited\n", encoding="utf-8")
+    with pytest.raises(InstallError, match=r"\(modified: SKILL\.md\)"):
         store.collect_garbage(grace_seconds=0)
     assert alpha.path.is_dir()
 

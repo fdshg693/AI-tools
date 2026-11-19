@@ -105,7 +105,7 @@ def test_installed_reads_only_the_project_manifest(
     assert entries[0]["installPath"] == ".claude/skills/alpha"
 
 
-def test_remove_refuses_drift_unless_forced_and_never_touches_unmanaged(
+def test_remove_ignores_unmanaged_files_and_refuses_managed_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
 ) -> None:
     source = make_repo(tmp_path / "source")
@@ -117,10 +117,18 @@ def test_remove_refuses_drift_unless_forced_and_never_touches_unmanaged(
     (unmanaged / "SKILL.md").write_text("keep\n", encoding="utf-8")
     assert main(["install-skills", "--config", str(config), "alpha"], cwd=project) == 0
     capsys.readouterr()
-    (project / ".claude" / "skills" / "alpha" / "user.txt").write_text("keep?\n", encoding="utf-8")
+    alpha = project / ".claude" / "skills" / "alpha"
+    (alpha / "user.txt").write_text("keep?\n", encoding="utf-8")
+    (alpha / ".venv" / "bin").mkdir(parents=True)
 
+    assert main(["remove-skills", "--dry-run", "alpha"], cwd=project) == 0
+    out = capsys.readouterr().out
+    assert "would remove" in out
+    assert "unmanaged files will be deleted: .venv, user.txt" in out
+
+    (alpha / "SKILL.md").write_text("edited\n", encoding="utf-8")
     assert main(["remove-skills", "alpha"], cwd=project) == 4
-    assert "(extra: user.txt)" in capsys.readouterr().err
+    assert "(modified: SKILL.md)" in capsys.readouterr().err
     assert main(["remove-skills", "alpha", "--force"], cwd=project) == 0
 
     capsys.readouterr()
@@ -168,7 +176,7 @@ def test_update_refuses_explicit_source_switch(
     assert "source" in capsys.readouterr().err
 
 
-def test_update_force_removes_extra_files_from_managed_directory(
+def test_update_without_force_replaces_directory_with_unmanaged_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
 ) -> None:
     source = make_repo(tmp_path / "source")
@@ -179,10 +187,40 @@ def test_update_force_removes_extra_files_from_managed_directory(
     capsys.readouterr()
     extra = project / ".claude" / "skills" / "alpha" / "user.txt"
     extra.write_text("local content\n", encoding="utf-8")
+    # Make the bundle differ from the manifest so update does not report "unchanged".
+    (source / "plugins" / "one" / "skills" / "alpha" / "SKILL.md").write_text(
+        "---\nname: alpha\ndescription: updated\n---\n", encoding="utf-8"
+    )
+    venv_bin = extra.parent / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    try:
+        (venv_bin / "python").symlink_to(tmp_path / "python-outside")
+    except OSError:
+        pass
 
-    assert main(["update-skills", "--config", str(config), "--force", "alpha"], cwd=project) == 0
+    assert main(["update-skills", "--config", str(config), "alpha"], cwd=project) == 0
 
     assert not extra.exists()
+    assert not (extra.parent / ".venv").exists()
+    assert "unmanaged files will be deleted with the old directory" in capsys.readouterr().out
+
+
+def test_update_refuses_missing_managed_file_unless_forced(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
+) -> None:
+    source = make_repo(tmp_path / "source")
+    project = tmp_path / "project"
+    project.mkdir()
+    config = write_config(tmp_path / "cfg.yaml", source, tmp_path / "index.json")
+    assert main(["install-skills", "--config", str(config), "alpha"], cwd=project) == 0
+    capsys.readouterr()
+    managed = project / ".claude" / "skills" / "alpha" / "SKILL.md"
+    managed.unlink()
+
+    assert main(["update-skills", "--config", str(config), "alpha"], cwd=project) == 4
+    assert "missing" in capsys.readouterr().err
+    assert main(["update-skills", "--config", str(config), "--force", "alpha"], cwd=project) == 0
+    assert managed.is_file()
     assert "force" in capsys.readouterr().out
 
 

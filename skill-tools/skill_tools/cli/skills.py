@@ -22,6 +22,7 @@ from ..install.installer import (
 from ..install.manifest import (
     bundle_file_hashes,
     link_store_root,
+    unmanaged_paths,
     verify_entry,
     verify_link_entry,
     verify_managed_entry,
@@ -388,6 +389,24 @@ def _command_remove(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
     return 0
 
 
+_UNMANAGED_PREVIEW = 5
+
+
+def _print_unmanaged_notice(target: Path, entry: dict, verb: str) -> None:
+    """Announce files outside the manifest (e.g. .venv/) that go away with the directory."""
+
+    extra = unmanaged_paths(target, entry)
+    if not extra:
+        return
+    shown = ", ".join(extra[:_UNMANAGED_PREVIEW])
+    more = (
+        f", ... (+{len(extra) - _UNMANAGED_PREVIEW} more)"
+        if len(extra) > _UNMANAGED_PREVIEW
+        else ""
+    )
+    print(f"  note: unmanaged files will be {verb}: {shown}{more}")
+
+
 def _plan_remove(
     scope: InstallScope, selected: Sequence[dict], force: bool, dry_run: bool
 ) -> dict[Path, list[str]]:
@@ -403,8 +422,10 @@ def _plan_remove(
             if store_root is not None:
                 stores.setdefault(store_root, []).append(entry["installPath"])
         else:
-            suffix = " (force: directory contents may be deleted)" if force else ""
+            suffix = " (force: modified managed files will be deleted)" if force else ""
         print(f"{action}\t{entry['canonicalId']}\t{scope.display(path)}{suffix}")
+        if entry["mode"] != "link":
+            _print_unmanaged_notice(path, entry, "deleted")
     return stores
 
 
@@ -539,8 +560,9 @@ def _command_update(args: argparse.Namespace, cwd: Path, scope: InstallScope) ->
         )
         plans.append(plan)
         copied.append(entry)
-        suffix = " (force: directory contents may be replaced)" if args.force else ""
+        suffix = " (force: modified managed files will be replaced)" if args.force else ""
         print(f"{action}	{entry['canonicalId']}	{scope.display(target)}{suffix}")
+        _print_unmanaged_notice(target, entry, "deleted with the old directory")
     for entry, link in shown_links:
         store_entry = store_entries.get(entry["store"].casefold())
         shared = len(store_entry.referrers) if store_entry is not None else 0
