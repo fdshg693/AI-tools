@@ -444,5 +444,36 @@ def test_project_install_warns_about_a_user_wide_copy(
         "agents may load both copies" in capsys.readouterr().err
     )
     assert main(["install-skills", "alpha"], cwd=project) == 0
-    assert "also installed user-wide" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "also installed user-wide" in err
+    # The managed copy is not reported a second time as an unmanaged directory.
+    assert "not managed by skill-tools" not in err
     assert (project / ".claude" / "skills" / "alpha" / "SKILL.md").is_file()
+
+
+def test_project_install_warns_about_an_unmanaged_user_wide_copy(
+    isolated_home: dict[str, Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    make_repo,
+    write_config,
+) -> None:
+    project, _ = _dirs(tmp_path)
+    source = make_repo(tmp_path / "source")
+    global_config = user_config_path()
+    global_config.parent.mkdir(parents=True)
+    write_config(global_config, source, tmp_path / "index.json")
+    skills = isolated_home["home"] / ".claude" / "skills"
+    (skills / "alpha").mkdir(parents=True)
+    (skills / "alpha" / "SKILL.md").write_text("hand-placed\n", encoding="utf-8")
+    # A directory without SKILL.md is not a skill copy.
+    (skills / "beta").mkdir()
+
+    assert main(["install-skills", "--dry-run", "alpha", "beta"], cwd=project) == 0
+    err = capsys.readouterr().err
+    assert (
+        "warning: alpha also exists user-wide, not managed by skill-tools "
+        "(~/.claude/skills/alpha); agents may load both copies" in err
+    )
+    assert "beta" not in err
+    assert "also installed user-wide" not in err
