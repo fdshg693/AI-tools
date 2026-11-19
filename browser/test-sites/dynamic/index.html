@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>非同期・待機ラボ</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 48rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; }
+  [hidden] { display: none !important; }
+  #feed { height: 8rem; overflow-y: auto; border: 1px solid #ddd; }
+  .spinner { color: #666; }
+</style>
+</head>
+<body>
+<header>
+  <h1>非同期・待機ラボ</h1>
+  <p>遅延表示・スピナー・トースト・自動更新・無限スクロールを集めたページ。auto-waiting と <code>expect</code> のポーリング挙動を確かめる。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <section aria-label="遅延表示">
+    <h2>遅延表示</h2>
+    <p>ボタンを押すと 2 秒後に結果が DOM に追加される（それまで要素自体が存在しない）。</p>
+    <button type="button" id="delayed-btn">読み込む</button>
+    <div id="delayed-slot"></div>
+  </section>
+
+  <section aria-label="スピナー">
+    <h2>スピナーつき読み込み</h2>
+    <p>スピナーが表示 → 1.5 秒後に消え、結果が visible になる（要素は最初から DOM にある）。</p>
+    <button type="button" id="spinner-btn">取得する</button>
+    <p class="spinner" id="spinner" hidden role="status">読み込み中…</p>
+    <p id="spinner-result" hidden>取得しました</p>
+  </section>
+
+  <section aria-label="自動的に消えるトースト">
+    <h2>自動的に消えるトースト</h2>
+    <p>3 秒で自動的に消えるメッセージ。「消えたこと」のアサーション練習用。</p>
+    <button type="button" id="toast-btn">保存する</button>
+    <p id="toast" role="alert" hidden>保存しました</p>
+  </section>
+
+  <section aria-label="不安定なボタン">
+    <h2>あとから有効になるボタン</h2>
+    <p>2.5 秒後に <code>disabled</code> が外れる。クリックの自動リトライ（actionability）確認用。</p>
+    <button type="button" id="late-btn" disabled>申し込む</button>
+    <p id="late-result" hidden>申し込みが完了しました</p>
+  </section>
+
+  <section aria-label="自動更新カウンター">
+    <h2>自動更新カウンター</h2>
+    <p>1 秒ごとに増える値。<code>expect.poll</code> / <code>toHaveText</code> のリトライ確認用。</p>
+    <output id="counter" aria-label="カウンター">0</output>
+  </section>
+
+  <section aria-label="無限スクロール">
+    <h2>無限スクロール</h2>
+    <p>枠内を最下部までスクロールすると 10 件ずつ追加される（最大 50 件）。</p>
+    <ul id="feed" aria-label="フィード"></ul>
+    <p>読み込み済み: <span id="feed-count">0</span> 件</p>
+  </section>
+</main>
+<script>
+  document.getElementById('delayed-btn').addEventListener('click', () => {
+    setTimeout(() => {
+      const p = document.createElement('p');
+      p.id = 'delayed-result';
+      p.textContent = '遅延して表示された結果';
+      document.getElementById('delayed-slot').appendChild(p);
+    }, 2000);
+  });
+
+  document.getElementById('spinner-btn').addEventListener('click', () => {
+    const spinner = document.getElementById('spinner');
+    const result = document.getElementById('spinner-result');
+    result.hidden = true;
+    spinner.hidden = false;
+    setTimeout(() => { spinner.hidden = true; result.hidden = false; }, 1500);
+  });
+
+  document.getElementById('toast-btn').addEventListener('click', () => {
+    const toast = document.getElementById('toast');
+    toast.hidden = false;
+    setTimeout(() => { toast.hidden = true; }, 3000);
+  });
+
+  const lateBtn = document.getElementById('late-btn');
+  setTimeout(() => { lateBtn.disabled = false; }, 2500);
+  lateBtn.addEventListener('click', () => { document.getElementById('late-result').hidden = false; });
+
+  let n = 0;
+  setInterval(() => { document.getElementById('counter').textContent = String(++n); }, 1000);
+
+  const feed = document.getElementById('feed');
+  const feedCount = document.getElementById('feed-count');
+  let loaded = 0;
+  function loadMore() {
+    if (loaded >= 50) return;
+    for (let i = 0; i < 10 && loaded < 50; i++) {
+      loaded++;
+      const li = document.createElement('li');
+      li.textContent = '記事 ' + loaded;
+      feed.appendChild(li);
+    }
+    feedCount.textContent = String(loaded);
+  }
+  loadMore();
+  feed.addEventListener('scroll', () => {
+    if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 4)
+      setTimeout(loadMore, 500);
+  });
+</script>
+</body>
+</html>

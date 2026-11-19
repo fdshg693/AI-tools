@@ -104,6 +104,15 @@ targets:
 
 `self_skill` は `install-skills self` の展開先で、空でないリポジトリ相対パスです（絶対パスと `..` は不可）。`skills:` の中には置きません（`skills:` のキーは配置先上書き用の canonical ID だからです）。設定ロード時にファイルの存在は確認せず、実在は install 時にカタログから探します。見つからなければ `skill not found` で終了コード `2` になります。`config show` は解決済みの値を `self_skill:` に出し、`config init` が書くファイルにも既定値を明記します。
 
+`sync-skills` が揃える「入れたいスキル」の一覧はトップレベルの `install_skills:` に書きます。要素は `install-skills` と同じ選択子（canonical ID・一意なスキル名・`self`）です。`skills:` の下に置かないのは、`skills:` のキーが配置先上書き用の canonical ID だからです。グローバルとプロジェクトの両方に書いたときは、`hooks.install.<agent>` と同じくプロジェクトの一覧がグローバルの一覧を丸ごと置き換えます（連結しません）。
+
+```yaml
+install_skills:
+  - self
+  - skills/plugins/coding/skills/review/SKILL.md
+  - gh-pr
+```
+
 `source.type` は `local` または `github` だけです。`config init` が作成するグローバル設定では、source と index の既定値も省略せずに記載します。インデックスの既定保存先は Windows では `%LOCALAPPDATA%\skill-tools\skill-index.json`、XDG では `$XDG_CACHE_HOME/skill-tools/skill-index.json`、それ以外は `~/.cache/skill-tools/skill-index.json` です。`SKILL_TOOLS_HOME` または `index.path` で上書きできます。
 
 使い方のフィードバック（`--fb`）の保存先は `fb.path` です。checkout または editable install（隣に `pyproject.toml` がある）では `<skill-tools プロジェクト>/fb`、wheel などで `pyproject.toml` が同梱されないときは OS キャッシュ領域の `skill-tools/fb`（`SKILL_TOOLS_HOME` を含む）が既定です。優先順は環境変数 `SKILL_TOOLS_FB_DIR`、設定の `fb.path`、既定値です。設定ファイル内の相対パスは、その設定ファイルのあるディレクトリ基準で解決します（`index.path` と同じ）。実行ログの `logs/` とは別のディレクトリです。
@@ -122,6 +131,9 @@ hooks:
     codex:
       destination: .codex/hooks
       global_destination: .codex/hooks # --global の配置先（ホーム相対）
+  install: # `hooks sync` が揃える、エージェントごとの入れるフック id
+    claude: [nested_agents_md, agent_sessions]
+    codex: [nested_agents_md]
 ```
 
 | agent       | 既定の配置先     | 登録ファイル                                                   | 登録するコマンド                                                                    |
@@ -134,16 +146,16 @@ hooks:
 
 `--global` では次の場所を使います。`settings_file: local` と `destination` はプロジェクト専用で無視し、配置先は `hooks.agents.<agent>.global_destination`（ホーム相対）で変えられます。
 
-| agent       | `--global` の配置先      | 登録ファイル              | 登録するコマンド                                                                                         |
-| ----------- | ------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| claude      | `~/.claude/hooks/`       | `~/.claude/settings.json` | `command` + `args`（配置したファイルの絶対パス。`uv-project` の `--project` もホームの絶対パス）         |
-| codex       | `~/.codex/hooks/`        | `~/.codex/hooks.json`     | 絶対パスを POSIX の `command` は `'...'`、PowerShell の `commandWindows` は `'...'`（`'` は `''`）で囲む |
-| cursor      | `~/.cursor/hooks/`       | `~/.cursor/hooks.json`    | `~/.cursor/` 相対（`hooks/<file>`）。配置先を `.cursor/` の外にしたときは絶対パス                        |
-| kilo        | `~/.config/kilo/plugin/` | なし                      | 配置だけで有効                                                                                           |
-| antigravity | 非対応（終了コード `2`） | —                         | ユーザー全体のフックの場所が確認できないため                                                             |
+| agent       | `--global` の配置先       | 登録ファイル                  | 登録するコマンド                                                                                         |
+| ----------- | ------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
+| claude      | `~/.claude/hooks/`        | `~/.claude/settings.json`     | `command` + `args`（配置したファイルの絶対パス。`uv-project` の `--project` もホームの絶対パス）         |
+| codex       | `~/.codex/hooks/`         | `~/.codex/hooks.json`         | 絶対パスを POSIX の `command` は `'...'`、PowerShell の `commandWindows` は `'...'`（`'` は `''`）で囲む |
+| cursor      | `~/.cursor/hooks/`        | `~/.cursor/hooks.json`        | `~/.cursor/` 相対（`hooks/<file>`）。配置先を `.cursor/` の外にしたときは絶対パス                        |
+| antigravity | `~/.gemini/config/hooks/` | `~/.gemini/config/hooks.json` | 絶対パスの `type` + `command`。キーはフック id のケバブケース。matcher があるイベントだけグループで包む  |
+| kilo        | `~/.config/kilo/plugin/`  | なし                          | 配置だけで有効                                                                                           |
 
 - 絶対パスはインストール時に1回だけ計算してエントリに書きます（パスは `/` 区切り）。Windows で入れた Codex のエントリは POSIX 側の `command` にも Windows のパスが入ります。ホームの場所が変わったら `hooks update --global` で入れ直します。
-- `--global` で `--agent antigravity` を指定すると終了コード `2`、`hooks.default_agents` 経由なら警告して飛ばします。`distributable: false` のフックは `--global` では常に終了コード `2` です。
+- `distributable: false` のフックは `--global` では常に終了コード `2` です。ユーザー全体の場所が無いエージェントを `--agent` で指定したときも終了コード `2`、`hooks.default_agents` 経由なら警告して飛ばします。
 - **`~/.claude/settings.json` は実行中の Claude Code 自身も書き換えます。** skill-tools は登録ファイルを書く直前に読み直し、読んでから内容が変わっていれば何も書かずに終了コード `4` で止まります。Claude Code を閉じてから実行し、ファイル全体が整形し直されるので先に `--dry-run` で確認してください。
 - プロジェクトと `--global` の両方に同じフックを入れると二重に発火します。二重発火の警告は1つの登録ファイルの中しか見ないので、この組み合わせは検出しません。どちらか一方に入れてください。
 
@@ -151,9 +163,35 @@ hooks:
 
 設定例は [skill-tools.yaml.example](skill-tools.yaml.example) を参照してください。
 
+### リンク方式（`--mode link`）とストア
+
+`install-skills` の配置方式は `copy`（既定。プロジェクトにスキルをコピーする）と `link` の 2 つです。`link` では、skill-tools が管理するグローバルな置き場（ストア）にスキルを 1 回だけコピーし、プロジェクトの配置先（`.claude/skills/<name>` など）にはストアを指すリンクを置きます。リンクは Windows では Junction（管理者権限も開発者モードも不要）、それ以外ではディレクトリの symlink です。ストアを更新すると、そこを指す全プロジェクトが最新に追従します。ユーザー全体（`--global`）には入れたくないが多くのプロジェクトで使うスキルを、常に最新のまま配るための方式です。
+
+```yaml
+# install-skills で --mode を省略したときの方式（既定 copy）
+install_mode: copy
+
+store:
+  path: ~/skill-store # 省略時は下記の既定の場所。相対パスはこの設定ファイル基準
+```
+
+- 方式は `--mode copy|link`、省略時は設定の `install_mode`、それも無ければ `copy` です。`install_mode` が `copy`／`link` 以外なら終了コード `2` です。target ごと・スキルごとの方式の指定はありません。
+- `--global` は常にコピーです。`--mode link --global` は終了コード `2`、設定の `install_mode: link` で `--global` を実行したときは stderr に注記を出してコピーします（ユーザー全体の置き場は 1 か所なので、リンクにする利点がないため）。
+- ストアの既定の場所は `SKILL_TOOLS_HOME/store`、無ければ Windows は `%LOCALAPPDATA%\skill-tools\store`、それ以外は `$XDG_STATE_HOME/skill-tools/store`（既定 `~/.local/state/skill-tools/store`）です。`--global` の管理情報と同じく、キャッシュ領域には置きません（キャッシュを消すと全プロジェクトのリンク先が消えるため）。`config show` が `store.path` と `install_mode` を出し、`config init` が書くファイルにも既定値を明記します。
+- ストアは「source（local のパス、または GitHub の owner/repository/ref）× canonical ID」ごとに最新の 1 つだけを持ち、`<store>/<source key>/<canonical ID の hash>/<スキル名>` に置きます。版を分けないので、古い版を指し続けるリンクはできません。ストア自体の manifest・journal は `<store>/.skill-tools/` にあり、どのプロジェクトのどのパスがどの entry にリンクしているかを `<store>/.skill-tools/referrers.json` に記録します。
+- リンク先は常にストアのコピーで、local source の checkout を直接は指しません（バンドルコピーの除外/包含ポリシーを効かせ、開発途中の変更をそのまま見せないため）。
+
+**リンクにする前に知っておくこと**
+
+- **リンクしたスキルのファイルを編集すると、ストアのコピーが変わり、そこを指す全プロジェクトに効きます。** さらにストアの drift として扱われ、次の `update-skills`／`store update` は `--force` なしでは止まります。プロジェクトだけで手を入れたいスキルは `copy` にします。
+- **リンクにした配置先は `.gitignore` に入れてください。** Git for Windows は Junction をふつうのディレクトリとして扱い、`git add -A` でリンク先の中身を通常のファイルとしてコミットしてしまいます。Windows 以外の symlink はリンク先の絶対パスとして記録され、他の環境では壊れたリンクになります。skill-tools は `.gitignore` を編集しません。
+- **リンクのスキルを読まないエージェントや版があります。** Claude Code は Windows の Junction のスキルを読みます（確認済み）が、symlink のスキルディレクトリを読まない不具合の報告がまだ open です（主に macOS/Linux）。Codex・Cursor・Kilo Code は修正済みと報告されています。Antigravity はリンクのスキルを読まない報告があります。スキルが一覧に出なければ `install-skills --mode copy --overwrite <skill>` でコピーに戻します。
+- **Windows では、リンク経由でストアのファイルを開いているプロセスがあるとストアを更新できません。** 更新は置き場の名前の入れ替えで行うため、エディタやエージェントがスキルのファイルを開いていると失敗します（終了コード `4`。途中の変更は戻されます）。それらを閉じてから再実行します。
+- **`store.path` を変えると既存のリンクは古いストアを指したままになり、新しいストアの設定では `update-skills` が止まります。** 移行は、各プロジェクトで `remove-skills <skill>` → 設定を変更 → `install-skills --mode link <skill>` と入れ直し、最後に古いストアを指す設定で `store gc` を実行して古いストアを片付けます（参照元が分からない場合は `store list --json` の `referrers` を見ます）。
+
 ### `repo-tools.yaml` の `description` locator
 
-source の `repo-tools.yaml` の各エントリは、`description` にそのツールの概要の取得元を `<repo相対path>[#<dotted key>]` の1文字列で書けます（例: `tools/aim/pyproject.toml#project.description`）。path は `repo-tools.yaml` からの相対で、`install` と同じ基準です。形式は拡張子で決まり、`.toml` / `.json` / `.yaml` / `.yml` は `#key` が必須でその値を、それ以外はプレーンテキストとして最初の見出し行（先頭の YAML frontmatter は読み飛ばす）を概要にします。`#key` はドット区切りでテーブルや配列を辿れます。locator 未指定のエントリは概要を空で表示し、ファイル・key・型が壊れているときは `list-tools` がエラーで止まります。
+source の `repo-tools.yaml` の各エントリは、`description` にそのツールの概要の取得元を `<repo相対path>[#<dotted key>]` の1文字列で書けます（例: `tools/llm/aim/pyproject.toml#project.description`）。path は `repo-tools.yaml` からの相対で、`install` と同じ基準です。形式は拡張子で決まり、`.toml` / `.json` / `.yaml` / `.yml` は `#key` が必須でその値を、それ以外はプレーンテキストとして最初の見出し行（先頭の YAML frontmatter は読み飛ばす）を概要にします。`#key` はドット区切りでテーブルや配列を辿れます。locator 未指定のエントリは概要を空で表示し、ファイル・key・型が壊れているときは `list-tools` がエラーで止まります。
 
 ### バンドルコピーの除外/包含ポリシー
 
@@ -179,7 +217,7 @@ GitHub source にも 1〜3 の判定を適用しますが、include による**�
 skill-tools config init
 skill-tools config show --config C:\src\ai\tools\skill-tools\skill-tools.yaml.example
 skill-tools --fb alpha --fb-text "検索結果の並びが期待と違った"
-skill-tools --fb tools/aim --fb-kind tool --fb-text "install の説明が足りない"
+skill-tools --fb tools/llm/aim --fb-kind tool --fb-text "install の説明が足りない"
 Get-Content feedback.txt | skill-tools --fb sample-flow --fb-kind workflow
 skill-tools list-skills --source local --repo C:\src\ai
 skill-tools workflow list
@@ -196,8 +234,15 @@ skill-tools installed-skills --global
 skill-tools update-skills --global
 skill-tools remove-skills --global alpha
 skill-tools config show --global
+skill-tools install-skills --mode link --dry-run alpha
+skill-tools install-skills --mode link alpha
+skill-tools store list
+skill-tools store update --dry-run
+skill-tools store gc --dry-run
 skill-tools update-skills alpha --dry-run
 skill-tools remove-skills alpha --dry-run
+skill-tools sync-skills --dry-run
+skill-tools sync-skills
 skill-tools install-skills --source github --dry-run alpha
 skill-tools list-tools
 skill-tools list-tools --json
@@ -214,6 +259,7 @@ skill-tools hooks install --global --agent claude,codex nested_agents_md --dry-r
 skill-tools hooks installed --global
 skill-tools hooks update --dry-run
 skill-tools hooks remove nested_agents_md --agent codex
+skill-tools hooks sync --dry-run
 skill-tools self-update --dry-run
 skill-tools self-update
 skill-tools build-index --source local --repo C:\src\ai
@@ -230,14 +276,27 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
   - 種別を省略したとき、1種別のカタログが壊れていても他種別の一致は保存できます。`--fb-kind` で指定した種別が壊れているときはそのエラーで止まります。
 - `list-skills` は `source path<TAB>skill name<TAB>file count` を標準出力へ出し、解決済み source を stderr に出します。source path は local なら SKILL.md の絶対パス、GitHub なら `https://github.com/<owner>/<repo>/blob/<commit>/<path>` です。
 - `install-skills` は config の source から bundle を全件 staging してから配置します。選択子は source path・リポジトリ相対の canonical ID・一意な skill 名のいずれかです。既存 skill は `--overwrite` なしでは変更しません。`--dry-run` はコピーしません。コピー対象はバンドルコピーの除外/包含ポリシーで絞り込まれ、`.venv` などの生成物や `.env` は既定で同梱されません。
+  - 選択子がカタログに無く、それが source 内に実在する `SKILL.md` のパス（canonical ID、または local source の絶対パス）なら、`skill not found: <選択子> (<canonical ID> exists in the source but is not registered in ai-tools.yaml, ...)` と出します（終了コード `2`）。名前での指定は未登録の領域を探しません（source 全体の走査と同名の誤検出を避けるため）。
+  - プロジェクトへ入れるとき（`--global` でないとき）、同じスキル名がグローバルの manifest にあれば `warning: <name> is also installed user-wide (~/...); agents may load both copies` を stderr に出して続行します（`--dry-run` も同じ）。manifest に無くても、各 target のユーザー全体の配置先（`--global` と同じ解決順。既定 `~/.claude/skills/`）に同名で `SKILL.md` を含むディレクトリがあれば、`warning: <name> also exists user-wide, not managed by skill-tools (~/...); agents may load both copies` を出します（手置き・旧版のコピー。`remove-skills --global` では消せません）。中身は比べず、manifest で報告したパスは重ねて報告しません。プラグイン経由の重複は確かめません。
 - `install-skills --target name[,name...]` は選択bundleを指定された全targetへ配置します。target名は `skill-tools.yaml` の `targets` に定義し、destinationはproject相対の安全なパスにします。すべてのtargetを事前検査し、installはproject単位lock内でpathを再検証してからstage・replaceします。`--dry-run` はsource、canonical ID、target名、最終相対pathをtargetごとに表示します。`--target`省略時は従来の単一destination動作です。
-- `--project-dir <path>` は `install-skills` / `installed-skills` / `update-skills` / `remove-skills`、`hooks install|installed|update|remove`、`config show` に付けられ、配置・管理するプロジェクトのルートを CWD から変えます。manifest・journal もそのルートの `.skill-tools/` を使い、設定はそのルートの `skill-tools.yaml` を重ねます（上記 Configuration）。相対パスは実際の CWD 基準で解決し、Junction・シンボリックリンクは実体へ解決します。存在するディレクトリだけを受け付け（作りません）、無ければ終了コード `2` です。`--repo` / `--index-path` / `--config` の相対パスも、これまでどおり実際の CWD 基準です。`list-skills` などの配置先を持たないコマンドには付きません。
-- `--global` は `install-skills` / `installed-skills` / `update-skills` / `remove-skills`、`hooks install|installed|update|remove` と `config show` に付けられ、ユーザー全体の場所（ホーム配下。スキルの既定は `~/.claude/skills/<name>`、フックは上記 Configuration の表）へ配置・管理します。`--project-dir` とは同時に指定できません（終了コード `2`）。配置先と manifest の場所は上記 Configuration を参照してください。`--dry-run` や update/remove の表示は `~/.claude/skills/alpha` のようにホームからのパスで出します。manifest の local source は常に絶対パスで記録します。
+- `--project-dir <path>` は `install-skills` / `installed-skills` / `update-skills` / `remove-skills` / `sync-skills`、`hooks install|installed|update|remove`、`config show` に付けられ、配置・管理するプロジェクトのルートを CWD から変えます。manifest・journal もそのルートの `.skill-tools/` を使い、設定はそのルートの `skill-tools.yaml` を重ねます（上記 Configuration）。相対パスは実際の CWD 基準で解決し、Junction・シンボリックリンクは実体へ解決します。存在するディレクトリだけを受け付け（作りません）、無ければ終了コード `2` です。`--repo` / `--index-path` / `--config` の相対パスも、これまでどおり実際の CWD 基準です。`list-skills` などの配置先を持たないコマンドには付きません。
+- `--global` は `install-skills` / `installed-skills` / `update-skills` / `remove-skills` / `sync-skills`、`hooks install|installed|update|remove` と `config show` に付けられ、ユーザー全体の場所（ホーム配下。スキルの既定は `~/.claude/skills/<name>`、フックは上記 Configuration の表）へ配置・管理します。`--project-dir` とは同時に指定できません（終了コード `2`）。配置先と manifest の場所は上記 Configuration を参照してください。`--dry-run` や update/remove の表示は `~/.claude/skills/alpha` のようにホームからのパスで出します。manifest の local source は常に絶対パスで記録します。
 - `install-skills` 成功時は、管理情報をプロジェクトのルートの`.skill-tools/manifest.json`へ記録します。manifestはschema version、canonical ID、bundle名、target/destination、project-relative install path、source descriptor、配置ファイルごとのSHA-256を持ちます。絶対install pathは保存せず、manifestや`.gitignore`の共有・管理方法も強制しません。
 - `install-skills self` は、予約語 `self` を設定の `self_skill`（skill-tools を使うコンパニオンスキルの canonical ID）へ展開して通常の install と同じ経路で配置します。既定値は `tools/_plugin/my-tools/skills/skill-tools-cli/SKILL.md` で、`--dry-run` / `--overwrite` / `--target` もそのまま使えます。`self` はカタログ上の同名スキルより優先されるため、同名のスキルを入れたいときは canonical ID を渡します。`install-skills self other-name` は両方を入れ、引数なしの `install-skills` は全件インストールにならずエラーです。
-- `installed-skills` はsource・catalog・networkを参照せず、manifest記録を一覧します。`--json`でmanifest entryの配列を出力します。
+- `install-skills --mode link` は、まずストアに entry が無ければコピーし（あればそのまま使い、更新はしません）、参照元を記録してから、プロジェクトの配置先にリンクを置いて manifest に記録します。ストアとプロジェクトは別のトランザクションで、ストアの後にプロジェクトを処理します。出力の各行の末尾に `(link -> <ストアの entry の絶対パス>)` が付きます（`--dry-run` も同じ）。既存の配置先は `--overwrite` なしでは変えず、`--overwrite` を付ければコピーとリンクを互いに置き換えられます。リンクをコピーで置き換えても、ストアの entry は消えず参照元の記録だけが消えます。
+- `installed-skills` はsource・catalog・networkを参照せず、manifest記録を一覧します。TSV の列は `canonical_id<TAB>target<TAB>install_path<TAB>source<TAB>mode` で、`mode` は `copy` か `link` です（既存の列位置は変えていません）。TSV の `source` 列は、manifest にプロジェクト相対で記録した local source のパスも絶対パスに解決して出します（`hooks installed` も同じ。manifest の保存形式は変えません）。`target` 列は `--target` なしで入れた entry では `(default)` です。`--json`でmanifest entryの配列を記録どおりに出力し、各 entry は `mode` を、リンクの entry は `store`（ストア相対の entry の位置）も持ちます。
+- `update-skills` はリンクの entry について、プロジェクトではなくストアの entry を更新します。**同じスキルにリンクしている他のすべてのプロジェクトにも効きます**。出力の末尾に `(shared: store entry <path> has N link(s))` と参照元の数を出すので、`--dry-run` で影響範囲を確認してください。1 つのストアの entry を指すリンクが複数あっても更新は 1 回です。リンクが設定の `store.path` 以外のストアを指していると止まります（終了コード `4`）。`remove-skills` はリンクだけを消し、ストアの entry は残します（`(link only; the shared store entry is kept)`）。消えたリンクの entry は `store gc` で回収します。
+- `store list [--json]` はストアの entry を `store_path<TAB>canonical_id<TAB>links<TAB>source` で一覧します（`links` は記録されている参照元の数で、リンクが実在するかはここでは確かめません）。`--json` は `{storePath, path, canonicalId, bundleName, source, referrers: [{projectRoot, installPath}]}` の配列です。ストアの場所は stderr に出します。
+- `store update [skill...] [--dry-run] [--force]` は、プロジェクトを経由せずにストアの entry を設定中の source から更新します（そこを指す全プロジェクトに効きます）。選択子は canonical ID・スキル名・ストア相対のパスで、省略すると全 entry が対象です。source が設定と異なる entry は、選択したなら終了コード `4`、省略時は警告して飛ばします。ストアの entry を手で編集していれば drift として止まり、`--force` で置き換えます。
+- `store gc [--dry-run]` は、参照元の記録を確かめ直し、プロジェクトのそのパスがもうその entry へのリンクでない記録を消してから、記録が 1 件も残らない entry を削除します。リンクが作られる前の記録を消さないよう、作られてから 1 時間以内でパスがまだ存在しない記録は残します。ストアの entry が drift していれば削除せずに止まります。`store` サブコマンドは `--config` / `--source` などで設定を選び、`--project-dir` / `--global` は付きません（ストアはプロジェクトに属さないため）。実行ログにはパスとスキル ID だけが残ります。
+- `sync-skills [--dry-run] [--overwrite] [--force]` は設定の `install_skills` を「入れたいスキルの一覧」として、manifest 管理のスキルをそれに揃えます（`hooks sync` のスキル版）。一覧をカタログで canonical ID に解決し、未管理のものを `install-skills` と同じ手順で入れ、manifest にあって一覧から外れたものを `remove-skills` と同じ手順で消します。比較は canonical ID だけで行い、すでに管理下のスキルは target・方式・source に関わらず触らないので、中身の更新は `update-skills` で行います。手で置いた（manifest に無い）スキルは消しません。
+  - 変更の前に、消すスキルの drift 検査と入れるスキルの配置先の検査をすべて済ませ、1 つでも引っかかれば何も変えずに止まります（終了コード `4`）。適用は削除→追加の順で、`install-skills` と `remove-skills` のトランザクションを続けて実行します（全体で 1 トランザクションではありません）。
+  - 方式は設定の `install_mode` で、配置先は `--target` なしの `install-skills` と同じです（`--mode` / `--target` は付きません）。`--overwrite` は新しく入れるスキルの既存ディレクトリに、`--force` は消すスキルの drift に効きます。
+  - `install_skills` が無い・空のときは終了コード `2` です（全部消すことはしません。全部消すなら `remove-skills`）。一覧の選択子がカタログに無いときも終了コード `2` で、何も変えません。何も変わらないときは `(no changes)` と出します。
+  - `--global` / `--project-dir` も使えます。リポジトリでは一覧を gitignore した `skill-tools.yaml` に書き、コミットするのはサンプルだけにして、clone 後に `cp skill-tools.example.yaml skill-tools.yaml && skill-tools sync-skills` で揃える使い方を想定しています。
 - `update-skills [skill...]` はmanifest記録を起点に、同じsource identityのentryだけを更新します。GitHubは同じowner/repository/refを再解決します。選択したentryのsourceが設定と異なる場合は暗黙切替を拒否し、catalogから消えたskillは警告して配置を保持します。`remove-skills [skill...]` はsource・catalog・network不要で、manifest entryのみを対象にします。選択子はcanonical ID、bundle名またはproject-relative install pathです。
-- `update-skills` / `remove-skills` が検証するのは manifest に記録したファイル（source の `git ls-files` 由来で配置したファイル）だけです。その各ファイルについて、installディレクトリからのパス要素がsymlinkでないこと、通常ファイルとして存在し記録したhashと一致することを確かめ、driftがあれば変更を中止します。manifestに無いファイル（スキル実行時にできる `.venv/`・`__pycache__/`、利用者が置いたファイルなど）はdriftとみなさず、走査もしません。ただしupdate/removeはmanaged directoryごと差し替え・削除するので、**それらの管理外ファイルも一緒に消えます**（引き継ぎません）。消えるものは`--dry-run`と実行時の出力に `note: unmanaged files will be ...` として表示します（先頭5件＋件数）。`--force`は記録ファイルの変更・欠落を上書きして続行する破壊的操作で、symlinkとproject外pathの拒否は`--force`でも無効化しません。実行前に`--dry-run`で対象を確認してください。manifest外のdirectory（他のskillディレクトリ）は`--force`でも探索・削除しません。
+- `update-skills` は、source のバンドル（バンドルコピーの除外/包含ポリシーを通した後のファイル集合）の hash が manifest の記録（リンクの entry はストアの entry の記録）とすべて同じ entry を `unchanged` と出し、書き換えません（`--dry-run` も同じ。`hooks update` と同じ表示）。GitHub source で commit だけが進んで中身が同じときも書き換えないので、manifest の `commit` は前回の値のままです。`--force` で drift を戻すときは、中身が同じでも `update` になります。
+- `update-skills` / `remove-skills` は既定で manifest に記録したファイルの hash・欠落と、その経路上の symlink を検証し、driftがあれば変更を中止します。エラーは `managed installation has drifted: <path> (modified: SKILL.md; missing: ...)` のように、変更・欠落のファイルを配置先相対ですべて列挙します。manifest に無いファイル（`.venv/`・`__pycache__/` など）は drift として扱わず、ディレクトリと一緒に消える旨を `note: unmanaged files will be deleted ...` で表示します。`--force`は記録したファイルの変更を置換または削除し得る破壊的操作です。実行前に`--dry-run`で対象を確認してください。manifest外のdirectoryは`--force`でも探索・削除しません。
 - `list-tools` は source の `repo-tools.yaml` に登録されたツールを `tool name<TAB>path<TAB>install command<TAB>summary` の4列で標準出力へ出し、解決済み source を stderr に出します。`path` は local なら絶対パス、GitHub ならツールフォルダの blob URL です。`summary` は各エントリの `description` locator を解決した1行概要で、locator 未指定なら空文字です。locator が壊れている（ファイル無し・key 無し・型不一致）ときはツール名と locator を示して終了コード `2` で止まります。`release` の値で絞り込まず、全エントリを出します。`--json` を付けると `{name, path, install, description}` の配列を `json.dumps(..., indent=2)` で出します（stderr の `source: ...` は TSV と同じく出ます）。
 - `install-tools` は選択したツールの `install` コマンドを source のルートで実行します。選択子は登録名またはリポジトリ相対の `path` で、1つも指定しなければ全ツールが対象です。`--dry-run` はコマンドを表示するだけで実行しません。実行は**local source が必要**で、GitHub source ではエラーになります（コマンドがリポジトリ相対のため）。あるツールのコマンドが非ゼロ終了した時点で停止し、そのツール名と終了コードを報告します。
 - `workflow list` / `workflow show <id>` は local source の `repo-workflows.yaml` を読み、目的・順序付きstep・optional/choice分岐・handoffと、canonical skill ID / `repo-tools.yaml` keyから解決したskill prerequisite・tool・environment要件を表示します。GitHub sourceでは非対応です。list/showは外部API、installer、tool shell commandを実行しません。
@@ -251,6 +310,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 - 登録ファイルの編集は skill-tools が追加したエントリだけが対象です。追加エントリの正規化 JSON の SHA-256 を manifest に記録し、remove/update はその hash と一致するエントリだけを消します。Claude/Codex は同じ event・matcher のグループがあればその `hooks[]` 末尾に追記し、無ければグループを新設します。削除で空になったグループ・event キー・ファイルは消します。利用者自身のエントリの順序・内容と未知キーは保持しますが、**ファイル全体をインデント2の JSON で書き直すため整形差分が出ます**。コメント付き（JSONC）など JSON として読めない登録ファイルは編集せずエラーで止まります。
 - `hooks installed [--json]` は manifest の `hooks` 記録を `hook_id<TAB>agent<TAB>install_dir<TAB>registered_in<TAB>source` で一覧します（source・network 不要）。
 - `hooks update [<hook-id>...] [--agent a,b]` は同じ source identity の記録だけを、旧エントリの削除と新エントリの追加を1トランザクションにして更新します（配置先は記録どおり、登録ファイルは現在の設定に従う）。変更の無いものは `unchanged` と表示します。source 切替の拒否・カタログから消えたフックの保持はスキルの `update-skills` と同じです。`hooks remove [<hook-id>...] [--agent a,b]` は source・config 不要で、記録されたファイルと登録エントリだけを消します。どちらも選択子なしなら全管理フックが対象です。
+- `hooks sync [--dry-run] [--overwrite] [--force]` は設定の `hooks.install.<agent>` を「入れたいフックの一覧」として、管理フックをそれに揃えます。列挙されていて未管理のものを `hooks install` と同じ手順で入れ、manifest にあって列挙から外れたもの（列挙に無いエージェントの分も含む）を `hooks remove` と同じ手順で消します。どちらも 1 トランザクションです。すでに管理下のフックは触らないので、中身の更新は `hooks update` で行います。`hooks.install` が無い・空のときは終了コード `2` です。`--overwrite` は新しく入れるフックに、`--force` は消すフックの drift に効きます。`--global` でも使え、そのときはユーザー全体の場所が無いエージェントを警告して飛ばします。リポジトリでは入れるフックの一覧を gitignore した設定ファイルに書き、コミットするのはサンプルだけにする、という使い方を想定しています。
 - `hooks update` / `hooks remove` は既定で drift（配置ファイルの変更・欠落、登録エントリの手編集・削除）があれば中止します。`--force` は変更されたフックファイルを置換・削除し、見つからない登録エントリは警告してスキップします。seed 設定は利用者が編集する前提なので hash 追跡せず、`remove` でも消しません。
 - <a id="self-update"></a>`self-update [--dry-run]` は skill-tools **自身**を更新します（スキル更新の `update-skills` とは別物）。インストール元は配布メタデータの `direct_url.json`（PEP 610）で判定します。
   - **editable install**（`dir_info.editable`）は何もせず、ローカル clone で `git pull` するよう案内して終了コード `0` で終わります。
@@ -260,6 +320,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
   - `--dry-run` は実行予定のコマンドを表示するだけです。
 - `build-index` は CLI 専用の global index だけを書き、`skills-site` 側の index は読み書きしません。既定では7日間の鮮度ゲートがあり、登録スキルの検索本文hashと埋め込みmetadata hashが変わっていない場合に再生成をスキップします（後述）。
 - `search` は保存済み snapshot だけを検索します。GitHub source でも branch を再取得しません。index 未作成・API key 未設定・別 source の index は非ゼロ終了です。fingerprint 不一致とインデックスの古さは stderr の警告にとどめ、検索自体は成功します。
+  - local source では、結果の canonical ID が今の source のカタログ（`ai-tools.yaml` に登録されたスキル）に無ければ、`warning: N of M result(s) are not in the source's current catalog (...): <canonical ID>, ...; run skill-tools build-index` を stderr に出します。該当する canonical ID は先頭 5 件まで列挙し、残りは `and N more` とまとめます（table 出力の列は変えません）。`--json` では各結果の `inSourceCatalog` が `true`／`false` になります（確かめなかったときは `null`）。古さの警告とは別で、作って間もない index でもスキルの移動・登録解除の後なら出ます。結果からは落とさず index の値をそのまま出します（そのまま `install-skills` に渡すと `skill not found` になります）。GitHub source はネットワークを使わない約束なので確かめません。
 - `config show` は採用した設定ファイル、グローバル設定ファイルのパス、`config.cwd`（CWD の `skill-tools.yaml`。`--project-dir` 指定時は `(not read: --project-dir)` を付ける）と `config.project`（実際に重ねるプロジェクトの `skill-tools.yaml` と `found` / `missing`）、source 種別、index path、fb path、解決済みの `self_skill` を出して終了します。`SKILL_TOOLS_FB_DIR` で上書きしているときはそのパスも出します。API key の値は出しません。
   - `source.*` は**スキルカタログの取得元**（local ならリポジトリのパス）で、この CLI 自身の場所ではありません。CLI 自身は `package.pyproject`（`pyproject.toml` の絶対パス）と `package.readme`（`[project].readme` が指すファイル）で出します。wheel など `pyproject.toml` が同梱されないインストールでは `package.pyproject: (not shipped with this install)` と `package.dir`（`skill_tools` パッケージの場所）を出し、`package.readme` は出さず終了コード `0` で終わります。
   - `source.fingerprint` / `resolved.commit` は、設定中の source と一致する index があるときだけ、index に保存済みの値を出します。source のファイルを読み直して再計算しないため、巨大な local source でも即座に終わります。index が無い・source が一致しないときは fingerprint 行を出しません（`index: missing` / `index.source: mismatch`）。
@@ -280,7 +341,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 
 `search`はpure-Python BM25によるcasefold済みUnicode語彙検索と既存意味検索をReciprocal Rank Fusion（RRF）で統合します。JSONは既存フィールドに`canonicalId`と一致周辺の短い`snippet`を追加します。text出力も`canonical_id`と`snippet`を含み、語彙一致のない意味検索結果ではsnippetを空にします。全文本文はsearch outputやrun logへ出しません。
 
-`--json` の検索結果は `score` / `canonicalId` / `path` / `name` / `description` / `tool` / `plugin` / `status` / `snippet` を含みます。`path` は local source なら絶対パス、GitHub source なら blob URL です。`canonicalId`はsource repo相対の`SKILL.md` pathで、snippetは最大240文字です。table mode の列順は `score`、`canonical_id`、`path`、`name`、`snippet` です。
+`--json` の検索結果は `score` / `canonicalId` / `path` / `name` / `description` / `tool` / `plugin` / `status` / `snippet` / `inSourceCatalog` を含みます。`path` は local source なら絶対パス、GitHub source なら blob URL です。`canonicalId`はsource repo相対の`SKILL.md` pathで、snippetは最大240文字です。table mode の列順は `score`、`canonical_id`、`path`、`name`、`snippet` です。
 
 ## Run logs
 
@@ -308,10 +369,12 @@ logs/
 - 配置は staging 完了後に置換し、後続失敗時は完了済みの置換を rollback します。
 - managed install/update/removeはproject単位lockと`.skill-tools/transaction.json` journalで複数directoryとmanifestの変更を追跡し、次回のmanaged操作時に中断journalを検出してrollbackまたは安全に停止します。通常のprocess terminationで復旧できるよう設計していますが、複数directoryとmanifestを単一OS atomic operationとはみなさず、電断・ストレージ障害時の完全な原子性は保証しません。
 - フック操作も同じlockとjournalに乗ります。フックは他のファイルと共有するdirectory（`.claude/hooks/` の `logs/` `state/` 等）や登録JSONを扱うため、directory単位ではなく**ファイル単位**でバックアップ（状態ディレクトリの `backups/`。プロジェクトでは `.skill-tools/backups/`、`--global` ではグローバルの状態ディレクトリ）→ 適用を記録し（journal schema v3。バックアップのパスを状態ディレクトリ相対で書く。v2 の journal も復旧できます）、中断時はバックアップから戻します。登録ファイル・manifestは一時ファイル→renameで置換するので、エージェントが途中状態を読むことはありません。
-- manifestは schema v2（スキルの `entries` とフックの `hooks` の2配列）です。v1 のmanifestはそのまま読め、次の書き込みでv2になります。古いskill-toolsはv2 manifest・新しい版の journal を「unsupported」として変更を拒否するので、その場合はskill-toolsを更新してください。
+- manifestは schema v3（スキルの `entries` とフックの `hooks` の2配列。スキルの entry は方式 `mode` を持ち、リンクの entry はストア相対の位置 `store` を持ってファイルの hash は持ちません）です。v1・v2 のmanifestはそのまま読め、次の書き込みでv3になります。古いskill-toolsはv3 manifest・新しい版の journal（リンクの操作は journal schema v4）を「unsupported」として変更を拒否するので、0.7.0 より前の skill-tools で一度でも書いたプロジェクトを扱う場合は、skill-toolsを更新してください。
+- リンクの entry の drift 検査: 配置先がリンクでない（ふつうのディレクトリに置き換わっている）、または記録したストアの entry 以外を指しているときは、`--force` を付けても `update-skills` / `remove-skills` は止まります（リンクの代わりに置かれた利用者のディレクトリを消さないため）。リンク先のストアの entry が消えているときは、`--force` を付けた `update-skills` が作り直し、`remove-skills --force` はリンクを消します。ストアの中身の drift は、ストアの manifest の hash で検査します。
+- リンクを消す・置き換える・中断から戻すときは、リンクそのものだけを扱い、リンク先（ストア）の中身は消しません。プロジェクトのルートやスキルの配置先がストアの中に解決されるとき（リンクの中を CWD にした、など）は、`install-skills` / `update-skills` / `hooks install|update` は終了コード `2` で止まります。
 - manifestのlocal source pathはproject内にある場合だけ相対化し、外部sourceは絶対pathとして残ります。machine-localな情報になり得るため、manifestを共有・公開する前に内容を確認してください。secretは記録しません。
 - `install-tools` は `repo-tools.yaml` の `install` 文字列を source ルートでそのまま実行します（`uv tool install` / `pnpm add -g` 等）。信頼できる source のこのファイルだけを対象にし、GitHub source では実行しません。
-- プロジェクトのルートがホーム、またはホームの祖先のとき（ホームで実行した、または `--project-dir ~` を付けた）、`install-skills` / `update-skills` / `hooks install` / `hooks update` は終了コード `2` で止まり `--global` を案内します（0.6.0 からの挙動の変更です。以前はホームの `.claude/skills` と `.skill-tools/` に入っていました）。同じファイルを、ホームの manifest とグローバルの manifest が別々に管理する状態を防ぐためです。すでにホームで入れたスキルは、ホームで `skill-tools installed-skills` で確認して `skill-tools remove-skills` で片付けてから、`skill-tools install-skills --global <skill>...` で入れ直します（`installed-skills` / `remove-skills` はホームでも動きます）。フックも同じく `hooks installed` / `hooks remove` で片付けてから `hooks install --global` で入れ直します。
+- プロジェクトのルートがホーム、またはホームの祖先のとき（ホームで実行した、または `--project-dir ~` を付けた）、`install-skills` / `update-skills` / `sync-skills` / `hooks install` / `hooks update` は終了コード `2` で止まり `--global` を案内します（0.6.0 からの挙動の変更です。以前はホームの `.claude/skills` と `.skill-tools/` に入っていました）。同じファイルを、ホームの manifest とグローバルの manifest が別々に管理する状態を防ぐためです。すでにホームで入れたスキルは、ホームで `skill-tools installed-skills` で確認して `skill-tools remove-skills` で片付けてから、`skill-tools install-skills --global <skill>...` で入れ直します（`installed-skills` / `remove-skills` はホームでも動きます）。フックも同じく `hooks installed` / `hooks remove` で片付けてから `hooks install --global` で入れ直します。
 - source・index・destination をコード位置や CWD から暗黙推測しません。
 
 終了コードは `0`（成功）、`2`（catalog / configuration / index、および `--fb` の名前不一致・曖昧・使用法エラー）、`3`（source）、`4`（install: skill・フックの配置と drift・tool install コマンド）、`1`（API key、`--fb` の空本文、FB ファイルの書き込み失敗などその他）です。

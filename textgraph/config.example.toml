@@ -1,0 +1,18 @@
+# .textgraph.toml — put this at the repository root (the directory --path points at).
+# textgraph reads no other config file. Re-run `textgraph sync` after editing.
+#
+# Globs are matched against repository-relative POSIX paths from the root:
+#   *  ?  [abc]  stay within one path segment
+#   **           zero or more directories (a trailing ** = everything below)
+#   dir/         same as dir/**
+
+# Not indexed, not part of the stale check, not scanned by --scripts.
+# Links *to* these files still resolve (they are not reported as broken).
+exclude = [
+  "plugins/*/skills/*/output/**",
+]
+
+# Only skipped by `check --scripts` / `fix --scripts`.
+scripts_exclude = [
+  "**/tests/**",
+]

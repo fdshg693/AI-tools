@@ -80,6 +80,8 @@ def _command_config_show(args: argparse.Namespace, cwd: Path, scope: InstallScop
     if override:
         print(f"fb.path: {Path(override).expanduser().resolve()} ({FB_DIR_ENV})")
     print(f"self_skill: {config.self_skill}")
+    print(f"install_mode: {config.install_mode}")
+    print(f"store.path: {config.store.path}")
     # Never recompute the fingerprint here: for a local source it hashes every
     # visible file. Only echo the value an index matching this source stored.
     fingerprint = None

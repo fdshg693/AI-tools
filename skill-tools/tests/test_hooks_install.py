@@ -107,7 +107,7 @@ def test_install_places_registers_and_remove_restores_user_files(env, capsys) ->
     assert "nested-rules" in _json(project / ".agents" / "hooks.json")
 
     manifest = _manifest(project)
-    assert manifest["schemaVersion"] == 2
+    assert manifest["schemaVersion"] == 3
     assert {(e["hookId"], e["agent"]) for e in manifest["hooks"]} == {
         ("nested_rules", agent) for agent in ALL_AGENTS.split(",")
     }
@@ -327,7 +327,7 @@ def test_skill_operations_keep_hook_records(env, capsys) -> None:
     assert main(["remove-skills", "alpha"], cwd=project) == 0
 
     manifest = _manifest(project)
-    assert manifest["schemaVersion"] == 2
+    assert manifest["schemaVersion"] == 3
     assert manifest["entries"] == []
     assert [entry["hookId"] for entry in manifest["hooks"]] == ["nested_rules"]
 
@@ -396,7 +396,7 @@ def test_interrupted_file_transaction_is_rolled_back(tmp_path: Path) -> None:
 
 # --- --global -----------------------------------------------------------------
 
-GLOBAL_AGENTS = "claude,codex,cursor,kilo"
+GLOBAL_AGENTS = "claude,codex,cursor,antigravity,kilo"
 
 
 def _global(config: Path, cwd: Path, *argv: str) -> int:
@@ -417,10 +417,12 @@ def test_global_hook_lifecycle_keeps_state_outside_home(env, isolated_home, caps
     out = capsys.readouterr().out
     assert "install\tnested_rules\tclaude\t~/.claude/hooks/nested_rules.py" in out
     assert "register\tnested_rules\tcodex\t~/.codex/hooks.json PreToolUse [^Bash$]" in out
+    assert "register\tnested_rules\tantigravity\t~/.gemini/config/hooks.json PreInvocation" in out
     for path in (
         ".claude/hooks/nested_rules.py",
         ".codex/hooks/nested_rules.py",
         ".cursor/hooks/nested_rules.py",
+        ".gemini/config/hooks/nested_rules.py",
         ".config/kilo/plugin/nested_rules.ts",
     ):
         assert (home / path).is_file(), path
@@ -436,9 +438,22 @@ def test_global_hook_lifecycle_keeps_state_outside_home(env, isolated_home, caps
     assert f"'{home_posix}/.codex/hooks/nested_rules.py'" in codex["command"]
     cursor = _json(home / ".cursor" / "hooks.json")["hooks"]["postToolUse"][0]
     assert cursor["command"] == f"{_python_command()} hooks/nested_rules.py"
+    antigravity = _json(home / ".gemini" / "config" / "hooks.json")["nested-rules"]
+    assert antigravity["PreInvocation"] == [
+        {
+            "type": "command",
+            "command": f"{_python_command()} {home_posix}/.gemini/config/hooks/nested_rules.py",
+        }
+    ]
 
     manifest = json.loads((state / "manifest.json").read_text(encoding="utf-8"))
-    assert {entry["agent"] for entry in manifest["hooks"]} == {"claude", "codex", "cursor", "kilo"}
+    assert {entry["agent"] for entry in manifest["hooks"]} == {
+        "claude",
+        "codex",
+        "cursor",
+        "antigravity",
+        "kilo",
+    }
     assert Path(manifest["hooks"][0]["source"]["path"]).is_absolute()
 
     assert _global(config, project, "installed") == 0
@@ -459,29 +474,30 @@ def test_global_hook_lifecycle_keeps_state_outside_home(env, isolated_home, caps
     capsys.readouterr()
     assert _json(settings) == {"model": "opus"}
     assert not (home / ".codex" / "hooks.json").exists()
+    assert not (home / ".gemini" / "config" / "hooks.json").exists()
+    assert not (home / ".gemini" / "config" / "hooks" / "nested_rules.py").exists()
     assert not (home / ".config" / "kilo" / "plugin" / "nested_rules.ts").exists()
     assert json.loads((state / "manifest.json").read_text(encoding="utf-8"))["hooks"] == []
 
 
-def test_global_refuses_antigravity_and_non_distributable_hooks(env, isolated_home, capsys) -> None:
+def test_global_refuses_non_distributable_hooks(env, isolated_home, capsys) -> None:
     _, project, config = env
     home = isolated_home["home"]
-    assert _global(config, project, "install", "--agent", "claude,antigravity", "nested_rules") == 2
-    assert "antigravity" in capsys.readouterr().err
     assert _global(config, project, "install", "--agent", "claude", "repo_only") == 2
     assert "not distributable" in capsys.readouterr().err
     assert not (home / ".claude").exists()
 
-    # From hooks.default_agents, an unsupported agent is only skipped.
     config.write_text(
         config.read_text(encoding="utf-8") + "hooks:\n  default_agents: [claude, antigravity]\n",
         encoding="utf-8",
     )
     assert _global(config, project, "install", "--dry-run", "nested_rules") == 0
     captured = capsys.readouterr()
-    assert "skipping those agents" in captured.err
     assert "would install\tnested_rules\tclaude\t~/.claude/hooks/nested_rules.py" in captured.out
-    assert "antigravity" not in captured.out
+    assert (
+        "would install\tnested_rules\tantigravity\t~/.gemini/config/hooks/nested_rules.py"
+        in captured.out
+    )
 
 
 def test_hooks_install_refuses_a_project_rooted_at_home(env, isolated_home, capsys) -> None:

@@ -128,7 +128,7 @@ def test_remove_ignores_unmanaged_files_and_refuses_managed_drift(
 
     (alpha / "SKILL.md").write_text("edited\n", encoding="utf-8")
     assert main(["remove-skills", "alpha"], cwd=project) == 4
-    assert "modified" in capsys.readouterr().err
+    assert "(modified: SKILL.md)" in capsys.readouterr().err
     assert main(["remove-skills", "alpha", "--force"], cwd=project) == 0
 
     capsys.readouterr()
@@ -187,7 +187,10 @@ def test_update_without_force_replaces_directory_with_unmanaged_files(
     capsys.readouterr()
     extra = project / ".claude" / "skills" / "alpha" / "user.txt"
     extra.write_text("local content\n", encoding="utf-8")
-
+    # Make the bundle differ from the manifest so update does not report "unchanged".
+    (source / "plugins" / "one" / "skills" / "alpha" / "SKILL.md").write_text(
+        "---\nname: alpha\ndescription: updated\n---\n", encoding="utf-8"
+    )
     venv_bin = extra.parent / ".venv" / "bin"
     venv_bin.mkdir(parents=True)
     try:
@@ -1114,3 +1117,138 @@ def test_broken_hook_catalog_fails_hooks_list_but_not_skill_list(
 
     assert main(["list-skills", "--config", str(config)], cwd=tmp_path) == 0
     assert "\talpha\t" in capsys.readouterr().out
+
+
+def test_update_reports_unchanged_copies_and_force_restores_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
+) -> None:
+    source = make_repo(tmp_path / "source")
+    project = tmp_path / "project"
+    project.mkdir()
+    config = write_config(tmp_path / "cfg.yaml", source, tmp_path / "index.json")
+    assert main(["install-skills", "--config", str(config), "alpha", "beta"], cwd=project) == 0
+    capsys.readouterr()
+
+    assert main(["update-skills", "--config", str(config), "--dry-run"], cwd=project) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out == [
+        "unchanged\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha",
+        "unchanged\tplugins/two/beta/SKILL.md\t.claude/skills/beta",
+    ]
+
+    (source / "plugins" / "two" / "beta" / "SKILL.md").write_text(
+        "---\nname: beta\ndescription: changed\n---\n", encoding="utf-8"
+    )
+    assert main(["update-skills", "--config", str(config)], cwd=project) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out == [
+        "unchanged\tplugins/one/skills/alpha/SKILL.md\t.claude/skills/alpha",
+        "update\tplugins/two/beta/SKILL.md\t.claude/skills/beta",
+    ]
+    installed = project / ".claude" / "skills" / "beta" / "SKILL.md"
+    assert "changed" in installed.read_text(encoding="utf-8")
+
+    # A drifted copy with an unchanged source is still restored under --force.
+    installed.write_text("edited\n", encoding="utf-8")
+    assert main(["update-skills", "--config", str(config), "beta"], cwd=project) == 4
+    assert "(modified: SKILL.md)" in capsys.readouterr().err
+    assert main(["update-skills", "--config", str(config), "beta", "--force"], cwd=project) == 0
+    assert capsys.readouterr().out.startswith("update\t")
+    assert "changed" in installed.read_text(encoding="utf-8")
+
+
+def test_search_warns_when_results_are_missing_from_the_source_catalog(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config, embedder
+) -> None:
+    source = make_repo(tmp_path / "source")
+    index_path = tmp_path / "index.json"
+    config = write_config(tmp_path / "cfg.yaml", source, index_path)
+    assert main(["build-index", "--config", str(config)], cwd=tmp_path, embedder=embedder) == 0
+    capsys.readouterr()
+
+    search_json = ["search", "--config", str(config), "--query", "alpha", "--json"]
+    assert main(search_json, embedder=embedder) == 0
+    captured = capsys.readouterr()
+    assert "out of sync" not in captured.err
+    assert all(item["inSourceCatalog"] is True for item in json.loads(captured.out))
+
+    # A fresh index whose IDs no longer exist: age alone would not warn.
+    old = source / "plugins" / "one" / "skills" / "alpha"
+    old.rename(source / "plugins" / "one" / "skills" / "alpha-moved")
+    assert main(search_json, embedder=embedder) == 0
+    captured = capsys.readouterr()
+    items = json.loads(captured.out)
+    ids = [item["canonicalId"] for item in items]
+    moved = "plugins/one/skills/alpha/SKILL.md"
+    assert moved in ids
+    assert {item["canonicalId"]: item["inSourceCatalog"] for item in items}[moved] is False
+    assert sum(1 for item in items if item["inSourceCatalog"] is False) == 1
+    assert (
+        f"warning: 1 of {len(ids)} result(s) are not in the source's current catalog "
+        f"(the index is out of sync with the source): {moved}; run `skill-tools build-index`"
+    ) in captured.err
+
+    # The table output keeps its columns; the IDs go to stderr only.
+    assert main(["search", "--config", str(config), "--query", "alpha"], embedder=embedder) == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines()[0] == "score\tcanonical_id\tpath\tname\tsnippet"
+    assert f"source): {moved};" in captured.err
+
+
+def test_unknown_result_warning_lists_only_the_first_ids(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from skill_tools.cli.index_cmd import _warn_about_unknown_results
+
+    results = [SimpleNamespace(canonical_id=f"p/s{number}/SKILL.md") for number in range(8)]
+    _warn_about_unknown_results(results, [False] * 7 + [True])
+    message = capsys.readouterr().err
+    assert "7 of 8 result(s)" in message
+    assert "p/s4/SKILL.md, and 2 more;" in message
+    assert "p/s5/SKILL.md" not in message
+
+    _warn_about_unknown_results(results, None)
+    assert capsys.readouterr().err == ""
+
+
+def test_install_explains_an_unregistered_skill_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
+) -> None:
+    source = make_repo(tmp_path / "source")
+    project = tmp_path / "project"
+    project.mkdir()
+    config = write_config(tmp_path / "cfg.yaml", source, tmp_path / "index.json")
+    unregistered = "meta-plugins/skills/private/SKILL.md"
+    absolute = str(source / "meta-plugins" / "skills" / "private" / "SKILL.md")
+
+    for selector in (unregistered, absolute):
+        assert main(["install-skills", "--config", str(config), selector], cwd=project) == 2
+        assert (
+            f"({unregistered} exists in the source but is not registered in ai-tools.yaml"
+            in capsys.readouterr().err
+        )
+    # A bare name is not looked up outside the registered roots.
+    assert main(["install-skills", "--config", str(config), "private"], cwd=project) == 2
+    err = capsys.readouterr().err
+    assert "skill not found: private" in err
+    assert "not registered" not in err
+    assert main(["install-skills", "--config", str(config), "nope/SKILL.md"], cwd=project) == 2
+    assert "not registered" not in capsys.readouterr().err
+
+
+def test_installed_skills_shows_a_project_relative_source_as_absolute(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], make_repo, write_config
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    source = make_repo(project / "source")
+    config = write_config(tmp_path / "cfg.yaml", source, tmp_path / "index.json")
+    assert main(["install-skills", "--config", str(config), "alpha"], cwd=project) == 0
+    capsys.readouterr()
+
+    assert main(["installed-skills", "--json"], cwd=project) == 0
+    assert json.loads(capsys.readouterr().out)[0]["source"]["path"] == "source"
+    assert main(["installed-skills"], cwd=project) == 0
+    row = capsys.readouterr().out.splitlines()[1].split("\t")
+    assert row[1] == "(default)"
+    assert row[3] == f"local {source.resolve()}"

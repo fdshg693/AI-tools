@@ -23,7 +23,7 @@ uv run my-agents run tavily-agent --prompt "LangChainのcreate_agentとAgentExec
 
 - システムプロンプトにより、推測ではなく`tavily_search`/`tavily_extract`の結果を根拠に
   日本語で回答し、参照ページのタイトルとURLを含めるよう指示されている
-- 実行には`tools/my-agents/.env`の`TAVILY_API_KEY`が必要(未設定時のエラー対応は
+- 実行には`tools/llm/my-agents/.env`の`TAVILY_API_KEY`が必要(未設定時のエラー対応は
   このスキルの対象外。`my-agents`スキル本体の前提条件を参照)
 
 ## 使い分け

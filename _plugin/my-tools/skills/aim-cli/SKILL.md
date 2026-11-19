@@ -1,19 +1,19 @@
 ---
 name: aim-cli
 description: OpenRouter経由でAIモデルを単発呼び出しする`aim` CLIツールの使い方を説明する。プロンプトをAIモデルに投げて応答を得たい、プロンプト内の`@path`でファイルやディレクトリの内容を取り込みたい、複数ファイルやスキルフォルダへ同じ質問（要約・バグ指摘など）を`--parallel`で一括したい、利用可能なモデル一覧を確認したい、タスクの難易度に応じてどのモデルを使うか選定したい場合に使う。
-# 前提条件: `aim`コマンドがPATH上にインストール済み（`uv tool install --editable tools/aim`）であり、OPENROUTER_API_KEYが設定済みであること。このスキルはインストール・セットアップは一切行わない
+# 前提条件: `aim`コマンドがPATH上にインストール済み（`uv tool install --editable tools/llm/aim`）であり、OPENROUTER_API_KEYが設定済みであること。このスキルはインストール・セットアップは一切行わない
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照（人間のメンテナ向け）
 meta:
   tag: []
   requires_repo_tools: aim
   requires_env: OPENROUTER_API_KEY
   dependencies: none
-  requires_install: uv tool install --editable tools/aim
+  requires_install: uv tool install --editable tools/llm/aim
   requires_hooks: none
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.9
+  version: 1.0.11
 ---
 
 # aim CLI の使い方
@@ -46,17 +46,21 @@ aim --parallel --format json --prompt "@a.py 要約して" --prompt "@b.py 要�
 ## 前提条件
 
 - `aim`コマンドが既にインストールされ、PATH上で実行可能であること
-- `OPENROUTER_API_KEY`が環境変数または`tools/aim/.env`で設定済みであること
-- 未インストール・未設定の場合はこのスキルでは対処しない。エラーが出た場合はユーザーに`tools/aim/README.md`のセットアップ手順を案内する
+- `OPENROUTER_API_KEY`が環境変数または`tools/llm/aim/.env`で設定済みであること
+- 未インストール・未設定の場合はこのスキルでは対処しない。エラーが出た場合はユーザーに`tools/llm/aim/README.md`のセットアップ手順を案内する
 
 モデルの入力・出力単価を見てから選びたいときは`aim --cost`（`--model`で略記。省略時はデフォルト）。`pricing`のベース値と`overrides`の最大値（最悪ケース）を`$/M tokens`で出す。`:free`は0。Models APIは認証不要なのでAPIキーは要らない。
 
 ## ログ
 
-呼び出しごとに`tools/aim/logs/<trace.tool>/<YYYY-MM-DD>.jsonl`（JSON Lines）へ1行追記される。`trace.tool`（`aim-cli`等。無ければ`unknown`）でフォルダ分けし、日付でファイル分割することで1ファイルへの際限ない肥大化を防いでいる。CLIのソースディレクトリ基準の絶対パスを使うため、実行時のカレントディレクトリには依存しない。`cost`・`*_tokens`・`generation_id`はOpenRouterレスポンスの`usage`/`id`フィールドからそのまま転記される。応答本文（completion）はログに含めない。`--parallel`の各ジョブも`trace.tool`は`aim-cli`のまま、`prompt_index`を付与する（`@path`があれば先頭を`file_path`にも付ける）。
+呼び出しごとに`tools/llm/aim/logs/<trace.tool>/<YYYY-MM-DD>.jsonl`（JSON Lines）へ1行追記される。`trace.tool`（`aim-cli`等。無ければ`unknown`）でフォルダ分けし、日付でファイル分割することで1ファイルへの際限ない肥大化を防いでいる。CLIのソースディレクトリ基準の絶対パスを使うため、実行時のカレントディレクトリには依存しない。`cost`・`*_tokens`・`generation_id`はOpenRouterレスポンスの`usage`/`id`フィールドからそのまま転記される。応答本文（completion）はログに含めない。`--parallel`の各ジョブも`trace.tool`は`aim-cli`のまま、`prompt_index`を付与する（`@path`があれば先頭を`file_path`にも付ける）。
 
-各呼び出しには`trace.trace_id`（32桁hexのOTel準拠trace id）が自動付与される。OpenRouterのGrafana Cloud連携（Broadcast機能、任意設定）を有効化している場合、このtrace_idがGrafana Cloud側のTrace IDと一致するため、ログの`trace.trace_id`をGrafana CloudのTempoで検索すれば対応するトレースを特定できる（詳細は`tools/aim/README.md`の「Grafana Cloudへのログ配信」参照）。
+各呼び出しには`trace.trace_id`（32桁hexのOTel準拠trace id）が自動付与される。OpenRouterのGrafana Cloud連携（Broadcast機能、任意設定）を有効化している場合、このtrace_idがGrafana Cloud側のTrace IDと一致するため、ログの`trace.trace_id`をGrafana CloudのTempoで検索すれば対応するトレースを特定できる（詳細は`tools/llm/aim/README.md`の「Grafana Cloudへのログ配信」参照）。
 
 ## エラー時の挙動
 
 APIキー未設定・モデルID誤り・OpenRouter側エラー（401/402/429など）が発生した場合、エラーメッセージを標準エラー出力に表示し、非ゼロで終了する。`--parallel`時の個別プロンプト失敗は全体を止めず、そのプロンプトの結果として記録される。
+
+## Python から呼ぶとき
+
+CLI を subprocess で叩かず `aim_cli` を import する。使い方は `tools/llm/aim/docs/library.md`。

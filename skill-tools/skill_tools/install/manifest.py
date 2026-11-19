@@ -1,9 +1,12 @@
 """Project-local records for skill bundles and hooks installed by skill-tools.
 
-Schema v2 adds a ``hooks`` array next to the skill ``entries``. A v1 file
-(``entries`` only) is still read and is upgraded to v2 on the next write, so
-every writer must carry the other array forward instead of rebuilding the
-manifest from one side.
+Schema v2 adds a ``hooks`` array next to the skill ``entries``. Schema v3 adds
+``mode`` to every skill entry (``copy`` or ``link``) and, for a link entry, the
+store-relative ``store`` path of the store entry its link points at. A link
+entry's ``files`` is empty: the store's own manifest holds the hashes. v1 and
+v2 files are still read (their entries are copies) and are upgraded to v3 on
+the next write, so every writer must carry the other array forward instead of
+rebuilding the manifest from one side.
 """
 
 from __future__ import annotations
@@ -18,10 +21,11 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from ..models import InstallError, SkillBundle
-from ..fs_links import is_link_like
+from ..fs_links import is_link_like, link_target, same_path
 
-MANIFEST_SCHEMA_VERSION = 2
-_READABLE_SCHEMA_VERSIONS = (1, 2)
+MANIFEST_SCHEMA_VERSION = 3
+_READABLE_SCHEMA_VERSIONS = (1, 2, 3)
+INSTALL_MODES = ("copy", "link")
 MANIFEST_RELATIVE_PATH = PurePosixPath(".skill-tools/manifest.json")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -60,8 +64,15 @@ def _validate_entry(value: object) -> dict[str, Any]:
         "source",
         "files",
     }
-    if not isinstance(value, dict) or set(value) != required:
+    if (
+        not isinstance(value, dict)
+        or not required <= set(value)
+        or not set(value) - required <= {"mode", "store"}
+    ):
         raise InstallError("managed manifest contains an invalid entry")
+    mode = value.get("mode", "copy")
+    if mode not in INSTALL_MODES:
+        raise InstallError(f"managed manifest entry has an invalid mode: {mode!r}")
     for key in ("canonicalId", "bundleName"):
         if not isinstance(value[key], str) or not value[key]:
             raise InstallError(f"managed manifest entry has an invalid {key}")
@@ -84,7 +95,19 @@ def _validate_entry(value: object) -> dict[str, Any]:
     _validate_source(value["source"])
 
     files = value["files"]
-    if not isinstance(files, dict) or not files:
+    store: str | None = None
+    if mode == "link":
+        if "store" not in value:
+            raise InstallError("managed manifest link entry has no store path")
+        store_path = _safe_relative(value["store"], "store")
+        if store_path.name != name or len(store_path.parts) < 2:
+            raise InstallError("managed manifest store path does not match its bundle")
+        store = store_path.as_posix()
+        if files != {}:
+            raise InstallError("managed manifest link entry must not record files")
+    elif "store" in value:
+        raise InstallError("managed manifest copy entry must not have a store path")
+    elif not isinstance(files, dict) or not files:
         raise InstallError("managed manifest entry has an invalid files mapping")
     validated_files: dict[str, str] = {}
     for relative, digest in files.items():
@@ -92,12 +115,16 @@ def _validate_entry(value: object) -> dict[str, Any]:
         if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
             raise InstallError(f"managed manifest has an invalid SHA-256 for {relative!r}")
         validated_files[file_path.as_posix()] = digest
-    return {
-        **value,
+    validated = {
+        **{key: item for key, item in value.items() if key != "store"},
         "destination": destination.as_posix(),
         "installPath": install_path.as_posix(),
         "files": validated_files,
+        "mode": mode,
     }
+    if store is not None:
+        validated["store"] = store
+    return validated
 
 
 def _validate_source(source: object) -> dict[str, str]:
@@ -171,7 +198,7 @@ def hook_file_paths(entry: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def validate_manifest(value: object) -> dict[str, Any]:
-    """Validate a v1 or v2 manifest and return it in the current (v2) shape."""
+    """Validate a v1, v2 or v3 manifest and return it in the current (v3) shape."""
 
     if not isinstance(value, dict) or "schemaVersion" not in value:
         raise InstallError("managed manifest must contain schemaVersion and entries")
@@ -189,6 +216,10 @@ def validate_manifest(value: object) -> dict[str, Any]:
     entries = value["entries"]
     if not isinstance(entries, list):
         raise InstallError("managed manifest entries must be a list")
+    if version < 3 and any(
+        isinstance(entry, dict) and ({"mode", "store"} & set(entry)) for entry in entries
+    ):
+        raise InstallError(f"managed manifest v{version} entries must not have mode or store")
     validated = [_validate_entry(entry) for entry in entries]
     identities = [entry["installPath"].casefold() for entry in validated]
     if len(identities) != len(set(identities)):
@@ -282,6 +313,139 @@ def make_entry(
     return _validate_entry(entry)
 
 
+def make_link_entry(
+    *,
+    canonical_id: str,
+    bundle_name: str,
+    target_name: str | None,
+    destination: str,
+    install_path: Path,
+    project_root: Path,
+    source_descriptor: Mapping[str, str],
+    store_path: str,
+    relativize_source: bool = True,
+) -> dict[str, Any]:
+    """A link entry for the link at ``install_path`` (its last component is not resolved)."""
+
+    project = project_root.resolve()
+    parent = install_path.parent.resolve()
+    if not parent.is_relative_to(project):
+        raise InstallError(f"managed install path resolves outside the project: {install_path}")
+    link = parent / install_path.name
+    if not is_link_like(link):
+        raise InstallError(f"installed skill link is missing: {link}")
+    entry = {
+        "canonicalId": canonical_id,
+        "bundleName": bundle_name,
+        "target": target_name,
+        "destination": destination.replace("\\", "/"),
+        "installPath": link.relative_to(project).as_posix(),
+        "source": normalized_source(source_descriptor, project, relativize=relativize_source),
+        "files": {},
+        "mode": "link",
+        "store": store_path,
+    }
+    return _validate_entry(entry)
+
+
+def link_install_path(project_root: Path, entry: Mapping[str, Any]) -> Path:
+    """Project path of an entry without following its last component (the link itself).
+
+    Every ancestor inside the project must be a real directory, as for
+    ``resolve_install_path``; only the final component may be a link.
+    """
+
+    relative = _safe_relative(entry.get("installPath"), "install")
+    root = project_root.resolve()
+    current = root
+    for part in relative.parts[:-1]:
+        current = current / part
+        if is_link_like(current):
+            raise InstallError(f"managed install path contains a symlink: {current}")
+    parent = current.resolve()
+    if not parent.is_relative_to(root):
+        raise InstallError(f"managed install path resolves outside the project: {current}")
+    return parent / relative.name
+
+
+def link_store_root(link: Path, entry: Mapping[str, Any]) -> Path | None:
+    """The store root a link entry's link points into, or None when it is not such a link.
+
+    The link must point at ``<store root>/<entry store path>``; the store root
+    is what remains after stripping the recorded store path from the target.
+    """
+
+    target = link_target(link)
+    store = entry.get("store")
+    if target is None or not isinstance(store, str):
+        return None
+    parts = PurePosixPath(store).parts
+    base = target
+    for _ in parts:
+        base = base.parent
+    if not same_path(target, base.joinpath(*parts)):
+        return None
+    return base
+
+
+def verify_link_entry(
+    project_root: Path,
+    entry: Mapping[str, Any],
+    *,
+    store_root: Path | None = None,
+    force: bool = False,
+) -> Path:
+    """Check a link entry's link and return its (unresolved) project path.
+
+    Drift is: the path is not a link, the link points somewhere other than the
+    recorded store entry (under ``store_root`` when given), or the store entry
+    directory is gone. Only the last one is accepted by ``force``: skill-tools
+    holds no hashes for a real directory in place of the link, so it cannot
+    tell whether the files there belong to the user.
+    """
+
+    validated = _validate_entry(dict(entry))
+    if validated["mode"] != "link":
+        raise InstallError(f"managed entry is not a link: {validated['installPath']}")
+    link = link_install_path(project_root, validated)
+    if not os.path.lexists(link):
+        raise InstallError(f"managed skill link is missing: {link}")
+    if not is_link_like(link):
+        raise InstallError(
+            f"managed skill link was replaced by a real directory or file: {link}; "
+            "skill-tools does not know whether its contents are yours, so move or delete "
+            "it by hand (--force does not remove it)"
+        )
+    base = link_store_root(link, validated)
+    if base is None:
+        raise InstallError(
+            f"managed skill link points at {link_target(link)}, not at the recorded store "
+            f"entry {validated['store']}: {link}"
+        )
+    if store_root is not None and not same_path(base, store_root):
+        raise InstallError(
+            f"managed skill link points into {base}, not into the configured skill store "
+            f"{store_root} (store.path changed?): {link}"
+        )
+    if not force and not base.joinpath(*PurePosixPath(validated["store"]).parts).is_dir():
+        raise InstallError(f"managed skill link points at a missing store entry: {link}")
+    return link
+
+
+def verify_managed_entry(
+    project_root: Path,
+    entry: Mapping[str, Any],
+    *,
+    store_root: Path | None = None,
+    force: bool = False,
+) -> Path:
+    """``verify_entry`` for a copy entry, ``verify_link_entry`` for a link entry."""
+
+    if entry.get("mode", "copy") == "link":
+        return verify_link_entry(project_root, entry, store_root=store_root, force=force)
+    return verify_entry(project_root, entry, force=force)
+
+
 def resolve_install_path(project_root: Path, entry: Mapping[str, Any]) -> Path:
     relative = _safe_relative(entry.get("installPath"), "install")
     root = project_root.resolve()
@@ -301,19 +465,23 @@ def resolve_install_path(project_root: Path, entry: Mapping[str, Any]) -> Path:
 def verify_entry(project_root: Path, entry: Mapping[str, Any], *, force: bool = False) -> Path:
     """Reject drift in the files the manifest records; ignore everything else.
 
-    Only manifest-recorded files (the bundle's Git-tracked files) are checked:
-    every path component from the install directory down must not be a symlink,
-    and unless ``force`` the file must exist as a regular file with the recorded
-    hash. Unmanaged files such as ``.venv/`` or ``__pycache__/`` are neither
-    scanned nor treated as drift; they disappear with the directory on
-    update/remove (see :func:`unmanaged_paths`).
+    Only manifest-recorded files (the bundle's files) are checked: every path
+    component from the install directory down must not be a symlink, and unless
+    ``force`` the file must exist as a regular file with the recorded hash.
+    Unmanaged files such as ``.venv/`` or ``__pycache__/`` are neither scanned
+    nor treated as drift; they disappear with the directory on update/remove
+    (see :func:`unmanaged_paths`).
     """
 
     validated = _validate_entry(dict(entry))
+    if validated["mode"] != "copy":
+        raise InstallError(f"managed entry is a link, not a copy: {validated['installPath']}")
     target = resolve_install_path(project_root, validated)
     if not target.is_dir():
         raise InstallError(f"managed installation is missing: {target}")
-    for relative, expected_hash in validated["files"].items():
+    modified: list[str] = []
+    missing: list[str] = []
+    for relative, expected_hash in sorted(validated["files"].items()):
         current = target
         for part in PurePosixPath(relative).parts:
             current = current / part
@@ -322,10 +490,15 @@ def verify_entry(project_root: Path, entry: Mapping[str, Any], *, force: bool = 
         if force:
             continue
         if not current.is_file():
-            raise InstallError(f"managed installation has missing files: {current}")
-        digest = hashlib.sha256(current.read_bytes()).hexdigest()
-        if digest != expected_hash:
-            raise InstallError(f"managed installation has modified files: {current}")
+            missing.append(relative)
+        elif hashlib.sha256(current.read_bytes()).hexdigest() != expected_hash:
+            modified.append(relative)
+    drift = [
+        (label, paths) for label, paths in (("modified", modified), ("missing", missing)) if paths
+    ]
+    if drift:
+        details = "; ".join(f"{label}: {', '.join(paths)}" for label, paths in drift)
+        raise InstallError(f"managed installation has drifted: {target} ({details})")
     return target
 
 
@@ -361,6 +534,20 @@ def unmanaged_paths(target: Path, entry: Mapping[str, Any]) -> list[str]:
             else:
                 found.append(relative)
     return found
+
+
+def bundle_file_hashes(source, bundle: SkillBundle) -> dict[str, str]:
+    """SHA-256 of each bundle file as the source holds it (after the bundle policy).
+
+    ``bundle.files`` is already the policy-filtered set, so this compares like
+    for like with a manifest entry's ``files``.
+    """
+
+    directory = PurePosixPath(bundle.directory)
+    return {
+        relative.as_posix(): hashlib.sha256(source.read_file(directory / relative)).hexdigest()
+        for relative in bundle.files
+    }
 
 
 def write_manifest(path: Path, value: Mapping[str, Any]) -> None:

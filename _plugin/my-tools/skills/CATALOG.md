@@ -4,55 +4,38 @@
 ---
 name: aim-cli
 description: OpenRouter経由でAIモデルを単発呼び出しする`aim` CLIツールの使い方を説明する。プロンプトをAIモデルに投げて応答を得たい、プロンプト内の`@path`でファイルやディレクトリの内容を取り込みたい、複数ファイルやスキルフォルダへ同じ質問（要約・バグ指摘など）を`--parallel`で一括したい、利用可能なモデル一覧を確認したい、タスクの難易度に応じてどのモデルを使うか選定したい場合に使う。
-# 前提条件: `aim`コマンドがPATH上にインストール済み（`uv tool install --editable tools/aim`）であり、OPENROUTER_API_KEYが設定済みであること。このスキルはインストール・セットアップは一切行わない
+# 前提条件: `aim`コマンドがPATH上にインストール済み（`uv tool install --editable tools/llm/aim`）であり、OPENROUTER_API_KEYが設定済みであること。このスキルはインストール・セットアップは一切行わない
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照（人間のメンテナ向け）
 meta:
   tag: []
   requires_repo_tools: aim
   requires_env: OPENROUTER_API_KEY
   dependencies: none
-  requires_install: uv tool install --editable tools/aim
+  requires_install: uv tool install --editable tools/llm/aim
   requires_hooks: none
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.9
----
-
-- aim-lib
----
-name: aim-lib
-description: "`tools/aim` のグローバルインストール済み Python 実装をライブラリとして使い、OpenRouter 経由で AI モデルへ単発リクエストを送る方法を説明する。Python コードからプロンプトを送信したい、モデル略記を解決したい、応答本文を取り出したい場合に使う。CLI コマンドを実行する場合は `aim-cli` を使う。"
-meta:
-  tag: []
-  requires_repo_tools: tools/aim
-  requires_env: OPENROUTER_API_KEY
-  dependencies: aim-cli, python>=3.11
-  requires_install: tools/aim (uv tool install --editable tools/aim)
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.0.9
+  version: 1.0.11
 ---
 
 - aim2-cli
 ---
 name: aim2-cli
 description: 複数プロバイダ（OpenAI, Anthropic, Google Gemini, OpenRouter, Ollama等）に直接対応したAIモデルCLIツール`aim2`の使い方を説明する。プロンプトをAIモデルに投げて応答を得たい、`--session-id`（互換`--thread-id`）でローカル会話継続したい、プロンプト内の`@path`でファイルやディレクトリの内容を取り込みたい、複数プロンプトを`--parallel`で一括並列実行したい、利用可能なモデル一覧を確認したい場合に使う。
-# 前提条件: `aim2`コマンドがPATH上にインストール済み（`cd tools/aim2 && pnpm add -g .`）であり、利用するプロバイダのAPIキーまたはOllamaが設定済みであること。このスキルはインストール・セットアップは一切行わない
+# 前提条件: `aim2`コマンドがPATH上にインストール済み（`cd tools/llm/aim2 && pnpm add -g .`）であり、利用するプロバイダのAPIキーまたはOllamaが設定済みであること。このスキルはインストール・セットアップは一切行わない
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照（人間のメンテナ向け）
 meta:
   tag: []
-  requires_repo_tools: tools/aim2
+  requires_repo_tools: tools/llm/aim2
   requires_env: none
   dependencies: none
-  requires_install: cd tools/aim2 && pnpm add -g .
+  requires_install: cd tools/llm/aim2 && pnpm add -g .
   requires_hooks: none
   requires_skills: none
   status: stable
   description: 複数プロバイダ対応 AI モデル単発呼び出し CLI ツールの使い方
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 - aws-docs
@@ -61,7 +44,7 @@ name: aws-docs
 description: Search and fetch official AWS documentation (docs.aws.amazon.com, AWS Blog, What's New, re:Post Knowledge Center, CDK/CloudFormation references) and check regional availability via the self-built `awsdocs` CLI, a fastmcp wrapper around the official AWS Knowledge MCP Server (https://knowledge-mcp.global.api.aws). Use when you need AWS service docs, API/SDK/CLI references, troubleshooting articles, recent AWS launches, or whether a service/API/CFN resource is available in a region. Do not use for general web research (use `tav-cli`), Microsoft/Azure docs (use `ms-learn`), or running AWS APIs.
 
 # 前提条件: `awsdocs`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/awsdocs`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/awsdocs`)であること。このスキルはインストール・
 # セットアップは一切行わない。認証不要(AWS Knowledge MCP は公開エンドポイント、
 # AWSアカウント不要)。このスキルの設計意図・前提条件の背景は同階層のREADME.md参照
 # (人間のメンテナ向け)
@@ -70,12 +53,33 @@ meta:
   requires_repo_tools: awsdocs
   requires_env: AWSDOCS_MCP_OUTPUT_DIR, AWSDOCS_MCP_ENDPOINT
   dependencies: none
-  requires_install: uv tool install --editable tools/awsdocs
+  requires_install: uv tool install --editable tools/web-research/awsdocs
   requires_hooks: none
   requires_skills: none
   status: experimental
   description: no description
-  version: 0.1.1
+  version: 0.1.2
+---
+
+- browser-context-tools
+---
+name: browser-context-tools
+description: Keeps browser work with `playwright-cli` from flooding the conversation by using the `pwq` wrapper (summarises / filters `snapshot` and `eval` output, 3–30% of the raw size) and the `pwdo` delegator (hands one stretch of browser steps to a cheap model and returns a short report plus a recovered script). Use when exploring an unfamiliar or large page and the raw snapshot would be big, when a browser stretch would take three or more snapshots and could be delegated, or when a `pwdo` run came back blocked by a login wall. Requires `pwq` / `pwdo` on PATH; without them use the using-playwright-cli skill alone.
+# 前提条件: `pwq`・`pwdo` が PATH にあること（tools/browser/pwq・tools/browser/pwdo。インストールは各 README）。
+#   このスキルはインストール・セットアップを一切行わない。無ければユーザーに伝え、using-playwright-cli だけで進める
+# 依存スキル: using-playwright-cli（playwright-cli のコマンド仕様の正）、認証が絡むときは sharing-browser-with-user
+# 根拠の実測: アンブレラの docs/topics/browser-automation/（delegation.md など）。本文からは張らない
+meta:
+  tag: []
+  requires_repo_tools: pwq, pwdo
+  requires_env: OPENROUTER_API_KEY
+  dependencies: none
+  requires_install: cd tools/browser/pwq && pnpm add -g ., cd tools/browser/pwdo && pnpm add -g .
+  requires_hooks: none
+  requires_skills: using-playwright-cli
+  status: experimental
+  description: pwq（出力の縮約）と pwdo（一区間の委譲）でブラウザ操作のコンテキスト消費を抑える手順
+  version: 1.0.0
 ---
 
 - gdev-docs
@@ -84,7 +88,7 @@ name: gdev-docs
 description: Search, fetch, and answer from official Google Cloud and Google Workspace developer documentation via the self-built `gdevdocs` CLI, a fastmcp wrapper around the Developer Knowledge MCP (https://developerknowledge.googleapis.com/mcp). Use when you need GCP or Workspace developer docs (concepts, APIs, SDKs, configuration, quotas, error explanations). Do not use for general web research (`tav-cli`), Microsoft docs (`ms-learn`), AWS docs (`aws-docs`), operating GCP or Workspace resources, or version-specific client-library APIs (`use-context`).
 
 # 前提条件: `gdevdocs` コマンドが PATH 上にインストール済み
-# (`uv tool install --editable tools/gdevdocs`)であり、`GDEVDOCS_API_KEY` が
+# (`uv tool install --editable tools/web-research/gdevdocs`)であり、`GDEVDOCS_API_KEY` が
 # 環境変数かグローバル設定で解決できること。このスキルはインストール・API の有効化を
 # 一切行わない。公式 Agent Skill（google/skills の retrieving-developer-knowledge）も
 # 入れない。設計意図は同階層の README.md（人間のメンテナ向け）。
@@ -93,12 +97,12 @@ meta:
   requires_repo_tools: gdevdocs
   requires_env: GDEVDOCS_API_KEY, GDEVDOCS_MCP_OUTPUT_DIR, GDEVDOCS_MCP_ENDPOINT
   dependencies: none
-  requires_install: uv tool install --editable tools/gdevdocs
+  requires_install: uv tool install --editable tools/web-research/gdevdocs
   requires_hooks: none
   requires_skills: none
   status: experimental
   description: GCP と Workspace の開発者向け公式ドキュメントを gdevdocs で引く
-  version: 0.1.0
+  version: 0.1.1
 ---
 
 - grep-app
@@ -107,7 +111,7 @@ name: grep-app
 description: Search real-world code examples across 1M+ public GitHub repositories via a self-built fastmcp CLI wrapper around the grep.app MCP server (https://mcp.grep.app). Use when you need to see how other real projects actually use an API, pattern, or library — literal code search across public GitHub, not semantic/keyword search.
 
 # 前提条件: `grepapp`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/grepapp`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/grepapp`)であること。このスキルはインストール・
 # セットアップは一切行わない。認証不要(grep.app MCP は公開エンドポイント)。
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照(人間のメンテナ向け)
 meta:
@@ -120,7 +124,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.4
+  version: 1.0.6
 ---
 
 - inspecting-python-libraries
@@ -192,53 +196,28 @@ meta:
   version: 1.2.4
 ---
 
-- ms-digest
----
-name: ms-digest
-description: Microsoft Learn/Azure公式ドキュメントを`mslearn`で検索した結果ファイルのうち、自分で1件ずつ読む代わりに`aim --parallel`で並列にAI抽出させたいものをまとめて処理し、関連する内容だけを報告させるCLI連携スキル。(a) 結果件数が多くタイトルだけでは関連性を判断しづらい場合(目安5件以上)に全件を渡して関連するものだけ絞り込ませたいとき、(b) `index.md`から読みたいファイルを選んだ後、その中に文字数が大きいファイルが複数あり個別Readせずまとめて抽出させたいとき、のいずれかで使う。1ファイルだけを抽出したい場合は`aim-cli`を直接使えばよい。
-
-# 前提条件(このスキル自体はインストール・セットアップを一切行わない):
-#   - `mslearn` コマンドが PATH 上で使えること
-#     (セットアップは tools/mslearn/README.md 参照)
-#   - `aim` コマンドが PATH 上で使え、OPENROUTER_API_KEY が設定済みであること
-#     (セットアップは tools/_plugin/my-tools/skills/aim-cli/SKILL.md 参照)
-#
-# 依存スキル: tools/_plugin/my-tools/skills/ms-learn (検索/フェッチ本体)
-#            tools/_plugin/my-tools/skills/aim-cli (並列AI抽出本体)
-# このスキルは上記2つを繋ぐ薄いオーケストレーション層で、自前のソースコードは持たない。
-meta:
-  tag: []
-  requires_repo_tools: mslearn, aim
-  requires_env: OPENROUTER_API_KEY
-  dependencies: none
-  requires_install: none
-  requires_hooks: none
-  requires_skills: ms-learn, aim-cli
-  status: stable
-  description: no description
-  version: 1.3.6
----
-
 - ms-learn
 ---
 name: ms-learn
-description: Search and fetch official Microsoft/Azure documentation (and code samples) via a self-built fastmcp CLI wrapper around the official Microsoft Learn MCP server (https://learn.microsoft.com/api/mcp). Use when you need Microsoft/Azure/.NET/M365 docs, API references, or official code samples — semantic search, full-page fetch, or code-sample lookup by language.
+description: Search and fetch official Microsoft/Azure documentation (and code samples) via a self-built fastmcp CLI wrapper around the official Microsoft Learn MCP server (https://learn.microsoft.com/api/mcp), and extract relevant parts from many result files in parallel via `aim --parallel`. Use when you need Microsoft/Azure/.NET/M365 docs, API references, or official code samples — semantic search, full-page fetch, or code-sample lookup by language.
 
 # 前提条件: `mslearn`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/mslearn`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/mslearn`)であること。このスキルはインストール・
 # セットアップは一切行わない。認証不要(Microsoft Learn MCP は公開エンドポイント)。
+# digest.md(結果ファイルの並列AI抽出)だけは `aim` コマンドと OPENROUTER_API_KEY も要る(aim-cli スキル参照)
+# SKILL.md は薄いエントリ。目的別の本文は同階層の queries.md / output.md / digest.md に置く
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照(人間のメンテナ向け)
 meta:
   tag: []
-  requires_repo_tools: mslearn
-  requires_env: MSLEARN_MCP_OUTPUT_DIR
+  requires_repo_tools: mslearn, aim
+  requires_env: MSLEARN_MCP_OUTPUT_DIR, OPENROUTER_API_KEY
   dependencies: none
   requires_install: none
   requires_hooks: none
-  requires_skills: none
+  requires_skills: aim-cli
   status: stable
   description: no description
-  version: 1.2.3
+  version: 1.3.0
 ---
 
 - my-agents
@@ -247,13 +226,13 @@ name: my-agents
 description: YAML定義のLangchainエージェントを実行・一覧表示・新規作成する `my-agents` CLIの使い方を説明する。カスタムエージェントにプロンプトを投げて答えさせたい、既存のエージェント設定YAMLを確認したい、使えるツールを確認した上で新しいエージェント設定YAMLを作りたい場合に使う。
 
 # 前提条件: リポジトリルートで`uv sync`済みであること（`uv run my-agents ...`で実行）。
-# グローバルCLIとして使う場合は`uv tool install --editable tools/my-agents`でも可。
-# いずれの場合も`tools/my-agents/.env`（`.env.example`をコピー）に`OPENAI_API_KEY`が
+# グローバルCLIとして使う場合は`uv tool install --editable tools/llm/my-agents`でも可。
+# いずれの場合も`tools/llm/my-agents/.env`（`.env.example`をコピー）に`OPENAI_API_KEY`が
 # 設定済みであること。このスキルはインストール・セットアップは一切行わない。
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照（人間のメンテナ向け）
 meta:
   tag: []
-  requires_repo_tools: tools/my-agents, tools/mslearn
+  requires_repo_tools: tools/llm/my-agents, tools/web-research/mslearn
   requires_env: OPENAI_API_KEY
   dependencies: none
   requires_install: uv sync
@@ -261,27 +240,7 @@ meta:
   requires_skills: ms-learn
   status: stable
   description: no description
-  version: 1.0.4
----
-
-- ona-run
----
-name: ona-run
-description: リポジトリURL（またはOnaプロジェクトID）とタスク内容を指定してOnaの環境（コンテナ）を作成・起動し、その中でAIエージェントCLI等のタスクを実行して完了後に停止する`ona-run` CLIツールの使い方を説明する。`--agent`/`--command`の選び方、`--cleanup`モードの選び方、終了コード・stderrマーカーの意味を判断したい場合に使う。
-# 前提条件: `ona-run`コマンドがPATH上にインストール済み（`uv tool install --editable tools/ona-run`）であり、Ona公式CLI（`ona`）もインストール・`ona login`で認証済みであること。ona-run自体は追加の環境変数を必要としない
-# コンテナ内でAIエージェントCLI（claude/codex）を動かす場合、対象リポジトリのDev Container側にそのCLIが導入済みであることが前提（このスキル・ツールとも導入までは面倒を見ない）
-# このスキルの設計意図・前提条件の背景は同階層のREADME.md参照（人間のメンテナ向け）
-meta:
-  tag: []
-  requires_repo_tools: ona-run
-  requires_env: none
-  dependencies: none
-  requires_install: uv tool install --editable tools/ona-run, ona CLI + ona login
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.0.4
+  version: 1.0.5
 ---
 
 - parallel-agent-worktree
@@ -330,7 +289,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.7
+  version: 1.2.15
 ---
 
 - task-tracker
@@ -349,86 +308,44 @@ meta:
   requires_skills: none
   status: draft
   description: no description
-  version: 1.0.4
+  version: 1.0.5
 ---
 
 - tav-cli
 ---
 name: tav-cli
-description: Guides multi-step Tavily research with this project's `tav` command, including web-wide search, multiple URLs, site maps/crawls, and topic-based result accumulation. Use when a task needs more than one known URL or a reusable research workspace; use `tav-lit` to extract one already-known URL.
+description: Guides multi-step Tavily research with this project's `tav` command, including web-wide search, multiple URLs, site maps/crawls, topic-based result accumulation, and parallel AI extraction of many collected pages via `aim --parallel`. Use when a task needs more than one known URL or a reusable research workspace; use `tav-lit` to extract one already-known URL.
 
 # 前提条件: `tav`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/tav-cli`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/tav-cli`)であること。このスキルはインストール・
 # セットアップは一切行わない。CLI本体は同梱せず、Pythonスクリプトを直接叩く運用は廃止した
-# (実体は tools/tav-cli/ を参照)。
+# (実体は tools/web-research/tav-cli/ を参照)。
 # 実行前に TAVILY_API_KEY を環境変数、またはグローバル設定 ~/.config/tav/config.toml の api_key に設定していること
 # 出力先などはプロジェクト設定 .tav.toml(CWD〜git ルートで近いものが勝つ)・グローバル設定・環境変数で設定でき、TAVILY_OUTPUT_DIR(出力先ベース、未設定時は git ルート基準の temp/web)・TAVILY_WRITE_LOG(監査ログ出力トグル、未設定=true)・TAVILY_SHOW_LOG_PATH(監査ログ書き込み時の「Wrote full log to <path>」通知トグル、未設定=true。結果ファイルのパス通知は常に表示)も設定できる
+# digest.md(pages/ の並列AI抽出)だけは `aim` コマンドと OPENROUTER_API_KEY も要る(aim-cli スキル参照)
+# SKILL.md は薄いエントリ。目的別の本文は同階層の commands.md / output.md / digest.md に置く
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照(人間のメンテナ向け)
 
 # ```!```を使った動的コンテキスト埋め込みを使い、更新漏れを防止する
 # 参考: https://code.claude.com/docs/en/skills#inject-dynamic-context
 meta:
   tag: []
-  requires_repo_tools: tav
-  requires_env: TAVILY_API_KEY, TAVILY_OUTPUT_DIR, TAVILY_LOG_DIR, TAVILY_WRITE_LOG, TAVILY_SHOW_LOG_PATH
-  dependencies: tavily-python
-  requires_install: uv tool install --editable tools/tav-cli
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.2.5
----
-
-- tav-digest
----
-name: tav-digest
-description: tav`で`--topic`指定して収集した`pages/`(extract/crawl/search-extract/map-extractの取得本文)のうち、自分で1件ずつ読む代わりに`aim --parallel`で並列にAI抽出させたいものをまとめて処理し、関連する内容だけを報告させるCLI連携スキル。(a) `pages/index.json`のエントリ数が多くタイトルだけでは関連性を判断しづらい場合(目安5件以上)に全件を渡して関連するものだけ絞り込ませたいとき、(b) `index.json`から読みたいファイルを選んだ後、その中に`char_count`が大きいファイルが複数あり個別Readせずまとめて抽出させたいとき、のいずれかで使う。1ファイルだけを抽出したい場合は`aim-cli`を直接使えばよい。discovery(`search/`・`map/`)やreport(`research/`)はこのスキルの対象外(集約1ファイル、または成功時のみの単一レポートなのでそのまま読めば足りる)。
-
-# 前提条件(このスキル自体はインストール・セットアップを一切行わない):
-#   - `tav` コマンドが PATH 上で使えること
-#     (セットアップは tools/tav-cli/README.md 参照)
-#   - `aim` コマンドが PATH 上で使え、OPENROUTER_API_KEY が設定済みであること
-#     (セットアップは tools/_plugin/my-tools/skills/aim-cli/SKILL.md 参照)
-#
-# 依存スキル: tools/_plugin/my-tools/skills/tav-cli (収集本体)
-#            tools/_plugin/my-tools/skills/aim-cli (並列AI抽出本体)
-# このスキルは上記2つを繋ぐ薄いオーケストレーション層で、自前のソースコードは持たない。
-meta:
-  tag: []
   requires_repo_tools: tav, aim
-  requires_env: OPENROUTER_API_KEY
-  dependencies: none
-  requires_install: none
+  requires_env: TAVILY_API_KEY, TAVILY_OUTPUT_DIR, TAVILY_LOG_DIR, TAVILY_WRITE_LOG, TAVILY_SHOW_LOG_PATH, OPENROUTER_API_KEY
+  dependencies: tavily-python
+  requires_install: uv tool install --editable tools/web-research/tav-cli
   requires_hooks: none
-  requires_skills: tav-cli, aim-cli
+  requires_skills: aim-cli
   status: stable
   description: no description
-  version: 1.0.6
----
-
-- tav-lib
----
-name: tav-lib
-description: "`tools/tav-cli` のグローバルインストール済み Python 実装をライブラリとして使い、Tavily 経由で Web 検索・URL 本文抽出・サイトマップ・クロール・リサーチを行う方法を説明する。Python コードから Tavily API を呼び出したい、`--detail` プリセットを適用した結果を取り出したい場合に使う。CLI コマンドを実行する場合は `tav-cli` を使う。"
-meta:
-  tag: []
-  requires_repo_tools: tools/tav-cli
-  requires_env: TAVILY_API_KEY
-  dependencies: tav-cli, python>=3.11
-  requires_install: tools/tav-cli (uv tool install --editable tools/tav-cli)
-  requires_hooks: none
-  requires_skills: none
-  status: stable
-  description: no description
-  version: 1.0.5
+  version: 1.3.1
 ---
 
 - textgraph
 ---
 name: textgraph
-description: Explains when to use the `textgraph` CLI for local file-link graphs in text files. Use when deciding among status, impact, and check, when editing Markdown or SKILL.md and needing inbound references, when choosing whether `fix --apply` is safe, when choosing `check --scripts` for script-comment links, or when falling back to grep for YAML or imports.
-# 前提条件: `textgraph` コマンドが PATH 上にインストール済み（`uv tool install --editable tools/textgraph`）であること。API キーは不要。このスキルはインストール・セットアップは一切行わない。
+description: Explains when to use the `textgraph` CLI for local file-link graphs in text files. Use when deciding among status, impact, and check, when editing Markdown or SKILL.md and needing inbound references, when moving files and comparing link breakage before and after with `check --baseline`, when choosing whether `fix --apply` is safe, when choosing `check --scripts` for script-comment links, or when falling back to grep for YAML or imports.
+# 前提条件: `textgraph` コマンドが PATH 上にインストール済み（`uv tool install --editable tools/textgraph`）であること。このリポジトリの中なら、入れずに `uv run --project tools/textgraph textgraph ...` でも動く。API キーは不要。このスキルはインストール・セットアップは一切行わない。
 # このスキルの設計意図・前提条件の背景は同階層の README.md 参照（人間のメンテナ向け）
 meta:
   tag: []
@@ -440,7 +357,7 @@ meta:
   requires_skills: none
   status: experimental
   description: テキストローカルリンクの impact / check / fix 判断
-  version: 1.0.4
+  version: 1.1.0
 ---
 
 - use-context
@@ -449,7 +366,7 @@ name: use-context
 description: Resolve and fetch current, version-aware library/framework documentation, API references, setup instructions, migration guidance, and code examples from Context7 via the self-built `ctx7` CLI (Context7's REST API directly — not the official Context7 MCP server/plugin). Activate when a task depends on an external package's current API, setup, or migration behavior. Prefer `ms-learn` for Microsoft/Azure, `aws-docs` for AWS, and `gdev-docs` for Google Cloud and Google Workspace developer documentation; do not use for general web research or local-code reading. For shipped implementation or a PyPI wheel's contents, use `inspecting-python-libraries`. Skip this skill if the official `context7-mcp` skill, the `docs-researcher` agent, or the `/context7:docs` command has already handled the same lookup in this session, to avoid duplicate calls.
 
 # 前提条件: `ctx7`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/ctx7`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/ctx7`)であること。このスキルはインストール・
 # セットアップは一切行わない。APIキー(CONTEXT7_API_KEY)は任意(未設定でも動くが
 # レート制限が低い)。このスキルの設計意図・前提条件の背景は同階層のREADME.md参照
 # (人間のメンテナ向け)。
@@ -458,10 +375,10 @@ meta:
   requires_repo_tools: ctx7
   requires_env: CONTEXT7_API_KEY
   dependencies: requests, python-dotenv
-  requires_install: uv tool install --editable tools/ctx7
+  requires_install: uv tool install --editable tools/web-research/ctx7
   requires_hooks: none
   requires_skills: none
   status: experimental
   description: no description
-  version: 1.0.5
+  version: 1.0.6
 ---

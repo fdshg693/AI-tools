@@ -8,12 +8,14 @@
 
 - `status` / `files` / `impact` / `check` / `fix` のどれを先に叩くかは `--help` だけでは割れる。件数確認と切れ検出と inbound 照会を取り違えると、広い grep に落ちるか、無関係なファイルを `--apply` する
 - 既定の走査はドキュメント拡張子だけ。スクリプトコメントの同じ構文を見るかは `check --scripts` の判断であり、`--help` の有無だけでは「いつ付けるか」は決まらない
-- `--apply` してよい信頼度は `unique-suffix` と `git-rename` だけ。`unique-basename` は一意でも誤ることがある、という運用は CLI の `--help` に出てこない
+- `--apply` してよい信頼度は `unique-suffix` と `git-rename` だけ。`unique-basename`・`git-rename-basename` は一意でも誤ることがある（basename だけの rename 一致で正しいリンクを壊しかけた実例がある）、という運用は CLI の `--help` に出てこない
+- `external`（索引の外だがディスクに実在）を直さないこと、ファイル移動の前後を `check --baseline` で比べることも、エージェント向けの分岐としてはスキル側に置く
 - CodeGraph との役割分担（コードの流れ vs テキストのローカル参照）と、YAML/import を grep に落とす条件も、ツール README のコマンド説明だけでは固定されない
 
 ## 前提条件（重要）
 
 - `textgraph` コマンドは事前にインストール済みであること（`uv tool install --editable tools/textgraph`）。このスキルはインストール処理を一切行わず、CLI 本体も同梱しない
+- このリポジトリの中では、グローバルに入れない場合の代替として `uv run --project tools/textgraph textgraph ...` で動かせる。SKILL.md はコマンドの置き換えを 1 行示すだけで、セットアップ手順としては扱わない
 - API キーは不要。索引は対象リポジトリ直下の `.textgraph/`（gitignore）
 - 上記が満たされていない環境でこのスキルが呼ばれた場合、Claude はこのスキルではエラーに対処せず、`tools/textgraph/README.md` のセットアップ手順をユーザーに案内する
 

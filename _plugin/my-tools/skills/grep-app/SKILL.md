@@ -3,7 +3,7 @@ name: grep-app
 description: Search real-world code examples across 1M+ public GitHub repositories via a self-built fastmcp CLI wrapper around the grep.app MCP server (https://mcp.grep.app). Use when you need to see how other real projects actually use an API, pattern, or library — literal code search across public GitHub, not semantic/keyword search.
 
 # 前提条件: `grepapp`コマンドがPATH上にインストール済み
-# (`uv tool install --editable tools/grepapp`)であること。このスキルはインストール・
+# (`uv tool install --editable tools/web-research/grepapp`)であること。このスキルはインストール・
 # セットアップは一切行わない。認証不要(grep.app MCP は公開エンドポイント)。
 # このスキルの設計意図・前提条件の背景は同階層のREADME.md参照(人間のメンテナ向け)
 meta:
@@ -16,7 +16,7 @@ meta:
   requires_skills: none
   status: stable
   description: no description
-  version: 1.0.4
+  version: 1.0.6
 ---
 
 ## エントリポイント: `grepapp` コマンド
@@ -26,7 +26,7 @@ grepapp --help
 ```
 
 未インストール・エラーが出た場合はこのスキルでは対処しない。ユーザーに
-`tools/grepapp/README.md` のセットアップ手順を案内する。
+`tools/web-research/grepapp/README.md` のセットアップ手順を案内する。
 
 ## クエリの書き方(最重要の制約)
 
@@ -67,7 +67,7 @@ grepapp --help
 ターミナルには **そのフォルダの `index.md` へのパスだけ** が返る(個別ファイルのパスや
 本文は返らない)。まず `index.md` を Read してタイトル一覧(各行末に個別ファイルの文字数も
 付記されている)を見て、**タイトルから読みたいファイルを選ぶ**。選んだファイルのうち
-文字数が大きいものは、そのまま Read せず `aim --parallel` で抽出させる(`ms-digest` スキルと同じ
+文字数が大きいものは、そのまま Read せず `aim --parallel` で抽出させる(`ms-learn` スキルの `digest.md` と同じ
 考え方) — 小さいものはそのまま Read してよい。
 
 ## 既知のリスク

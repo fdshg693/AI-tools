@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
+from .config import Config, load_config
 from .extract import extract_links
-from .resolve import resolve_link
+from .resolve import FileIndex, resolve_link
 from .store import StoredLink, GraphStore, db_path
 
 TEXT_EXTENSIONS = {".md", ".mdc", ".txt", ".rst"}
@@ -94,7 +95,18 @@ def is_script_file(path: str) -> bool:
     return posix.name.lower() in SCRIPT_BASENAMES
 
 
-def stored_links_from_text(text: str, source: str, file_set: set[str]) -> list[StoredLink]:
+def indexed_text_files(all_files: list[str], config: Config) -> list[str]:
+    """The text files the index should hold: git's list minus ``exclude``.
+
+    ``sync`` and the stale check both call this, so an excluded file is
+    neither indexed nor reported as missing from the index.
+    """
+    return [path for path in config.sources(all_files) if is_text_file(path)]
+
+
+def stored_links_from_text(
+    text: str, source: str, file_set: set[str] | FileIndex
+) -> list[StoredLink]:
     links: list[StoredLink] = []
     for extracted in extract_links(text):
         resolved = resolve_link(extracted.raw, source, file_set)
@@ -115,10 +127,14 @@ def read_source_text(root: Path, path: str) -> str:
     return full.read_text(encoding="utf-8", errors="replace")
 
 
-def sync_index(root: Path, *, force: bool = False) -> SyncStats:
+def sync_index(root: Path, *, force: bool = False, config: Config | None = None) -> SyncStats:
+    if config is None:
+        config = load_config(root)
     all_files = list_git_files(root)
-    text_files = [path for path in all_files if is_text_file(path)]
-    file_set = set(all_files)
+    text_files = indexed_text_files(all_files, config)
+    # Links resolve against every git file, excluded or not: a link to an
+    # excluded document is still a correct link.
+    file_set = FileIndex(all_files)
     store = GraphStore(db_path(root))
     try:
         known = store.listed_paths()
@@ -129,17 +145,25 @@ def sync_index(root: Path, *, force: bool = False) -> SyncStats:
             removed += 1
         updated = 0
         skipped = 0
+        mtimes = store.file_mtimes()
         for path in text_files:
             full = root.joinpath(*path.split("/"))
             data = full.read_bytes()
             digest = hashlib.sha256(data).hexdigest()
             if not force and store.file_hash(path) == digest:
+                # Content is unchanged, but a newer mtime (rewrite, checkout,
+                # touch) would keep is_index_stale true forever unless the
+                # stored mtime follows the disk.
+                mtime = full.stat().st_mtime
+                if mtimes.get(path) != mtime:
+                    store.update_mtime(path, mtime)
                 skipped += 1
                 continue
             text = data.decode("utf-8", errors="replace")
             links = stored_links_from_text(text, path, file_set)
             store.replace_file(path, digest, full.stat().st_mtime, links)
             updated += 1
+        store.commit()
         store.set_last_sync(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
         return SyncStats(updated=updated, skipped=skipped, removed=removed)
     finally:

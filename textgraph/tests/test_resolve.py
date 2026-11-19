@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from textgraph.resolve import ResolvedLink, fallback_candidates, lookup_candidates, resolve_link
+from textgraph.resolve import (
+    ResolvedLink,
+    directories_of,
+    fallback_candidates,
+    lookup_candidates,
+    narrow_candidates,
+    resolve_link,
+)
 
 FILES = {
     "README.md",
@@ -107,3 +114,41 @@ def test_strips_at_prefix_before_resolving() -> None:
         confidence="exact",
         anchor=None,
     )
+
+
+def test_directory_without_index_file_resolves_exactly() -> None:
+    files = {"pkg/skills/a/SKILL.md", "pkg/README.md"}
+    assert resolve_link("skills/", "pkg/README.md", files) == ResolvedLink(
+        resolved="pkg/skills",
+        confidence="exact",
+        anchor=None,
+    )
+    assert resolve_link("../pkg/skills", "pkg/README.md", files).resolved == "pkg/skills"
+    assert resolve_link("missing/", "pkg/README.md", files).confidence == "unresolved"
+
+
+def test_directories_of_includes_every_ancestor_and_root() -> None:
+    assert directories_of({"a/b/c.md", "d.md"}) == frozenset({"", "a", "a/b"})
+    assert directories_of(set()) == frozenset()
+
+
+def test_parent_relative_link_found_by_suffix_is_not_exact() -> None:
+    files = {"tools/_plugin/guide.md", "tools/_plugin/other/guide.md"}
+    hit = resolve_link("../_plugin/guide.md", "tools/plugin/deep/README.md", files)
+    assert hit == ResolvedLink(
+        resolved="tools/_plugin/guide.md",
+        confidence="unique-suffix",
+        anchor=None,
+    )
+
+
+def test_narrow_candidates_keeps_paths_sharing_a_directory_name() -> None:
+    candidates = ["maintenance/plugin/README.md", "tools/coding-agent/README.md"]
+    assert narrow_candidates("../tools/x/README.md", candidates) == ["tools/coding-agent/README.md"]
+    assert narrow_candidates("../workflow/README.md", candidates) == []
+
+
+def test_narrow_candidates_passes_bare_basename_through() -> None:
+    candidates = ["a/SKILL.md", "b/SKILL.md"]
+    assert narrow_candidates("SKILL.md", candidates) == candidates
+    assert narrow_candidates("./SKILL.md", candidates) == candidates

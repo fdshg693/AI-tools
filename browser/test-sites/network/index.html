@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ネットワーク・モックラボ</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 48rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; }
+  [hidden] { display: none !important; }
+  code { background: #f2f2f2; padding: 0 .2rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ネットワーク・モックラボ</h1>
+  <p>ページ内から <code>fetch</code> で静的 JSON を取りに行くだけのページ。<code>page.route()</code> でのモック、
+     <code>waitForResponse</code>、オフライン／失敗時の挙動を試す。エンドポイントは静的ファイルなので、
+     レスポンスの中身を変えたいときは Playwright 側で差し替える。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <section aria-label="商品一覧の取得">
+    <h2>商品一覧の取得</h2>
+    <p>取得先: <code>/network/api/items.json</code></p>
+    <button type="button" id="load-items">商品を読み込む</button>
+    <ul id="items" aria-label="商品一覧"></ul>
+    <p id="items-error" role="alert" hidden>商品の読み込みに失敗しました</p>
+  </section>
+
+  <section aria-label="遅いAPI">
+    <h2>遅い API</h2>
+    <p>取得先: <code>/network/api/profile.json</code>（ページ側で 3 秒遅らせて表示する）</p>
+    <button type="button" id="load-profile">プロフィールを読み込む</button>
+    <p id="profile-loading" role="status" hidden>読み込み中…</p>
+    <p id="profile" hidden></p>
+  </section>
+
+  <section aria-label="失敗するAPI">
+    <h2>失敗する API</h2>
+    <p>取得先: <code>/network/api/missing.json</code>（存在しないので 404）。リトライ導線つき。</p>
+    <button type="button" id="load-missing">レポートを読み込む</button>
+    <p id="missing-error" role="alert" hidden>読み込みに失敗しました（<span id="missing-status"></span>）</p>
+    <button type="button" id="retry" hidden>再試行する</button>
+    <p id="missing-ok" hidden>レポートを読み込みました</p>
+  </section>
+
+  <section aria-label="POST送信">
+    <h2>POST 送信</h2>
+    <p>送信先: <code>/network/api/submit</code>（サーバー側には存在しない。<code>route.fulfill()</code> で受け止める前提）</p>
+    <div>
+      <label for="comment">コメント</label>
+      <input type="text" id="comment" name="comment">
+    </div>
+    <button type="button" id="send">送信する</button>
+    <p id="send-result" role="status">未送信</p>
+  </section>
+</main>
+<script>
+  document.getElementById('load-items').addEventListener('click', async () => {
+    const list = document.getElementById('items');
+    const err = document.getElementById('items-error');
+    list.innerHTML = ''; err.hidden = true;
+    try {
+      const res = await fetch('/network/api/items.json');
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      for (const item of data.items) {
+        const li = document.createElement('li');
+        li.textContent = item.name + ' — ' + item.price.toLocaleString('ja-JP') + ' 円';
+        list.appendChild(li);
+      }
+    } catch { err.hidden = false; }
+  });
+
+  document.getElementById('load-profile').addEventListener('click', async () => {
+    const loading = document.getElementById('profile-loading');
+    const out = document.getElementById('profile');
+    out.hidden = true; loading.hidden = false;
+    const res = await fetch('/network/api/profile.json');
+    const data = await res.json();
+    setTimeout(() => {
+      loading.hidden = true;
+      out.textContent = data.name + '（' + data.plan + '）';
+      out.hidden = false;
+    }, 3000);
+  });
+
+  async function loadMissing() {
+    const err = document.getElementById('missing-error');
+    const ok = document.getElementById('missing-ok');
+    err.hidden = true; ok.hidden = true;
+    const res = await fetch('/network/api/missing.json');
+    if (res.ok) {
+      ok.hidden = false;
+      document.getElementById('retry').hidden = true;
+    } else {
+      document.getElementById('missing-status').textContent = 'HTTP ' + res.status;
+      err.hidden = false;
+      document.getElementById('retry').hidden = false;
+    }
+  }
+  document.getElementById('load-missing').addEventListener('click', loadMissing);
+  document.getElementById('retry').addEventListener('click', loadMissing);
+
+  document.getElementById('send').addEventListener('click', async () => {
+    const out = document.getElementById('send-result');
+    out.textContent = '送信中…';
+    try {
+      const res = await fetch('/network/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment: document.getElementById('comment').value }),
+      });
+      out.textContent = res.ok ? '送信しました' : '送信に失敗しました（HTTP ' + res.status + '）';
+    } catch {
+      out.textContent = '送信に失敗しました（ネットワークエラー）';
+    }
+  });
+</script>
+</body>
+</html>

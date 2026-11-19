@@ -9,11 +9,17 @@ import pytest
 from skill_tools.install.manifest import (
     empty_manifest,
     load_manifest,
+    link_install_path,
+    link_store_root,
     make_entry,
+    make_link_entry,
     unmanaged_paths,
     verify_entry,
+    verify_link_entry,
+    verify_managed_entry,
     write_manifest,
 )
+from skill_tools.fs_links import create_dir_link, remove_link
 from skill_tools.models import InstallError
 from skill_tools.models import SkillBundle
 from pathlib import PurePosixPath
@@ -211,21 +217,21 @@ def _hook_entry(**overrides) -> dict:
     return entry
 
 
-def test_v1_manifest_is_read_as_v2_and_written_back_as_v2(tmp_path: Path) -> None:
+def test_v1_manifest_is_read_and_written_back_as_v3(tmp_path: Path) -> None:
     path = tmp_path / "manifest.json"
     path.write_text('{"schemaVersion": 1, "entries": []}', encoding="utf-8")
 
     loaded = load_manifest(path)
     assert loaded == empty_manifest()
     write_manifest(path, {**loaded, "hooks": [_hook_entry()]})
-    assert json.loads(path.read_text(encoding="utf-8"))["schemaVersion"] == 2
+    assert json.loads(path.read_text(encoding="utf-8"))["schemaVersion"] == 3
     assert load_manifest(path)["hooks"][0]["hookId"] == "nested_rules"
 
 
 @pytest.mark.parametrize(
     ("manifest", "message"),
     [
-        ({"schemaVersion": 3, "entries": [], "hooks": []}, "update skill-tools"),
+        ({"schemaVersion": 4, "entries": [], "hooks": []}, "update skill-tools"),
         ({"schemaVersion": 2, "entries": []}, "must contain exactly"),
         ({"schemaVersion": 1, "entries": [], "hooks": []}, "must contain exactly"),
         (
@@ -260,3 +266,170 @@ def test_manifest_v2_hook_validation(tmp_path: Path, manifest: dict, message: st
 
     with pytest.raises(InstallError, match=message):
         load_manifest(path)
+
+
+def _skill_entry(**overrides) -> dict:
+    entry = {
+        "canonicalId": "plugins/alpha/SKILL.md",
+        "bundleName": "alpha",
+        "target": None,
+        "destination": ".claude/skills",
+        "installPath": ".claude/skills/alpha",
+        "source": {"type": "local", "path": "catalog"},
+        "files": {"SKILL.md": "0" * 64},
+    }
+    entry.update(overrides)
+    return entry
+
+
+def _link_entry(**overrides) -> dict:
+    values = {"files": {}, "mode": "link", "store": "local-0123456789ab/01234567/alpha"}
+    return _skill_entry(**{**values, **overrides})
+
+
+def test_v2_copy_entry_gains_mode_and_is_written_as_v3(tmp_path: Path) -> None:
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps({"schemaVersion": 2, "entries": [_skill_entry()], "hooks": []}),
+        encoding="utf-8",
+    )
+
+    loaded = load_manifest(path)
+    assert loaded["schemaVersion"] == 3
+    assert loaded["entries"][0]["mode"] == "copy"
+    assert "store" not in loaded["entries"][0]
+    write_manifest(path, loaded)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert raw["schemaVersion"] == 3
+    assert raw["entries"][0]["mode"] == "copy"
+
+
+def test_v3_link_entry_round_trips(tmp_path: Path) -> None:
+    path = tmp_path / "manifest.json"
+    manifest = {"schemaVersion": 3, "entries": [_link_entry()], "hooks": []}
+    write_manifest(path, manifest)
+    assert load_manifest(path) == manifest
+
+
+@pytest.mark.parametrize(
+    ("entries", "version", "message"),
+    [
+        ([_skill_entry(mode="copy")], 2, "must not have mode"),
+        ([_link_entry()], 2, "must not have mode"),
+        ([_skill_entry(mode="hardlink")], 3, "invalid mode"),
+        ([_skill_entry(files={}, mode="link")], 3, "no store path"),
+        ([_link_entry(files={"SKILL.md": "0" * 64})], 3, "must not record files"),
+        ([_skill_entry(store="local-x/01234567/alpha")], 3, "must not have a store"),
+        ([_skill_entry(mode="link", files={}, store="local-x/01234567/beta")], 3, "store path"),
+        ([_skill_entry(mode="link", files={}, store="alpha")], 3, "store path"),
+        ([_skill_entry(mode="link", files={}, store="../x/alpha")], 3, "store"),
+        ([_skill_entry(extra=1)], 3, "invalid entry"),
+    ],
+)
+def test_v3_entry_validation(tmp_path: Path, entries: list, version: int, message: str) -> None:
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps({"schemaVersion": version, "entries": entries, "hooks": []}), encoding="utf-8"
+    )
+    with pytest.raises(InstallError, match=message):
+        load_manifest(path)
+
+
+def _linked_project(tmp_path: Path) -> tuple[Path, Path, dict]:
+    project = tmp_path / "project"
+    store_root = (tmp_path / "store").resolve()
+    entry = _link_entry()
+    store_entry = store_root.joinpath(*PurePosixPath(entry["store"]).parts)
+    store_entry.mkdir(parents=True)
+    (store_entry / "SKILL.md").write_text("store\n", encoding="utf-8")
+    create_dir_link(project / ".claude" / "skills" / "alpha", store_entry)
+    return project, store_root, entry
+
+
+def test_make_and_verify_link_entry(tmp_path: Path) -> None:
+    project, store_root, expected = _linked_project(tmp_path)
+    link = project / ".claude" / "skills" / "alpha"
+
+    entry = make_link_entry(
+        canonical_id="plugins/alpha/SKILL.md",
+        bundle_name="alpha",
+        target_name=None,
+        destination=".claude/skills",
+        install_path=link,
+        project_root=project,
+        source_descriptor={"type": "local", "path": str(project / "catalog")},
+        store_path=expected["store"],
+    )
+    assert entry == expected
+    assert link_install_path(project, entry) == project.resolve() / ".claude/skills/alpha"
+    assert verify_link_entry(project, entry) == link_install_path(project, entry)
+    assert verify_link_entry(project, entry, store_root=store_root)
+    assert verify_managed_entry(project, entry, store_root=store_root)
+    assert link_store_root(link, entry) == store_root
+    with pytest.raises(InstallError, match="not a copy"):
+        verify_entry(project, entry, force=True)
+
+
+def test_verify_link_entry_drift(tmp_path: Path) -> None:
+    project, store_root, entry = _linked_project(tmp_path)
+    link = project / ".claude" / "skills" / "alpha"
+
+    with pytest.raises(InstallError, match="configured skill store"):
+        verify_link_entry(project, entry, store_root=tmp_path / "other-store")
+
+    store_entry = store_root.joinpath(*PurePosixPath(entry["store"]).parts)
+    moved = store_entry.with_name("moved")
+    store_entry.rename(moved)
+    with pytest.raises(InstallError, match="missing store entry"):
+        verify_link_entry(project, entry)
+    # --force accepts the missing store entry (update re-creates it, remove drops the link).
+    assert verify_link_entry(project, entry, force=True) == link_install_path(project, entry)
+    moved.rename(store_entry)
+
+    remove_link(link)
+    create_dir_link(link, moved.parent.parent)  # some other directory
+    with pytest.raises(InstallError, match="not at the recorded store entry"):
+        verify_link_entry(project, entry, force=True)
+
+    remove_link(link)
+    with pytest.raises(InstallError, match="missing"):
+        verify_link_entry(project, entry, force=True)
+
+    link.mkdir()
+    (link / "SKILL.md").write_text("mine\n", encoding="utf-8")
+    with pytest.raises(InstallError, match="real directory"):
+        verify_link_entry(project, entry, force=True)
+    assert (link / "SKILL.md").read_text(encoding="utf-8") == "mine\n"
+
+
+def test_verify_entry_lists_every_drifted_file_at_once(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    target = root / ".claude" / "skills" / "alpha"
+    (target / "references").mkdir(parents=True)
+    (target / "SKILL.md").write_text("original\n", encoding="utf-8")
+    (target / "references" / "guide.md").write_text("guide\n", encoding="utf-8")
+    (target / "gone.md").write_text("gone\n", encoding="utf-8")
+    files = tuple(PurePosixPath(p) for p in ("SKILL.md", "gone.md", "references/guide.md"))
+    entry = make_entry(
+        canonical_id="plugins/alpha/SKILL.md",
+        bundle_name="alpha",
+        target_name=None,
+        destination=".claude/skills",
+        install_path=target,
+        project_root=root,
+        source_descriptor={"type": "local", "path": str(tmp_path / "source")},
+        bundle=SkillBundle(
+            canonical_id="plugins/alpha/SKILL.md",
+            name="alpha",
+            directory=PurePosixPath("plugins/alpha"),
+            files=files,
+        ),
+    )
+    (target / "SKILL.md").write_text("edited\n", encoding="utf-8")
+    (target / "references" / "guide.md").write_text("edited\n", encoding="utf-8")
+    (target / "gone.md").unlink()
+    (target / "extra.txt").write_text("extra\n", encoding="utf-8")
+
+    with pytest.raises(InstallError) as caught:
+        verify_entry(root, entry)
+    assert str(caught.value).endswith("(modified: SKILL.md, references/guide.md; missing: gone.md)")

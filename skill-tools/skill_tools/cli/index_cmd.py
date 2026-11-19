@@ -23,7 +23,7 @@ from ..index.build import (
 )
 from ..index.embedding import EMBEDDING_MODEL, missing_api_key_message, resolve_api_key
 from ..index.search import search_index
-from ..models import CatalogError, EmbeddingError, IndexError, SearchResult
+from ..models import CatalogError, EmbeddingError, IndexError, SearchResult, SourceError
 from .arguments import (
     _add_runtime_arguments,
     _configured_source_description,
@@ -94,7 +94,51 @@ def _read_search_index(config):
     return index
 
 
-def _result_payload(result: SearchResult) -> dict[str, Any]:
+_UNKNOWN_IDS_SHOWN = 5
+
+
+def _check_results_in_catalog(config, results: Sequence[SearchResult]) -> list[bool] | None:
+    """Whether each result is in the configured local source's current catalog.
+
+    The index is matched on source identity, not content, so it can still list
+    skills that were moved or unregistered since it was built; installing such an
+    ID fails with ``skill not found``. Results are shown as stored either way.
+    Only a local source is checked (``None`` otherwise, or when the catalog cannot
+    be read): a GitHub source must not touch the network here.
+    """
+
+    if config.source.type != "local" or not results:
+        return None
+    try:
+        known = {record.canonical_id for record in discover_catalog(create_source(config))}
+    except (CatalogError, SourceError) as exc:
+        print(
+            f"warning: could not check results against the source catalog: {exc}", file=sys.stderr
+        )
+        return None
+    return [result.canonical_id in known for result in results]
+
+
+def _warn_about_unknown_results(
+    results: Sequence[SearchResult], in_catalog: Sequence[bool] | None
+) -> None:
+    if in_catalog is None:
+        return
+    unknown = [result.canonical_id for result, ok in zip(results, in_catalog) if not ok]
+    if not unknown:
+        return
+    shown = ", ".join(unknown[:_UNKNOWN_IDS_SHOWN])
+    if len(unknown) > _UNKNOWN_IDS_SHOWN:
+        shown += f", and {len(unknown) - _UNKNOWN_IDS_SHOWN} more"
+    print(
+        f"warning: {len(unknown)} of {len(results)} result(s) are not in the source's current "
+        f"catalog (the index is out of sync with the source): {shown}; "
+        "run `skill-tools build-index`",
+        file=sys.stderr,
+    )
+
+
+def _result_payload(result: SearchResult, in_source_catalog: bool | None) -> dict[str, Any]:
     return {
         "path": result.path,
         "canonicalId": result.canonical_id,
@@ -105,6 +149,7 @@ def _result_payload(result: SearchResult) -> dict[str, Any]:
         "status": {"key": result.status},
         "score": result.score,
         "snippet": result.snippet,
+        "inSourceCatalog": in_source_catalog,
     }
 
 
@@ -147,8 +192,12 @@ def _command_search(
     api_key = _resolve_api_key_or_raise(embedder)
     index = _read_search_index(config)
     results = search_index(args.query, index, top_k=args.top, embedder=embedder, api_key=api_key)
+    in_catalog = _check_results_in_catalog(config, results)
+    _warn_about_unknown_results(results, in_catalog)
     if args.json:
-        print(json.dumps([_result_payload(result) for result in results], indent=2))
+        flags = in_catalog if in_catalog is not None else [None] * len(results)
+        payload = [_result_payload(result, flag) for result, flag in zip(results, flags)]
+        print(json.dumps(payload, indent=2))
     else:
         _print_search_table(results)
     return 0

@@ -124,6 +124,12 @@ class GraphStore:
         )
         self._conn.commit()
 
+    def update_mtime(self, path: str, mtime: float) -> None:
+        self._conn.execute("UPDATE files SET mtime = ? WHERE path = ?", (mtime, path))
+
+    def commit(self) -> None:
+        self._conn.commit()
+
     def remove_file(self, path: str) -> None:
         self._conn.execute("DELETE FROM links WHERE source = ?", (path,))
         self._conn.execute("DELETE FROM files WHERE path = ?", (path,))

@@ -18,28 +18,41 @@ from .manifest import (
     MANIFEST_RELATIVE_PATH,
     load_manifest,
     make_entry,
+    make_link_entry,
     validate_manifest,
     verify_entry,
+    verify_managed_entry,
     write_manifest,
 )
 from ..models import ConfigError, InstallError, SkillBundle
-from ..fs_links import is_link_like
+from ..fs_links import create_dir_link, is_link_like, link_target, remove_link, same_link_target
 
 # v1 journals hold only directory swaps; v2 adds per-file operations ("kind": "file")
 # whose backups are project-relative; v3 keeps file backups relative to the state
-# directory, which may lie outside the project (``--global``).
-JOURNAL_SCHEMA_VERSIONS = (1, 2, 3)
+# directory, which may lie outside the project (``--global``); v4 adds link
+# operations ("kind": "link") that place or remove a directory link.
+JOURNAL_SCHEMA_VERSIONS = (1, 2, 3, 4)
 FILE_TRANSACTION_SCHEMA_VERSION = 3
+LINK_TRANSACTION_SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
 class InstallPlan:
-    """A selected bundle and its final on-disk directory."""
+    """A selected bundle and its final on-disk path.
+
+    A ``link`` plan places a directory link at ``target`` pointing at
+    ``link_target`` (the store entry at store-relative ``store_path``) instead
+    of copying the bundle. ``target`` is never resolved through its last
+    component, so an existing link there is replaced, not followed.
+    """
 
     bundle: SkillBundle
     target: Path
     target_name: str | None = None
     overwrite: bool = False
+    mode: str = "copy"
+    store_path: str | None = None
+    link_target: Path | None = None
 
 
 def _state_directory(project: Path, state_dir: Path | None) -> Path:
@@ -82,6 +95,24 @@ def _safe_project_path(project: Path, relative: str) -> Path:
 
     path = project.resolve().joinpath(*_safe_relative(relative, "transaction").parts)
     if not path.resolve(strict=False).is_relative_to(project.resolve()):
+        raise InstallError(f"transaction path resolves outside the project: {relative}")
+    return path
+
+
+def _safe_project_entry_path(project: Path, relative: str) -> Path:
+    """Like ``_safe_project_path`` but without following the last component.
+
+    Skill directories, their backups and link installs may be links (to the
+    store) whose target lies outside the project; only the parent must resolve
+    inside it. Callers remove such a path with ``_remove_directory``, which
+    drops a link instead of descending into it.
+    """
+
+    from .manifest import _safe_relative
+
+    root = project.resolve()
+    path = root.joinpath(*_safe_relative(relative, "transaction").parts)
+    if not path.parent.resolve(strict=False).is_relative_to(root):
         raise InstallError(f"transaction path resolves outside the project: {relative}")
     return path
 
@@ -171,6 +202,38 @@ def _recover_file_operation(
         raise InstallError(f"interrupted transaction backup is missing; refusing cleanup: {target}")
 
 
+def _recover_link_operation(project: Path, operation: dict) -> None:
+    """Undo one link operation: drop the link it created, then restore its backup.
+
+    A link is removed only when it points at the recorded ``linkTarget``;
+    anything else at the target is left alone and stops the recovery.
+    """
+
+    target = _safe_project_entry_path(project, operation.get("target"))
+    backup_value = operation.get("backup")
+    backup = (
+        _safe_project_entry_path(project, backup_value) if isinstance(backup_value, str) else None
+    )
+    expected_link = operation.get("linkTarget")
+    had_target = operation.get("hadTarget", False)
+    replaced = operation.get("replaced", False)
+    if os.path.lexists(target) and not (had_target and not replaced):
+        if isinstance(expected_link, str) and same_link_target(target, expected_link):
+            remove_link(target)
+        else:
+            raise InstallError(
+                f"interrupted transaction target is ambiguous; refusing cleanup: {target}"
+            )
+    if backup is not None and os.path.lexists(backup):
+        if os.path.lexists(target):
+            raise InstallError(
+                f"interrupted transaction target is ambiguous; refusing cleanup: {target}"
+            )
+        backup.rename(target)
+    elif had_target and replaced:
+        raise InstallError(f"interrupted transaction backup is missing; refusing cleanup: {target}")
+
+
 def recover_transaction(project: Path, *, state_dir: Path | None = None) -> None:
     """Roll back an interrupted transaction or finish cleanup after commit."""
 
@@ -199,7 +262,10 @@ def recover_transaction(project: Path, *, state_dir: Path | None = None) -> None
         if not isinstance(operation, dict) or operation.get("kind", "directory") not in {
             "directory",
             "file",
+            "link",
         }:
+            raise InstallError("managed transaction journal contains an invalid operation")
+        if operation.get("kind") == "link" and journal["schemaVersion"] < 4:
             raise InstallError("managed transaction journal contains an invalid operation")
 
     state_directory = _state_directory(project, state_dir)
@@ -207,11 +273,10 @@ def recover_transaction(project: Path, *, state_dir: Path | None = None) -> None
         for operation in journal["operations"]:
             backup = operation.get("backup")
             if isinstance(backup, str):
-                _remove_path(
-                    _file_backup_path(project, state_directory, journal, backup)
-                    if operation.get("kind") == "file"
-                    else _safe_project_path(project, backup)
-                )
+                if operation.get("kind") == "file":
+                    _remove_path(_file_backup_path(project, state_directory, journal, backup))
+                else:
+                    _remove_directory(_safe_project_entry_path(project, backup))
         journal_path.unlink(missing_ok=True)
         return
 
@@ -219,19 +284,24 @@ def recover_transaction(project: Path, *, state_dir: Path | None = None) -> None
         if operation.get("kind") == "file":
             _recover_file_operation(project, state_directory, journal, operation)
             continue
-        target = _safe_project_path(project, operation.get("target"))
-        incoming = _safe_project_path(project, operation.get("incoming"))
+        if operation.get("kind") == "link":
+            _recover_link_operation(project, operation)
+            continue
+        target = _safe_project_entry_path(project, operation.get("target"))
+        incoming = _safe_project_entry_path(project, operation.get("incoming"))
         backup_value = operation.get("backup")
         backup = (
-            _safe_project_path(project, backup_value) if isinstance(backup_value, str) else None
+            _safe_project_entry_path(project, backup_value)
+            if isinstance(backup_value, str)
+            else None
         )
         expected = operation.get("newFiles")
         if not isinstance(expected, dict):
             raise InstallError("managed transaction journal has invalid file hashes")
-        if backup is not None and backup.exists():
+        if backup is not None and os.path.lexists(backup):
             _remove_directory(target)
             backup.rename(target)
-        elif not operation.get("hadTarget", False) and target.exists():
+        elif not operation.get("hadTarget", False) and os.path.lexists(target):
             if _tree_hashes(target) != expected:
                 raise InstallError(
                     f"interrupted transaction target is ambiguous; refusing cleanup: {target}"
@@ -284,8 +354,10 @@ def resolve_install_target(
     destination_root = (project / Path(*_safe_destination_parts(destination))).resolve()
     if not destination_root.is_relative_to(project):
         raise ConfigError(f"destination resolves outside the project: {destination!r}")
-    target = (destination_root / bundle.name).resolve()
-    if not target.is_relative_to(project):
+    # The last component is not resolved: an existing link there (a link install
+    # pointing at the store) is the thing to replace, not a path to follow.
+    target = destination_root / bundle.name
+    if target.parent != destination_root or bundle.name in {"", ".", ".."}:
         raise ConfigError(f"skill target resolves outside the project: {bundle.name!r}")
     return target
 
@@ -357,13 +429,19 @@ def build_plan(
                 break
             if parent.is_file():
                 raise InstallError(f"existing file blocks skill destination: {parent}")
-        if item.target.exists() and not item.target.is_dir():
-            raise InstallError(f"existing skill target is not a directory: {item.target}")
-        if item.target.exists() and not overwrite:
-            raise InstallError(
-                f"skill already exists: {item.target} (use --overwrite to replace it)"
-            )
+        _check_existing_target(item.target, overwrite)
     return plan
+
+
+def _check_existing_target(target: Path, overwrite: bool) -> None:
+    """An existing directory or link (even a broken one) may be replaced only with overwrite."""
+
+    if not os.path.lexists(target):
+        return
+    if not is_link_like(target) and not target.is_dir():
+        raise InstallError(f"existing skill target is not a directory: {target}")
+    if not overwrite:
+        raise InstallError(f"skill already exists: {target} (use --overwrite to replace it)")
 
 
 @contextmanager
@@ -408,15 +486,13 @@ def _project_install_lock(cwd: Path, *, state_dir: Path | None = None) -> Iterat
 
 def _validate_plan_target(item: InstallPlan, cwd: Path, overwrite: bool) -> None:
     project = cwd.resolve()
-    resolved = item.target.resolve()
-    if not resolved.is_relative_to(project):
+    # Resolve only the parent: the target itself may be a link to replace.
+    parent = item.target.parent.resolve()
+    if not parent.is_relative_to(project):
         raise ConfigError(f"destination resolves outside the project: {item.target}")
-    if resolved != item.target:
+    if parent != item.target.parent:
         raise InstallError(f"skill destination changed during installation: {item.target}")
-    if item.target.exists() and not item.target.is_dir():
-        raise InstallError(f"existing skill target is not a directory: {item.target}")
-    if item.target.exists() and not overwrite:
-        raise InstallError(f"skill already exists: {item.target} (use --overwrite to replace it)")
+    _check_existing_target(item.target, overwrite)
 
 
 def _safe_relative_path(path: PurePosixPath) -> Path:
@@ -569,24 +645,54 @@ def execute_install(
     """Stage every bundle, then replace targets with rollback on a later failure."""
 
     try:
+        with _project_install_lock(cwd, state_dir=state_dir):
+            execute_install_locked(
+                source,
+                plan,
+                cwd,
+                overwrite=overwrite,
+                managed_entries=managed_entries,
+                force_managed=force_managed,
+                state_dir=state_dir,
+            )
+    except InstallError:
+        raise
+    except OSError as exc:
+        raise InstallError(f"could not create or update skill directories: {exc}") from exc
+
+
+def execute_install_locked(
+    source,
+    plan: tuple[InstallPlan, ...],
+    cwd: Path,
+    *,
+    overwrite: bool | None = None,
+    managed_entries: tuple[dict, ...] = (),
+    force_managed: bool = False,
+    state_dir: Path | None = None,
+) -> None:
+    """``execute_install`` for a caller that already holds ``_project_install_lock``.
+
+    The lock is not re-entrant, so a caller that must do more work in the same
+    critical section (the link store records referrers) uses this instead.
+    """
+
+    try:
         allow_overwrite = (
             overwrite if overwrite is not None else all(item.overwrite for item in plan)
         )
-        with _project_install_lock(cwd, state_dir=state_dir):
-            recover_transaction(cwd, state_dir=state_dir)
-            if managed_entries:
-                current = load_project_manifest(cwd, state_dir=state_dir)["entries"]
-                by_path = {entry["installPath"].casefold(): entry for entry in current}
-                for expected in managed_entries:
-                    entry = by_path.get(expected["installPath"].casefold())
-                    if entry != expected:
-                        raise InstallError(
-                            "managed manifest changed before update; refusing changes"
-                        )
-                    verify_entry(cwd, entry, force=force_managed)
-            for item in plan:
-                _validate_plan_target(item, cwd, allow_overwrite)
-            _execute_install_locked(source, plan, cwd, allow_overwrite, state_dir=state_dir)
+        recover_transaction(cwd, state_dir=state_dir)
+        if managed_entries:
+            current = load_project_manifest(cwd, state_dir=state_dir)["entries"]
+            by_path = {entry["installPath"].casefold(): entry for entry in current}
+            for expected in managed_entries:
+                entry = by_path.get(expected["installPath"].casefold())
+                if entry != expected:
+                    raise InstallError("managed manifest changed before update; refusing changes")
+                verify_entry(cwd, entry, force=force_managed)
+        for item in plan:
+            _validate_plan_target(item, cwd, allow_overwrite)
+        _execute_install_locked(source, plan, cwd, allow_overwrite, state_dir=state_dir)
     except InstallError:
         raise
     except OSError as exc:
@@ -605,77 +711,112 @@ def execute_remove(
     root = project.resolve()
     try:
         with _project_install_lock(root, state_dir=state_dir):
-            recover_transaction(root, state_dir=state_dir)
-            manifest = load_project_manifest(root, state_dir=state_dir)
-            selected_paths = {entry["installPath"].casefold() for entry in entries}
-            current = [
-                entry
-                for entry in manifest["entries"]
-                if entry["installPath"].casefold() in selected_paths
-            ]
-            if len(current) != len(selected_paths):
-                raise InstallError("managed manifest changed before remove; refusing changes")
-            operations: list[dict] = []
-            for entry in current:
-                target = verify_entry(root, entry, force=force)
+            execute_remove_locked(root, entries, force=force, state_dir=state_dir)
+    except InstallError:
+        raise
+    except OSError as exc:
+        raise InstallError(f"could not remove managed skill directory: {exc}") from exc
+
+
+def execute_remove_locked(
+    project: Path,
+    entries: tuple[dict, ...],
+    *,
+    force: bool = False,
+    state_dir: Path | None = None,
+) -> None:
+    """``execute_remove`` for a caller that already holds ``_project_install_lock``."""
+
+    root = project.resolve()
+    try:
+        recover_transaction(root, state_dir=state_dir)
+        manifest = load_project_manifest(root, state_dir=state_dir)
+        selected_paths = {entry["installPath"].casefold() for entry in entries}
+        current = [
+            entry
+            for entry in manifest["entries"]
+            if entry["installPath"].casefold() in selected_paths
+        ]
+        if len(current) != len(selected_paths):
+            raise InstallError("managed manifest changed before remove; refusing changes")
+        operations: list[dict] = []
+        for entry in current:
+            target = verify_managed_entry(root, entry, force=force)
+            if entry["mode"] == "link":
                 operations.append(
                     {
+                        "kind": "link",
                         "target": target.relative_to(root).as_posix(),
-                        "incoming": (target.parent / f".{target.name}.unused-{uuid.uuid4().hex}")
-                        .relative_to(root)
-                        .as_posix(),
                         "backup": (
                             target.parent / f".{target.name}.skill-tools-backup-{uuid.uuid4().hex}"
                         )
                         .relative_to(root)
                         .as_posix(),
+                        "linkTarget": str(link_target(target)),
                         "hadTarget": True,
                         "replaced": False,
-                        "newFiles": {},
                     }
                 )
-            path = manifest_path(root, state_dir=state_dir)
-            before = path.read_text(encoding="utf-8") if path.exists() else None
-            journal_file = _journal_path(root, state_dir=state_dir)
-            journal = {
-                "schemaVersion": 1,
-                "phase": "applying",
-                "manifestBefore": before,
-                "operations": operations,
-            }
-            _write_journal(journal_file, journal)
-            try:
-                for entry, operation in zip(current, operations, strict=True):
-                    target = _safe_project_path(root, operation["target"])
-                    backup = _safe_project_path(root, operation["backup"])
-                    # Re-check after the lock and immediately before moving the directory.
-                    verify_entry(root, entry, force=force)
-                    target.rename(backup)
-                    operation["replaced"] = True
-                    _write_journal(journal_file, journal)
-                retained = [
-                    entry
-                    for entry in manifest["entries"]
-                    if entry["installPath"].casefold() not in selected_paths
-                ]
-                write_manifest(path, validate_manifest({**manifest, "entries": retained}))
-                journal["phase"] = "committed"
+                continue
+            operations.append(
+                {
+                    "target": target.relative_to(root).as_posix(),
+                    "incoming": (target.parent / f".{target.name}.unused-{uuid.uuid4().hex}")
+                    .relative_to(root)
+                    .as_posix(),
+                    "backup": (
+                        target.parent / f".{target.name}.skill-tools-backup-{uuid.uuid4().hex}"
+                    )
+                    .relative_to(root)
+                    .as_posix(),
+                    "hadTarget": True,
+                    "replaced": False,
+                    "newFiles": {},
+                }
+            )
+        path = manifest_path(root, state_dir=state_dir)
+        before = path.read_text(encoding="utf-8") if path.exists() else None
+        journal_file = _journal_path(root, state_dir=state_dir)
+        journal = {
+            "schemaVersion": LINK_TRANSACTION_SCHEMA_VERSION
+            if any(operation.get("kind") == "link" for operation in operations)
+            else 1,
+            "phase": "applying",
+            "manifestBefore": before,
+            "operations": operations,
+        }
+        _write_journal(journal_file, journal)
+        try:
+            for entry, operation in zip(current, operations, strict=True):
+                target = _safe_project_entry_path(root, operation["target"])
+                backup = _safe_project_entry_path(root, operation["backup"])
+                # Re-check after the lock and immediately before moving the directory
+                # (a link moves as itself; its target is never touched).
+                verify_managed_entry(root, entry, force=force)
+                target.rename(backup)
+                operation["replaced"] = True
                 _write_journal(journal_file, journal)
-                for operation in operations:
-                    _remove_directory(_safe_project_path(root, operation["backup"]))
-                journal_file.unlink(missing_ok=True)
-            except Exception as exc:
-                try:
-                    recover_transaction(root, state_dir=state_dir)
-                except Exception as recovery_exc:
-                    raise InstallError(
-                        f"{exc}; transaction recovery stopped: {recovery_exc}"
-                    ) from exc
-                if isinstance(exc, InstallError):
-                    raise
-                if isinstance(exc, OSError):
-                    raise InstallError(f"could not remove managed skill directory: {exc}") from exc
+            retained = [
+                entry
+                for entry in manifest["entries"]
+                if entry["installPath"].casefold() not in selected_paths
+            ]
+            write_manifest(path, validate_manifest({**manifest, "entries": retained}))
+            journal["phase"] = "committed"
+            _write_journal(journal_file, journal)
+            for operation in operations:
+                _remove_directory(_safe_project_entry_path(root, operation["backup"]))
+            journal_file.unlink(missing_ok=True)
+        except Exception as exc:
+            try:
+                recover_transaction(root, state_dir=state_dir)
+            except Exception as recovery_exc:
+                raise InstallError(f"{exc}; transaction recovery stopped: {recovery_exc}") from exc
+            if isinstance(exc, InstallError):
                 raise
+            if isinstance(exc, OSError):
+                raise InstallError(f"could not remove managed skill directory: {exc}") from exc
+            raise
     except InstallError:
         raise
     except OSError as exc:
@@ -709,7 +850,7 @@ def _execute_install_locked(
                 "target": item.target.relative_to(root).as_posix(),
                 "incoming": incoming.relative_to(root).as_posix(),
                 "backup": backup.relative_to(root).as_posix(),
-                "hadTarget": item.target.exists(),
+                "hadTarget": os.path.lexists(item.target),
                 "replaced": False,
                 "newFiles": {},
             }
@@ -723,7 +864,7 @@ def _execute_install_locked(
     _write_journal(journal_file, journal)
     try:
         for item, operation in zip(plan, operations, strict=True):
-            incoming = _safe_project_path(root, operation["incoming"])
+            incoming = _safe_project_entry_path(root, operation["incoming"])
             incoming.mkdir()
             _write_staging_bundle(source, item.bundle, incoming)
             hashes = _tree_hashes(incoming)
@@ -737,9 +878,9 @@ def _execute_install_locked(
         for item, operation in zip(plan, operations, strict=True):
             _validate_plan_target(item, root, overwrite)
             target = item.target
-            incoming = _safe_project_path(root, operation["incoming"])
-            backup = _safe_project_path(root, operation["backup"])
-            if target.exists():
+            incoming = _safe_project_entry_path(root, operation["incoming"])
+            backup = _safe_project_entry_path(root, operation["backup"])
+            if os.path.lexists(target):
                 target.rename(backup)
             target.parent.mkdir(parents=True, exist_ok=True)
             incoming.rename(target)
@@ -772,7 +913,7 @@ def _execute_install_locked(
         journal["phase"] = "committed"
         _write_journal(journal_file, journal)
         for operation in operations:
-            _remove_directory(_safe_project_path(root, operation["backup"]))
+            _remove_directory(_safe_project_entry_path(root, operation["backup"]))
         journal_file.unlink(missing_ok=True)
     except Exception as exc:
         try:
@@ -784,3 +925,132 @@ def _execute_install_locked(
         if isinstance(exc, OSError):
             raise InstallError(f"could not replace skill directory: {exc}") from exc
         raise
+
+
+def execute_link_install(
+    source_descriptor,
+    plan: tuple[InstallPlan, ...],
+    cwd: Path,
+    *,
+    overwrite: bool | None = None,
+    state_dir: Path | None = None,
+) -> None:
+    """Place directory links for ``link`` plans and record them, as one transaction.
+
+    The store entries the links point at must already exist (``Store.ensure``
+    runs first, under the store lock; this takes only the project lock).
+    """
+
+    try:
+        with _project_install_lock(cwd, state_dir=state_dir):
+            execute_link_install_locked(
+                source_descriptor, plan, cwd, overwrite=overwrite, state_dir=state_dir
+            )
+    except InstallError:
+        raise
+    except OSError as exc:
+        raise InstallError(f"could not create skill links: {exc}") from exc
+
+
+def execute_link_install_locked(
+    source_descriptor,
+    plan: tuple[InstallPlan, ...],
+    cwd: Path,
+    *,
+    overwrite: bool | None = None,
+    state_dir: Path | None = None,
+) -> None:
+    """``execute_link_install`` for a caller that already holds ``_project_install_lock``."""
+
+    root = cwd.resolve()
+    try:
+        allow_overwrite = (
+            overwrite if overwrite is not None else all(item.overwrite for item in plan)
+        )
+        recover_transaction(root, state_dir=state_dir)
+        for item in plan:
+            if item.mode != "link" or item.link_target is None or item.store_path is None:
+                raise InstallError(f"install plan is not a link plan: {item.target}")
+            if is_link_like(item.link_target) or not item.link_target.is_dir():
+                raise InstallError(f"skill store entry is missing: {item.link_target}")
+            _validate_plan_target(item, root, allow_overwrite)
+        manifest_file = manifest_path(root, state_dir=state_dir)
+        manifest = load_project_manifest(root, state_dir=state_dir)
+        previous_manifest = (
+            manifest_file.read_text(encoding="utf-8") if manifest_file.exists() else None
+        )
+        journal_file = _journal_path(root, state_dir=state_dir)
+        operations: list[dict] = []
+        for item in plan:
+            had_target = os.path.lexists(item.target)
+            backup = (
+                item.target.parent / f".{item.target.name}.skill-tools-backup-{uuid.uuid4().hex}"
+            )
+            operations.append(
+                {
+                    "kind": "link",
+                    "target": item.target.relative_to(root).as_posix(),
+                    "backup": backup.relative_to(root).as_posix() if had_target else None,
+                    "linkTarget": str(item.link_target),
+                    "hadTarget": had_target,
+                    "replaced": False,
+                }
+            )
+        journal = {
+            "schemaVersion": LINK_TRANSACTION_SCHEMA_VERSION,
+            "phase": "applying",
+            "manifestBefore": previous_manifest,
+            "operations": operations,
+        }
+        _write_journal(journal_file, journal)
+        try:
+            for item, operation in zip(plan, operations, strict=True):
+                _validate_plan_target(item, root, allow_overwrite)
+                target = _safe_project_entry_path(root, operation["target"])
+                if operation["backup"] is not None:
+                    # A directory or link moves as itself; nothing is followed.
+                    target.rename(_safe_project_entry_path(root, operation["backup"]))
+                    operation["replaced"] = True
+                    _write_journal(journal_file, journal)
+                create_dir_link(target, item.link_target)
+
+            entries = list(manifest["entries"])
+            for item in plan:
+                entry = make_link_entry(
+                    canonical_id=item.bundle.canonical_id,
+                    bundle_name=item.bundle.name,
+                    target_name=item.target_name,
+                    destination=item.target.parent.relative_to(root).as_posix(),
+                    install_path=item.target,
+                    project_root=root,
+                    source_descriptor=source_descriptor,
+                    store_path=item.store_path,
+                    relativize_source=uses_project_state(root, state_dir),
+                )
+                entries = [
+                    old
+                    for old in entries
+                    if old["installPath"].casefold() != entry["installPath"].casefold()
+                ]
+                entries.append(entry)
+            write_manifest(manifest_file, validate_manifest({**manifest, "entries": entries}))
+            journal["phase"] = "committed"
+            _write_journal(journal_file, journal)
+            for operation in operations:
+                if operation["backup"] is not None:
+                    _remove_directory(_safe_project_entry_path(root, operation["backup"]))
+            journal_file.unlink(missing_ok=True)
+        except Exception as exc:
+            try:
+                recover_transaction(root, state_dir=state_dir)
+            except Exception as recovery_exc:
+                raise InstallError(f"{exc}; transaction recovery stopped: {recovery_exc}") from exc
+            if isinstance(exc, InstallError):
+                raise
+            if isinstance(exc, OSError):
+                raise InstallError(f"could not create skill link: {exc}") from exc
+            raise
+    except InstallError:
+        raise
+    except OSError as exc:
+        raise InstallError(f"could not create skill links: {exc}") from exc

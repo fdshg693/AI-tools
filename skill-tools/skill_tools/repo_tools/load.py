@@ -175,7 +175,7 @@ def resolve_install_root(source: CatalogSource) -> Path:
     """Return the directory the install commands run from.
 
     The commands in repo-tools.yaml use repository-relative paths (for example
-    ``uv tool install --editable tools/aim``), so installation needs a local
+    ``uv tool install --editable tools/llm/aim``), so installation needs a local
     clone. A GitHub source has no working tree to run them in.
     """
 

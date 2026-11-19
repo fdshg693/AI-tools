@@ -5,13 +5,17 @@ import json
 import os
 import platform
 import subprocess
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from vscode_profiles.diff import mask_value
 from vscode_profiles.errors import CliError
+from vscode_profiles.keys import check_selectors, select_keys
 from vscode_profiles.paths import resolve_user_data_dir
+from vscode_profiles.script import EmitScript, append_command
 from vscode_profiles.profiles import Profile, load_profiles, read_own_settings
 
 
@@ -78,17 +82,18 @@ def run_apply(
     destinations: Sequence[str],
     keys: Sequence[str],
     prefix: str | None,
+    exclude: Sequence[str] = (),
+    mask: bool = False,
     write: bool,
     force: bool,
+    machines: Sequence[Profile] = (),
+    emit: EmitScript | None = None,
 ) -> int:
-    if prefix == "":
-        raise CliError("prefix must not be empty", code=2)
-    if any(key == "" for key in keys):
-        raise CliError("key must not be empty", code=2)
+    check_selectors(keys, prefix, exclude)
     if not keys and prefix is None:
         raise CliError("apply requires --key or --prefix", code=2)
 
-    profiles = load_profiles(resolve_user_data_dir(user_data_dir))
+    profiles = load_profiles(resolve_user_data_dir(user_data_dir), machines)
     by_name = {profile.name: profile for profile in profiles}
     source_profile = by_name.get(source)
     if source_profile is None:
@@ -101,14 +106,72 @@ def run_apply(
     for key in keys:
         if key not in source_values:
             raise CliError(f"key {key!r} is not in source profile {source_profile.name!r}")
-    selected = _selected_keys(source_values, keys, prefix)
+    selected = select_keys(source_values, keys, prefix, exclude)
     if not selected:
         raise CliError("no keys matched")
 
     planned: list[_Planned] = []
     for profile in chosen:
-        planned.append(_plan_destination(profile, selected, source_values))
+        planned.append(_plan_destination(profile, selected, source_values, mask=mask))
+    return _finish(planned, skips, write=write, force=force, emit=emit)
 
+
+def run_remove(
+    user_data_dir: Path | None,
+    *,
+    targets: Sequence[str],
+    keys: Sequence[str],
+    prefix: str | None,
+    exclude: Sequence[str] = (),
+    mask: bool = False,
+    write: bool,
+    force: bool,
+    machines: Sequence[Profile] = (),
+    emit: EmitScript | None = None,
+) -> int:
+    check_selectors(keys, prefix, exclude)
+    if not keys and prefix is None:
+        raise CliError("remove requires --key or --prefix", code=2)
+
+    profiles = load_profiles(resolve_user_data_dir(user_data_dir), machines)
+    chosen, skips = _destinations(profiles, None, targets)
+    current = {profile.name: read_own_settings(profile) for profile in chosen}
+    candidates = {key for values in current.values() for key in values} | set(keys)
+    selected = select_keys(candidates, keys, prefix, exclude)
+    if not selected:
+        raise CliError("no keys matched")
+
+    planned: list[_Planned] = []
+    for profile in chosen:
+        values = current[profile.name]
+        original = _read_settings_text(profile)
+        lines: list[str] = []
+        removing: list[str] = []
+        for key in selected:
+            if key not in values:
+                lines.append(f"{profile.name}\t{key}\tabsent")
+                continue
+            shown = mask_value(values[key]) if mask else values[key]
+            lines.append(f"{profile.name}\t{key}\tremove\t{_dumps(shown)}")
+            removing.append(key)
+        try:
+            new_text = remove_settings_keys(original, removing)
+        except CliError as exc:
+            raise CliError(f"cannot edit settings for profile {profile.name!r}: {exc}") from exc
+        planned.append(_Planned(profile, original, new_text, tuple(lines)))
+    return _finish(planned, skips, write=write, force=force, emit=emit)
+
+
+def _finish(
+    planned: Sequence[_Planned],
+    skips: Sequence[Profile],
+    *,
+    write: bool,
+    force: bool,
+    emit: EmitScript | None = None,
+) -> int:
+    if write and emit is not None:
+        raise CliError("--emit-ps1 cannot be combined with --write", code=2)
     pending = [item for item in planned if item.new_text != item.original]
     if write and pending and not force and code_process_running():
         raise CliError("VS Code stable (Code) is running; pass --force to write")
@@ -120,6 +183,12 @@ def run_apply(
             print(line)
     if write and pending:
         _write_all(pending)
+    if emit is not None:
+        if pending:
+            append_command(emit.path, emit.command, emit.comment)
+            print(f"script	{emit.path}")
+        else:
+            print("nothing to write; script not changed", file=sys.stderr)
     return 0
 
 
@@ -133,7 +202,7 @@ class _Planned:
 
 def _destinations(
     profiles: Sequence[Profile],
-    source_name: str,
+    source_name: str | None,
     names: Sequence[str],
 ) -> tuple[list[Profile], list[Profile]]:
     by_name = {profile.name: profile for profile in profiles}
@@ -165,31 +234,18 @@ def _destinations(
     return chosen, skips
 
 
-def _selected_keys(
-    source_values: Mapping[str, object],
-    keys: Sequence[str],
-    prefix: str | None,
-) -> list[str]:
-    wanted = set(keys)
-    found: list[str] = []
-    for key in sorted(source_values):
-        if wanted and key not in wanted:
-            continue
-        if prefix is not None and not key.startswith(prefix):
-            continue
-        found.append(key)
-    return found
-
-
 def _plan_destination(
     profile: Profile,
     selected: Sequence[str],
     source_values: Mapping[str, object],
+    *,
+    mask: bool,
 ) -> _Planned:
     dest_values = read_own_settings(profile)
     original = _read_settings_text(profile)
     lines = tuple(
-        _operation_line(profile.name, key, source_values, dest_values) for key in selected
+        _operation_line(profile.name, key, source_values, dest_values, mask=mask)
+        for key in selected
     )
     changes = {
         key: source_values[key]
@@ -211,13 +267,18 @@ def _operation_line(
     key: str,
     source_values: Mapping[str, object],
     dest_values: Mapping[str, object],
+    *,
+    mask: bool,
 ) -> str:
-    encoded = _dumps(source_values[key])
+    def render(value: object) -> str:
+        return _dumps(mask_value(value) if mask else value)
+
+    encoded = render(source_values[key])
     if key not in dest_values:
         return f"{name}\t{key}\tadd\t{encoded}"
     if _same_value(dest_values[key], source_values[key]):
         return f"{name}\t{key}\tsame\t{encoded}"
-    return f"{name}\t{key}\treplace\t{encoded}\t{_dumps(dest_values[key])}"
+    return f"{name}\t{key}\treplace\t{encoded}\t{render(dest_values[key])}"
 
 
 def _same_value(left: object, right: object) -> bool:
@@ -230,6 +291,8 @@ def _dumps(value: object, *, sort_keys: bool = False) -> str:
 
 def _read_settings_text(profile: Profile) -> str:
     path = profile.settings_path
+    if profile.machine and not path.exists():
+        return "{}\n"
     try:
         return path.read_bytes().decode("utf-8")
     except OSError as exc:
@@ -243,8 +306,7 @@ def _write_all(pending: Sequence[_Planned]) -> None:
     root = user_cache_dir() / "backups" / stamp
     staged: list[tuple[_Planned, Path]] = []
     for item in pending:
-        folder = "Default" if item.profile.location is None else item.profile.location
-        backup = root / folder / "settings.json"
+        backup = root / item.profile.backup_folder / "settings.json"
         try:
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_bytes(item.original.encode("utf-8"))
@@ -287,6 +349,48 @@ class _Document:
     order: tuple[str, ...]
     close: int
     indent: str
+    key_starts: dict[str, int]
+
+
+def remove_settings_keys(text: str, removing: Sequence[str]) -> str:
+    """Remove top-level keys, keeping comments, other keys, and the comma style."""
+    for key in removing:
+        text = _remove_one(text, key)
+    return text
+
+
+def _remove_one(text: str, key: str) -> str:
+    document = _scan(text)
+    if key not in document.keys:
+        raise CliError(f"could not locate top-level key {key!r}")
+    index = document.order.index(key)
+    start = document.key_starts[key]
+    value_end = document.keys[key][1]
+    after = _Scanner(text)
+    after.i = value_end
+    after.skip_ws_and_comments()
+    if after.peek() == ",":
+        end = after.i + 1
+    else:
+        end = value_end
+        if index > 0:
+            # Last key without a trailing comma: drop the comma that preceded it.
+            previous_end = document.keys[document.order[index - 1]][1]
+            before = _Scanner(text)
+            before.i = previous_end
+            before.skip_ws_and_comments()
+            if before.peek() == "," and before.i < start:
+                comma = before.i
+                text = text[:comma] + text[comma + 1 :]
+                start -= 1
+                end -= 1
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    rest = text[end:] if line_end == -1 else text[end:line_end]
+    if text[line_start:start].strip(" \t") == "" and rest.strip(" \t\r") == "":
+        start = line_start
+        end = len(text) if line_end == -1 else line_end + 1
+    return text[:start] + text[end:]
 
 
 def edit_settings(text: str, changes: Mapping[str, object], replacing: set[str]) -> str:
@@ -366,6 +470,7 @@ def _scan(text: str) -> _Document:
         raise CliError("could not locate the top-level object")
     scanner.i += 1
     keys: dict[str, tuple[int, int]] = {}
+    key_starts: dict[str, int] = {}
     order: list[str] = []
     while True:
         scanner.skip_ws_and_comments()
@@ -376,6 +481,7 @@ def _scan(text: str) -> _Document:
             break
         if scanner.peek() != '"':
             raise CliError("could not locate a top-level key")
+        key_start = scanner.i
         key = scanner.read_string()
         if key in keys:
             raise CliError(f"duplicate top-level key {key!r}")
@@ -385,11 +491,12 @@ def _scan(text: str) -> _Document:
         scanner.i += 1
         start, end = scanner.read_value_span()
         keys[key] = (start, end)
+        key_starts[key] = key_start
         order.append(key)
         scanner.skip_ws_and_comments()
         if scanner.peek() == ",":
             scanner.i += 1
-    return _Document(keys, tuple(order), close, _detect_indent(text))
+    return _Document(keys, tuple(order), close, _detect_indent(text), key_starts)
 
 
 class _Scanner:

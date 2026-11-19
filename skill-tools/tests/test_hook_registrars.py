@@ -184,11 +184,13 @@ def test_global_locations_ignore_project_settings() -> None:
     assert install_dir_for("claude", config, global_scope=True) == ".claude/hooks"
     assert install_dir_for("codex", config, global_scope=True) == ".codex/my-hooks"
     assert install_dir_for("kilo", config, global_scope=True) == ".config/kilo/plugin"
+    assert install_dir_for("antigravity", config, global_scope=True) == ".gemini/config/hooks"
     assert registration_file_for("claude", config, global_scope=True) == ".claude/settings.json"
+    assert registration_file_for("antigravity", config, global_scope=True) == (
+        ".gemini/config/hooks.json"
+    )
     assert registration_file_for("kilo", config, global_scope=True) is None
-    assert not supports_global("antigravity")
-    with pytest.raises(InstallError, match="--global"):
-        install_dir_for("antigravity", config, global_scope=True)
+    assert supports_global("antigravity")
 
 
 def test_global_claude_entry_uses_absolute_paths(tmp_path) -> None:
@@ -215,6 +217,29 @@ def test_global_codex_entry_quotes_for_both_shells(tmp_path) -> None:
         "command": f"python3 {sh}",
         "commandWindows": f'powershell -NoProfile -Command "python {ps}"',
     }
+
+
+def test_global_antigravity_entry_uses_absolute_path(tmp_path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    absolute = f"{home.resolve().as_posix()}/.gemini/config/hooks/x.py"
+    entry = build_entry(
+        "antigravity",
+        "python",
+        ".gemini/config/hooks/x.py",
+        {"event": "PreInvocation"},
+        home=home,
+    )
+    assert entry == {"type": "command", "command": f"python {absolute}"}
+    matched = build_entry(
+        "antigravity",
+        "python",
+        ".gemini/config/hooks/x.py",
+        {"event": "PreToolUse", "matcher": "view_file"},
+        home=home,
+    )
+    assert matched["command"] == f"python {absolute}"
+    assert "matcher" not in matched
 
 
 def test_global_cursor_entry_is_relative_to_dot_cursor(tmp_path) -> None:

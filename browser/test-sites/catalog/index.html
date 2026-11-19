@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>デモショップ - 商品一覧</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 48rem; }
+  article { border: 1px solid #ccc; padding: .8rem; margin-bottom: .6rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>デモショップ</h1>
+  <p>一覧 → 詳細 → カート → 注文確定まで通しで流せるダミーの買い物サイト。実務に近い複数ページ E2E シナリオ用。</p>
+  <nav aria-label="メインナビゲーション">
+    <a href="cart.html">カート（<span id="cart-count">0</span>）</a>
+    <a href="/">テストサイト一覧（トップ）へ</a>
+  </nav>
+</header>
+<main>
+  <form id="search-form" role="search">
+    <label for="keyword">商品を検索</label>
+    <input type="search" id="keyword" name="keyword">
+    <label for="category">カテゴリ</label>
+    <select id="category" name="category">
+      <option value="">すべて</option>
+      <option value="コーヒー">コーヒー</option>
+      <option value="器具">器具</option>
+      <option value="雑貨">雑貨</option>
+    </select>
+    <button type="submit">検索</button>
+  </form>
+  <h2>商品一覧</h2>
+  <div id="list"></div>
+  <p id="empty" hidden>条件に合う商品が見つかりませんでした</p>
+  <p id="status" role="status">カートは空です</p>
+</main>
+<script src="shop.js"></script>
+<script>
+  function render() {
+    const kw = document.getElementById('keyword').value.trim();
+    const cat = document.getElementById('category').value;
+    const items = PRODUCTS.filter(p => (!kw || p.name.includes(kw)) && (!cat || p.category === cat));
+    document.getElementById('list').innerHTML = items.map(p => `
+      <article aria-label="${p.name}">
+        <h3><a href="item.html?id=${p.id}">${p.name}</a></h3>
+        <p>${p.category} / ${yen(p.price)} / ${p.stock > 0 ? '在庫 ' + p.stock + ' 点' : '在庫切れ'}</p>
+        <button type="button" data-add="${p.id}"${p.stock === 0 ? ' disabled' : ''}>カートに入れる</button>
+      </article>`).join('');
+    document.getElementById('empty').hidden = items.length > 0;
+    renderCartBadge();
+  }
+  document.getElementById('search-form').addEventListener('submit', e => { e.preventDefault(); render(); });
+  document.getElementById('list').addEventListener('click', e => {
+    const btn = e.target.closest('[data-add]');
+    if (!btn) return;
+    cart.add(btn.dataset.add);
+    const p = PRODUCTS.find(p => p.id === btn.dataset.add);
+    document.getElementById('status').textContent = p.name + ' をカートに入れました';
+    renderCartBadge();
+  });
+  render();
+  if (cart.count() > 0)
+    document.getElementById('status').textContent = 'カートに ' + cart.count() + ' 点入っています';
+</script>
+</body>
+</html>

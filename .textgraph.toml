@@ -1,0 +1,2 @@
+# textgraph: skip test fixtures (string literals like "./missing.md") in check --scripts.
+scripts_exclude = ["**/tests/**"]

@@ -35,6 +35,8 @@ fb/
 .claude/settings.local.json
 .claude/hooks/
 .claude/tasks/
+# local hook selection (the committed sample is .claude/skill-tools.hooks.example.yaml)
+.claude/skill-tools.hooks.yaml
 .skill-tools/
 
 # Links created by `just links-sync` from .links.yaml (never committed). info/exclude lists them

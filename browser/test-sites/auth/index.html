@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ログイン</title>
+<style>body{font-family:system-ui,sans-serif;margin:1.5rem;max-width:36rem;} [hidden]{display:none!important;}</style>
+</head>
+<body>
+<header>
+  <h1>ログイン</h1>
+  <p>ダミーの認証ページ。ユーザー名 <code>demo</code> / パスワード <code>demo1234</code> で成功する（判定はページ内 JS、実在のアカウントではない）。
+     成功すると localStorage と Cookie の両方にセッション印を書くので、<code>storageState</code> の保存・再利用を試せる。</p>
+  <nav aria-label="メインナビゲーション"><a href="/">テストサイト一覧（トップ）へ</a></nav>
+</header>
+<main>
+  <form id="login-form">
+    <div>
+      <label for="username">ユーザー名</label>
+      <input type="text" id="username" name="username" autocomplete="username">
+    </div>
+    <div>
+      <label for="password">パスワード</label>
+      <input type="password" id="password" name="password" autocomplete="current-password">
+    </div>
+    <button type="submit">ログイン</button>
+    <p id="error" role="alert" hidden>ユーザー名またはパスワードが正しくありません</p>
+  </form>
+</main>
+<script>
+  document.getElementById('login-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const u = document.getElementById('username').value;
+    const p = document.getElementById('password').value;
+    if (u === 'demo' && p === 'demo1234') {
+      localStorage.setItem('demo-session', u);
+      document.cookie = 'demo-session=' + encodeURIComponent(u) + '; path=/';
+      location.href = 'home.html';
+    } else {
+      document.getElementById('error').hidden = false;
+    }
+  });
+</script>
+</body>
+</html>

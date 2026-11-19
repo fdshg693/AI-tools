@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,9 +18,29 @@ class Profile:
     location: str | None
     inherits_settings: bool
     settings_path: Path
+    machine: bool = False
+
+    @property
+    def backup_folder(self) -> str:
+        if self.machine:
+            return "_machine/" + re.sub(r"[^A-Za-z0-9._-]", "_", self.name)
+        if self.location is None:
+            return DEFAULT_NAME
+        return self.location
 
 
-def load_profiles(user_data_dir: Path) -> list[Profile]:
+def machine_profile(name: str, settings_path: Path) -> Profile:
+    """A single Machine settings.json (VS Code Server) shown as a pseudo profile."""
+    return Profile(
+        name=name,
+        location=None,
+        inherits_settings=False,
+        settings_path=settings_path,
+        machine=True,
+    )
+
+
+def load_profiles(user_data_dir: Path, machines: Sequence[Profile] = ()) -> list[Profile]:
     ledger_path = user_data_dir / "User" / "globalStorage" / "storage.json"
     if not ledger_path.is_file():
         raise CliError(f"storage.json is missing: {ledger_path}")
@@ -39,13 +61,16 @@ def load_profiles(user_data_dir: Path) -> list[Profile]:
     ]
     for entry in raw_profiles:
         profiles.append(_profile_from_entry(user_data_dir, entry))
-    _reject_duplicate_names(profiles)
     profiles.sort(key=lambda profile: (profile.name != DEFAULT_NAME, profile.name))
+    profiles.extend(machines)
+    _reject_duplicate_names(profiles)
     return profiles
 
 
 def read_own_settings(profile: Profile) -> dict[str, object]:
     if profile.inherits_settings:
+        return {}
+    if profile.machine and not profile.settings_path.exists():
         return {}
     if not profile.settings_path.is_file():
         raise CliError(
@@ -108,6 +133,8 @@ def _reject_duplicate_names(profiles: list[Profile]) -> None:
 
 
 def _location_label(profile: Profile) -> str:
+    if profile.machine:
+        return str(profile.settings_path)
     if profile.location is None:
         return "(default)"
     return profile.location
