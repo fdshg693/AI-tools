@@ -14,7 +14,7 @@ meta:
   requires_skills: none
   status: experimental
   description: skill-tools CLIのsource解決・install選択子・index運用・フック配置・使い方FBの判断基準
-  version: 1.2.13
+  version: 1.2.14
 ---
 
 # skill-tools の使い方
@@ -240,7 +240,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 - **indexは既定で7日間キャッシュされる。** ただし各`build-index`実行時に登録スキルの本文hashと埋め込みmetadata hashを確認するため、変更は期間内でも反映される。変更が無く7日以内なら`Index is up to date: ...`を出し終了コード`0`で終わる。スキル追加・本文変更・metadata変更を反映するために`--force`は不要（日数を変えるなら`--max-age-days N`、`0`は常に再生成）
 - 再生成が走っても全件を埋め込み直すわけではない。埋め込み対象は各スキルの`name`と`description`だけで、本文は埋め込みAPIへ送られず、name/descriptionが変わっていない行は前回のベクトルを再利用する。本文は指定index pathのローカルcacheにだけ保持される。本文サイズが1 MiBを超えるスキルは語彙検索対象外になりstderrに警告する。本文をcacheから破棄するにはindexファイルを削除する
 - `search`はpure-Python BM25のUnicode語彙検索と既存の意味検索をRRFで統合する。JSONは`canonicalId`と一致語周辺の最大240文字の`snippet`を含み、tableにも`canonical_id`と`snippet`を表示する。本文全文やsnippetをrun logに記録しない。旧index schemaは`build-index`で再構築する
-- **index未作成・APIキー未設定・別sourceのindexは非ゼロ終了**であり、空結果として扱わない。一方、fingerprint不一致とindexの古さはstderrの警告にとどまり検索は成功するので、警告だけを理由に`build-index`をやり直さない。ただし`warning: N of M result(s) are not in the source's current catalog`（local sourceだけ）が出たら、その結果のIDは`install-skills`で`skill not found`になるので、`build-index`してから検索し直す
+- **index未作成・APIキー未設定・別sourceのindexは非ゼロ終了**であり、空結果として扱わない。一方、fingerprint不一致とindexの古さはstderrの警告にとどまり検索は成功するので、警告だけを理由に`build-index`をやり直さない。ただし`warning: N of M result(s) are not in the source's current catalog`（local sourceだけ）が出たら、警告の末尾に列挙されたID（`--json`なら`inSourceCatalog: false`の結果）は`install-skills`で`skill not found`になるので、`build-index`してから検索し直す
 - `--json`は`score` / `canonicalId` / `path` / `name` / `description` / `tool` / `plugin` / `status` / `snippet`を返す。`path`はlocalなら絶対パス、GitHubならblob URL、`canonicalId`はsource repo相対の`SKILL.md` path。table表示も`score` / `canonical_id` / `path` / `name` / `snippet`を含む。snippetは語彙一致がある場合だけ出る
 - local sourceのファイル列挙は`git ls-files`（チェックアウト済みのサブモジュールの中も列挙する）。git管理下でないディレクトリではディレクトリ走査へフォールバックし、gitignoreを解釈しないぶん`config show`のfingerprint計算が遅くなる。install時のコピー対象はこの列挙に加えてバンドルコピーの除外/包含ポリシー（`tools/skill-tools/.gitignore`と`.skill-tools`）で絞られる
 

@@ -320,7 +320,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
   - `--dry-run` は実行予定のコマンドを表示するだけです。
 - `build-index` は CLI 専用の global index だけを書き、`skills-site` 側の index は読み書きしません。既定では7日間の鮮度ゲートがあり、登録スキルの検索本文hashと埋め込みmetadata hashが変わっていない場合に再生成をスキップします（後述）。
 - `search` は保存済み snapshot だけを検索します。GitHub source でも branch を再取得しません。index 未作成・API key 未設定・別 source の index は非ゼロ終了です。fingerprint 不一致とインデックスの古さは stderr の警告にとどめ、検索自体は成功します。
-  - local source では、結果の canonical ID が今の source のカタログ（`ai-tools.yaml` に登録されたスキル）に無ければ、`warning: N of M result(s) are not in the source's current catalog ...; run skill-tools build-index` を stderr に出します。古さの警告とは別で、作って間もない index でもスキルの移動・登録解除の後なら出ます。結果からは落とさず index の値をそのまま出します（そのまま `install-skills` に渡すと `skill not found` になります）。GitHub source はネットワークを使わない約束なので確かめません。
+  - local source では、結果の canonical ID が今の source のカタログ（`ai-tools.yaml` に登録されたスキル）に無ければ、`warning: N of M result(s) are not in the source's current catalog (...): <canonical ID>, ...; run skill-tools build-index` を stderr に出します。該当する canonical ID は先頭 5 件まで列挙し、残りは `and N more` とまとめます（table 出力の列は変えません）。`--json` では各結果の `inSourceCatalog` が `true`／`false` になります（確かめなかったときは `null`）。古さの警告とは別で、作って間もない index でもスキルの移動・登録解除の後なら出ます。結果からは落とさず index の値をそのまま出します（そのまま `install-skills` に渡すと `skill not found` になります）。GitHub source はネットワークを使わない約束なので確かめません。
 - `config show` は採用した設定ファイル、グローバル設定ファイルのパス、`config.cwd`（CWD の `skill-tools.yaml`。`--project-dir` 指定時は `(not read: --project-dir)` を付ける）と `config.project`（実際に重ねるプロジェクトの `skill-tools.yaml` と `found` / `missing`）、source 種別、index path、fb path、解決済みの `self_skill` を出して終了します。`SKILL_TOOLS_FB_DIR` で上書きしているときはそのパスも出します。API key の値は出しません。
   - `source.*` は**スキルカタログの取得元**（local ならリポジトリのパス）で、この CLI 自身の場所ではありません。CLI 自身は `package.pyproject`（`pyproject.toml` の絶対パス）と `package.readme`（`[project].readme` が指すファイル）で出します。wheel など `pyproject.toml` が同梱されないインストールでは `package.pyproject: (not shipped with this install)` と `package.dir`（`skill_tools` パッケージの場所）を出し、`package.readme` は出さず終了コード `0` で終わります。
   - `source.fingerprint` / `resolved.commit` は、設定中の source と一致する index があるときだけ、index に保存済みの値を出します。source のファイルを読み直して再計算しないため、巨大な local source でも即座に終わります。index が無い・source が一致しないときは fingerprint 行を出しません（`index: missing` / `index.source: mismatch`）。
@@ -341,7 +341,7 @@ skill-tools search --query "ローカルでベクトル検索したい" --top 5 
 
 `search`はpure-Python BM25によるcasefold済みUnicode語彙検索と既存意味検索をReciprocal Rank Fusion（RRF）で統合します。JSONは既存フィールドに`canonicalId`と一致周辺の短い`snippet`を追加します。text出力も`canonical_id`と`snippet`を含み、語彙一致のない意味検索結果ではsnippetを空にします。全文本文はsearch outputやrun logへ出しません。
 
-`--json` の検索結果は `score` / `canonicalId` / `path` / `name` / `description` / `tool` / `plugin` / `status` / `snippet` を含みます。`path` は local source なら絶対パス、GitHub source なら blob URL です。`canonicalId`はsource repo相対の`SKILL.md` pathで、snippetは最大240文字です。table mode の列順は `score`、`canonical_id`、`path`、`name`、`snippet` です。
+`--json` の検索結果は `score` / `canonicalId` / `path` / `name` / `description` / `tool` / `plugin` / `status` / `snippet` / `inSourceCatalog` を含みます。`path` は local source なら絶対パス、GitHub source なら blob URL です。`canonicalId`はsource repo相対の`SKILL.md` pathで、snippetは最大240文字です。table mode の列順は `score`、`canonical_id`、`path`、`name`、`snippet` です。
 
 ## Run logs
 

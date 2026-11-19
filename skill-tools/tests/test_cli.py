@@ -1128,23 +1128,49 @@ def test_search_warns_when_results_are_missing_from_the_source_catalog(
     assert main(["build-index", "--config", str(config)], cwd=tmp_path, embedder=embedder) == 0
     capsys.readouterr()
 
-    assert main(["search", "--config", str(config), "--query", "alpha"], embedder=embedder) == 0
-    assert "out of sync" not in capsys.readouterr().err
+    search_json = ["search", "--config", str(config), "--query", "alpha", "--json"]
+    assert main(search_json, embedder=embedder) == 0
+    captured = capsys.readouterr()
+    assert "out of sync" not in captured.err
+    assert all(item["inSourceCatalog"] is True for item in json.loads(captured.out))
 
     # A fresh index whose IDs no longer exist: age alone would not warn.
     old = source / "plugins" / "one" / "skills" / "alpha"
     old.rename(source / "plugins" / "one" / "skills" / "alpha-moved")
-    assert (
-        main(["search", "--config", str(config), "--query", "alpha", "--json"], embedder=embedder)
-        == 0
-    )
+    assert main(search_json, embedder=embedder) == 0
     captured = capsys.readouterr()
-    ids = [item["canonicalId"] for item in json.loads(captured.out)]
-    assert "plugins/one/skills/alpha/SKILL.md" in ids
-    assert f"warning: 1 of {len(ids)} result(s) are not in the source's current catalog" in (
-        captured.err
-    )
-    assert "skill-tools build-index" in captured.err
+    items = json.loads(captured.out)
+    ids = [item["canonicalId"] for item in items]
+    moved = "plugins/one/skills/alpha/SKILL.md"
+    assert moved in ids
+    assert {item["canonicalId"]: item["inSourceCatalog"] for item in items}[moved] is False
+    assert sum(1 for item in items if item["inSourceCatalog"] is False) == 1
+    assert (
+        f"warning: 1 of {len(ids)} result(s) are not in the source's current catalog "
+        f"(the index is out of sync with the source): {moved}; run `skill-tools build-index`"
+    ) in captured.err
+
+    # The table output keeps its columns; the IDs go to stderr only.
+    assert main(["search", "--config", str(config), "--query", "alpha"], embedder=embedder) == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines()[0] == "score\tcanonical_id\tpath\tname\tsnippet"
+    assert f"source): {moved};" in captured.err
+
+
+def test_unknown_result_warning_lists_only_the_first_ids(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from skill_tools.cli.index_cmd import _warn_about_unknown_results
+
+    results = [SimpleNamespace(canonical_id=f"p/s{number}/SKILL.md") for number in range(8)]
+    _warn_about_unknown_results(results, [False] * 7 + [True])
+    message = capsys.readouterr().err
+    assert "7 of 8 result(s)" in message
+    assert "p/s4/SKILL.md, and 2 more;" in message
+    assert "p/s5/SKILL.md" not in message
+
+    _warn_about_unknown_results(results, None)
+    assert capsys.readouterr().err == ""
 
 
 def test_install_explains_an_unregistered_skill_path(
